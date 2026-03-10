@@ -9,6 +9,19 @@ dotenv.config();
 const client = new Client({
     authStrategy: new LocalAuth()
 });
+// Logica para el generador de qr de whatsapp web
+client.on('qr', (qr) => {
+    console.log('Vinculacion requerida');
+    qrcode.generate(qr, { small: true });
+});
+
+client.on('ready', () => {
+    console.log('Bot listo y funcionando');
+});
+
+client.on('authenticated', () => {
+    console.log(' Autenticación exitosa');
+});
 
 // Db momentanea en array
 const inventario: { [key: string]: { nombre: string, precio: number } } = {

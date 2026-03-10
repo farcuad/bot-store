@@ -3,4 +3,3 @@ node_modules/
 .wwebjs_cache/
 .env
 cloudflared.exe
-dist/
