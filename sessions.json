@@ -1,18 +1,48 @@
 {
-  "584245497873@c.us": {
-    "last_interaction": 1773705954,
-    "status": "human"
-  },
-  "120363361918369316@g.us": {
-    "last_interaction": 1773705870,
-    "status": "human"
-  },
   "584245435637@c.us": {
-    "last_interaction": 1773708926,
-    "status": "bot"
-  },
-  "584125695100@c.us": {
-    "last_interaction": 1773709213,
-    "status": "human"
+    "last_interaction": 1773723850,
+    "status": "bot",
+    "history": [
+      {
+        "role": "user",
+        "content": "Precio?"
+      },
+      {
+        "role": "assistant",
+        "content": "📦 *Listas de precios*:\n1. *Yogurt 16 Oz* - 12$\n\n2. *Tortas Frias 12 Oz* - (8 sabores)\n    $1.5 BCV\n    1$ en divisas\n    $1.25 A partir de 5 unidades\n\n3. *Bizcochos Marmoleados* - $15\n\n4. *Tortas de Piña* -\n    $1.25 BCV\n    1$ en divisas\n    1.25$ precio por docena\n\n5. *Ponquesitos paquete de 8 unidades* -\n    $1.25 BCV\n    1$ en divisas\n\n6. *Quesillo* - \n    $1.35 BCV\n    1$ en divisas\n    $16 la docena\n\n7. *Palmeritas* - $14\n\n8. *Ponqué 300 gramos* -\n    $1.25 BCV\n    1$ en divisas\n    $1.25 precio por docena\n\n9. *Torta ponqué 1.5 kg*\n    $5 BCV"
+      },
+      {
+        "role": "user",
+        "content": "Hacen domicilio?"
+      },
+      {
+        "role": "assistant",
+        "content": "¡Ups! 🤖 No estoy seguro de haber entendido bien.\n\nPara ayudarte mejor, puedes:\n* 📝 Describir brevemente tu duda.\n* 👩 Escribir *'Hablar con Raquel'* para que una persona te atienda.\n* 👋 Despedirte si ya tienes todo lo que necesitabas.\n\n¿En qué más puedo apoyarte hoy?"
+      },
+      {
+        "role": "user",
+        "content": "Hola"
+      },
+      {
+        "role": "assistant",
+        "content": "¡Hola David Reyes 🤓! 👋 Bienvenido a *Dulces Porciones*.\n\nPuedes consultarme por:\n- 📦 *Listas de precios*\n- 📍 *Ubicación*\n- 📱 *Redes Sociales*\n- ⏰ *Horarios de Atención*\n\n ¿En qué podemos ayudarte? "
+      },
+      {
+        "role": "user",
+        "content": "Están en horario de atención?"
+      },
+      {
+        "role": "assistant",
+        "content": "⏰ *Nuestro Horario de Atención*\n\n📅 *Martes a Sábados*\n\n📥 *Recepción de pedidos:* Después de las 12:00 PM\n🚚 *Despacho de entregas:* Desde las 2:00 PM hasta finalizar ruta.\n\n¡Estamos para servirte! ✨"
+      },
+      {
+        "role": "user",
+        "content": "Tienen delivery?"
+      },
+      {
+        "role": "assistant",
+        "content": "¡Ups! 🤖 No estoy seguro de haber entendido bien.\n\nPara ayudarte mejor, puedes:\n* 📝 Describir brevemente tu duda.\n* 👩 Escribir *'Hablar con Raquel'* para que una persona te atienda.\n* 👋 Despedirte si ya tienes todo lo que necesitabas.\n\n¿En qué más puedo apoyarte hoy?"
+      }
+    ]
   }
 }
