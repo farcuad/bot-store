@@ -1,0 +1,12 @@
+{
+  "total_mensajes": 26,
+  "por_intencion": {
+    "noentendi": 19,
+    "ubicacion": 3,
+    "horario": 2,
+    "precio": 1,
+    "saludo": 1
+  },
+  "usuarios_unicos": 4,
+  "ultima_actualizacion": "2026-03-17T05:04:13.790Z"
+}
