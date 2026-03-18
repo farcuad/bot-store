@@ -28,6 +28,7 @@ import {
   getOutOfHoursMessage,
   registrarNoEntendido,
 } from "./services/configService.js";
+import { startAdminServer } from "./admin/server.js";
 
 const client = new Client({ authStrategy: new LocalAuth() });
 
@@ -47,6 +48,7 @@ const bootTime = Date.now();
 
 await loadConfig();
 startConfigRefresh();
+startAdminServer();
 await loadStats();
 imprimirResumenStats();
 

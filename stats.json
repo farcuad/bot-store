@@ -1,12 +1,15 @@
 {
-  "total_mensajes": 26,
+  "total_mensajes": 45,
   "por_intencion": {
     "noentendi": 19,
-    "ubicacion": 3,
+    "ubicacion": 6,
     "horario": 2,
-    "precio": 1,
-    "saludo": 1
+    "precio": 3,
+    "saludo": 6,
+    "agenda": 4,
+    "redes": 4,
+    "delivery": 1
   },
-  "usuarios_unicos": 4,
-  "ultima_actualizacion": "2026-03-17T05:04:13.790Z"
+  "usuarios_unicos": 7,
+  "ultima_actualizacion": "2026-03-17T23:34:57.647Z"
 }
