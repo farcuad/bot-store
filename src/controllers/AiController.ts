@@ -1,60 +1,69 @@
 import { llamarDeepseek } from "../config/deepseek.js";
+import { getConfig, getNombre } from "../services/configService.js";
+import type { ConversationMessage } from "../services/sessionManager.js";
 
-// --- Clasificador de Intención por IA ---
+export type Intencion = string;
 
-const CATEGORIAS_VALIDAS = [
-  "precio",
-  "ubicacion",
-  "redes",
-  "pago_movil",
-  "agendacion",
-  "horario",
-  "despedida",
-  "noentendi",
-] as const;
+/**
+ * Construye el prompt del clasificador dinámicamente desde Firestore.
+ * Las categorías de negocio se leen en tiempo real del cache.
+ * "saludo", "despedida" y "noentendi" son siempre fijos.
+ */
+function buildClassifierPrompt(): string {
+  const respuestas = getConfig().respuestas_info;
+  const nombre = getNombre();
 
-export type Intencion = (typeof CATEGORIAS_VALIDAS)[number];
+  const categoriasNegocio = Object.entries(respuestas)
+    .map(([id, r]) => `- ${id.padEnd(15)} → ${r.descripcion_ia}`)
+    .join("\n");
 
-const intentClassifierPrompt = `
-Eres un clasificador de intenciones para un bot de WhatsApp de una pastelería llamada "Dulces Porciones".
+  return `
+Eres un clasificador de intenciones para un bot de WhatsApp de "${nombre}".
 Tu única tarea es leer el mensaje del usuario y responder con UNA SOLA PALABRA, exactamente uno de estos valores:
 
-- precio        → El usuario pregunta por precios, lista de productos, catálogo, qué venden, etc.
-- ubicacion     → El usuario pregunta por la dirección, dónde están, cómo llegar, etc.
-- redes         → El usuario pregunta por Instagram, TikTok, Facebook, redes sociales.
-- pago_movil    → El usuario pregunta por pago, transferencia, datos bancarios, formas de pago.
-- agendacion    → El usuario quiere agendar, pedir una cita, apartar o encargar algo.
-- horario       → El usuario pregunta por el horario, a qué hora abren, cuándo cierran.
-- despedida     → El usuario se está despidiendo, agradeciendo o dando por terminada la conversación.
-- noentendi     → El mensaje no encaja con ninguna categoría anterior.
+${categoriasNegocio}
+- saludo         → El usuario saluda, dice hola, buenos días, buenas, etc.
+- despedida      → El usuario se está despidiendo, agradeciendo o da por terminada la conversación.
+- noentendi      → El mensaje no encaja con ninguna categoría anterior.
 
-IMPORTANTE: Responde ÚNICAMENTE con una de las palabras de la lista. Sin explicaciones, sin puntos, sin comillas.
-`;
+REGLAS:
+- Responde ÚNICAMENTE con una de las palabras exactas de la lista.
+- Sin explicaciones, sin signos de puntuación, sin comillas, sin tildes.
+- Si el usuario pregunta por algo fuera de las categorías, responde exactamente: noentendi
+`.trim();
+}
+
+/** Categorías válidas = negocio + fijas */
+function getCategoriasValidas(): string[] {
+  const fijas = ["saludo", "despedida", "noentendi"];
+  return [...Object.keys(getConfig().respuestas_info), ...fijas];
+}
 
 export const clasificarIntencion = async (
   mensajeCliente: string,
+  // El historial NO se pasa al clasificador: el contexto previo corrompe
+  // la salida y el modelo responde con texto en lugar de una sola palabra.
+  _historial: ConversationMessage[] = [],
 ): Promise<Intencion> => {
   try {
     const messages = [
-      { role: "system", content: intentClassifierPrompt },
+      { role: "system", content: buildClassifierPrompt() },
       { role: "user", content: mensajeCliente },
     ];
 
     const response = await llamarDeepseek(messages);
+    // Tomamos sólo la primera palabra por si el modelo añade algo extra
     const rawContent: string =
-      response.choices[0].message.content?.trim().toLowerCase() ?? "noentendi";
+      (response.choices[0].message.content?.trim().toLowerCase() ?? "")
+        .split(/[\s\n,.;:]+/)[0];
 
-    // Validar que la respuesta sea una categoría conocida
-    const intencion = CATEGORIAS_VALIDAS.find((c) => c === rawContent);
-
-    if (!intencion) {
-      console.warn(
-        `⚠️ IA retornó categoría desconocida: "${rawContent}". Usando 'noentendi'.`,
-      );
+    const validas = getCategoriasValidas();
+    if (!validas.includes(rawContent)) {
+      console.warn(`⚠️ IA retornó categoría desconocida: "${rawContent}". Usando 'noentendi'.`);
       return "noentendi";
     }
 
-    return intencion;
+    return rawContent;
   } catch (error) {
     console.error("❌ Error al clasificar intención con IA:", error);
     return "noentendi";
