@@ -89,7 +89,9 @@ client.on("message_create", async (msg) => {
   // ── Manejo de media ───────────────────────────────────────────────────────
   const isMedia =
     msg.hasMedia ||
-    ["image", "video", "audio", "ptt", "sticker", "document"].includes(msg.type);
+    ["image", "video", "audio", "ptt", "sticker", "document"].includes(
+      msg.type,
+    );
 
   if (isMedia && msg.type !== "sticker") {
     console.log(`📸 Media (${msg.type}) de ${from}.`);
@@ -103,7 +105,9 @@ client.on("message_create", async (msg) => {
   if (session?.status === "human" && session.human_since !== undefined) {
     const elapsed = nowInSeconds - session.human_since;
     if (elapsed >= AUTO_REACTIVATE_SECONDS) {
-      console.log(`🔄 Auto-reactivando bot para ${from} (${Math.floor(elapsed / 60)} min).`);
+      console.log(
+        `🔄 Auto-reactivando bot para ${from} (${Math.floor(elapsed / 60)} min).`,
+      );
       sessions[from] = {
         last_interaction: nowInSeconds,
         status: "bot",
@@ -123,7 +127,11 @@ client.on("message_create", async (msg) => {
   let saludoEnviado = false;
 
   if (!session) {
-    sessions[from] = { last_interaction: nowInSeconds, status: "bot", history: [] };
+    sessions[from] = {
+      last_interaction: nowInSeconds,
+      status: "bot",
+      history: [],
+    };
     incrementarUsuariosUnicos();
     console.log(`🆕 Nuevo usuario: ${nombre}`);
 
@@ -134,9 +142,12 @@ client.on("message_create", async (msg) => {
     await msg.reply(mensajeBienvenida);
     appendToHistory(sessions[from]!, "assistant", mensajeBienvenida);
     saludoEnviado = true;
-
   } else if (nowInSeconds - session.last_interaction > TWENTY_FOUR_HOURS) {
-    sessions[from] = { last_interaction: nowInSeconds, status: "bot", history: [] };
+    sessions[from] = {
+      last_interaction: nowInSeconds,
+      status: "bot",
+      history: [],
+    };
     console.log(`🔄 Re-contacto: ${nombre}`);
 
     const mensajeRecontacto = !isWithinBusinessHours()
@@ -146,7 +157,6 @@ client.on("message_create", async (msg) => {
     await msg.reply(mensajeRecontacto);
     appendToHistory(sessions[from]!, "assistant", mensajeRecontacto);
     saludoEnviado = true;
-
   } else {
     sessions[from]!.last_interaction = nowInSeconds;
   }
@@ -185,14 +195,11 @@ client.on("message_create", async (msg) => {
 
       if (intencion === "saludo") {
         respuesta = render(sys("saludoInicial"), nombre);
-
       } else if (intencion === "noentendi") {
         respuesta = sys("noentendi");
         registrarNoEntendido(msg.body, from, nombre).catch(() => {});
-
       } else if (intencion === "despedida") {
         respuesta = sys("despedida");
-
       } else {
         const infoRespuesta = getConfig().respuestas_info[intencion];
 
@@ -207,7 +214,6 @@ client.on("message_create", async (msg) => {
 
       await msg.reply(respuesta);
       appendToHistory(sessions[from]!, "assistant", respuesta);
-
     } catch (error) {
       console.error("❌ Error procesando intención:", error);
     }
@@ -219,3 +225,8 @@ client.on("message_create", async (msg) => {
 });
 
 client.initialize();
+
+export async function senBotMessage(to: string, message: string) {
+  const chatId = to.includes("@c.us") ? to : `${to.replace(/\D/g, "")}@c.us`;
+  await client.sendMessage(chatId, message);
+}

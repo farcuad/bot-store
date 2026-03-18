@@ -1,7 +1,8 @@
 {
   "584245435637@c.us": {
-    "last_interaction": 1773790298,
+    "last_interaction": 1773860875,
     "status": "human",
+    "human_since": 1773860875,
     "history": [
       {
         "role": "user",
@@ -43,8 +44,7 @@
         "role": "assistant",
         "content": "👩 ¡Perfecto! Ya avisé a *Raquel* y pronto te atenderá personalmente. 🙌\n\nEn un momento te contactará. ¡Gracias por tu paciencia! 💛"
       }
-    ],
-    "human_since": 1773790298
+    ]
   },
   "584264654702@c.us": {
     "last_interaction": 1773750357,
@@ -170,5 +170,23 @@
         "content": "comunicate con el numero 04263564646, por eahi manuel te atendera los delivery. solo eso"
       }
     ]
+  },
+  "584145193744@c.us": {
+    "last_interaction": 1773844342,
+    "status": "human",
+    "human_since": 1773844342,
+    "history": []
+  },
+  "120363419907997854@g.us": {
+    "last_interaction": 1773845847,
+    "status": "human",
+    "human_since": 1773845847,
+    "history": []
+  },
+  "120363361918369316@g.us": {
+    "last_interaction": 1773861611,
+    "status": "human",
+    "human_since": 1773861611,
+    "history": []
   }
 }
