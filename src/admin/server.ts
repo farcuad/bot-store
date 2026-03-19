@@ -1,11 +1,14 @@
 import express from "express";
+import type { Request, Response } from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import adminRoutes from "./routes.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const ADMIN_PORT = process.env.ADMIN_PORT ? parseInt(process.env.ADMIN_PORT) : 3001;
+const ADMIN_PORT = process.env.ADMIN_PORT
+  ? parseInt(process.env.ADMIN_PORT)
+  : 3001;
 
 export function startAdminServer(): void {
   const app = express();

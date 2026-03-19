@@ -228,3 +228,8 @@ client.on("message_create", async (msg) => {
 });
 
 client.initialize();
+
+export async function senBotMessage(to: string, message: string) {
+  const chatId = to.includes("@c.us") ? to : `${to.replace(/\D/g, "")}@c.us`;
+  await client.sendMessage(chatId, message);
+}

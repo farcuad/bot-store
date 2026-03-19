@@ -10,18 +10,24 @@ import { initializeApp, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { createRequire } from "module";
 import { fileURLToPath } from "url";
+import dotenv from "dotenv";
+dotenv.config();
 import path from "path";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 
 // Leer el service account desde las descargas
-const serviceAccount = require("/Users/macbookpro/Downloads/whaibot-firebase-adminsdk-fbsvc-ed2b6edcf1.json");
+const serviceAccount = {
+  projectId: process.env.FIREBASE_PROJECT_ID,
+  clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+  privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+};
 
 initializeApp({ credential: cert(serviceAccount) });
 const db = getFirestore();
 
-const BOT = "584268691664"; //aqui debe ir el numero inicial del bot
+const BOT = "584127575904"; //aqui debe ir el numero inicial del bot
 const botDoc = db.collection("bots").doc(BOT);
 // de aqui en adelante sera el modelo inicial
 // ─── 1. respuestas_info ───────────────────────────────────────────────────────
