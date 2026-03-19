@@ -53,13 +53,15 @@ export const clasificarIntencion = async (
 
     const response = await llamarDeepseek(messages);
     // Tomamos sólo la primera palabra por si el modelo añade algo extra
-    const rawContent: string =
-      (response.choices[0].message.content?.trim().toLowerCase() ?? "")
-        .split(/[\s\n,.;:]+/)[0];
+    const rawContent: string = (
+      response.choices[0].message.content?.trim().toLowerCase() ?? ""
+    ).split(/[\s\n,.;:]+/)[0];
 
     const validas = getCategoriasValidas();
     if (!validas.includes(rawContent)) {
-      console.warn(`⚠️ IA retornó categoría desconocida: "${rawContent}". Usando 'noentendi'.`);
+      console.warn(
+        `⚠️ IA retornó categoría desconocida: "${rawContent}". Usando 'noentendi'.`,
+      );
       return "noentendi";
     }
 
@@ -67,5 +69,30 @@ export const clasificarIntencion = async (
   } catch (error) {
     console.error("❌ Error al clasificar intención con IA:", error);
     return "noentendi";
+  }
+};
+export const cambiarMensaje = async (
+  mensajeCliente: string,
+): Promise<Intencion> => {
+  try {
+    const messages = [
+      {
+        role: "system",
+        content:
+          "en base a este mensaje quiero una version diferente pero que tenga el mismo significado",
+      },
+      { role: "user", content: mensajeCliente },
+    ];
+
+    const response = await llamarDeepseek(messages);
+    // Tomamos sólo la primera palabra por si el modelo añade algo extra
+    const rawContent: string =
+      response.choices[0].message.content?.trim().toLowerCase() ??
+      mensajeCliente;
+
+    return rawContent;
+  } catch (error) {
+    console.error("❌ Error al obtener texto diferente:", error);
+    return mensajeCliente;
   }
 };

@@ -104,7 +104,7 @@ export async function loadConfig(): Promise<void> {
  * Mientras TESTING_MODE=true el intervalo es muy corto (5 seg) para ver cambios al instante.
  * En producción subirlo a 5 minutos.
  */
-const TESTING_MODE = true;
+const TESTING_MODE = false;
 console.log("TESTING_MODE", TESTING_MODE);
 const REFRESH_INTERVAL_MS = TESTING_MODE ? 5_000 : 5 * 60 * 1000;
 

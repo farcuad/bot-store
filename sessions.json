@@ -1,50 +1,49 @@
 {
   "584245435637@c.us": {
-    "last_interaction": 1773790298,
-    "status": "human",
+    "last_interaction": 1773891757,
+    "status": "bot",
     "history": [
-      {
-        "role": "user",
-        "content": "Ok y como puedo hacer un pedido?"
-      },
-      {
-        "role": "assistant",
-        "content": "Te informamos que estamos tomando pedidos a través de nuestro grupo exclusivo de WhatsApp y también te esperamos en nuestro punto de venta físico.\n\nCuéntame qué necesitas:\n\n📲 *¿Deseas unirte al grupo de pedidos?*\n📍 *¿Buscas nuestra ubicación física?*\n\n¡Escríbeme tu opción y te ayudo de inmediato! ✨"
-      },
-      {
-        "role": "user",
-        "content": "Si el grupo de pedido"
-      },
-      {
-        "role": "assistant",
-        "content": "Te informamos que estamos tomando pedidos a través de nuestro grupo exclusivo de WhatsApp y también te esperamos en nuestro punto de venta físico.\n\nCuéntame qué necesitas:\n\n📲 *¿Deseas unirte al grupo de pedidos?*\n📍 *¿Buscas nuestra ubicación física?*\n\n¡Escríbeme tu opción y te ayudo de inmediato! ✨"
-      },
-      {
-        "role": "user",
-        "content": "Si deseo unirme al grupo de pedido."
-      },
-      {
-        "role": "assistant",
-        "content": "📱 *Síguenos en TikTok*:\n- https://www.tiktok.com/@dulcesporciones\n\n🫂 Abre este enlace para unirte a mi *grupo de WhatsApp*: \n- https://chat.whatsapp.com/FHQFn9LgO8u52Zb8o9vufJ?mode=gi_t\n\n¿Necesitas algo más?"
-      },
       {
         "role": "user",
         "content": "Hola"
       },
       {
         "role": "assistant",
-        "content": "¡Hola David Reyes 🤓! 👋 Bienvenido a *Dulces Porciones*.\n\nPuedes consultarme por:\n- 📦 *Listas de precios*\n- 📍 *Ubicación*\n- 📱 *Redes Sociales*\n- ⏰ *Horarios de Atención*\n\n ¿En qué podemos ayudarte? "
+        "content": "¡hola david reyes! 👋 es un gusto saludarte en *dulces porciones* 🧁.\n\nestoy aquí para brindarte información sobre:\n- 📦 nuestros *listados de precios*\n- 📍 dónde *encontrarnos*\n- 📱 nuestros *perfiles en redes*\n- ⏰ los *horarios* en que estamos para atenderte\n\n¿qué te gustaría saber? 😊"
       },
       {
         "role": "user",
-        "content": "Raquel dónde está?"
+        "content": "Listas de precios?"
       },
       {
         "role": "assistant",
-        "content": "👩 ¡Perfecto! Ya avisé a *Raquel* y pronto te atenderá personalmente. 🙌\n\nEn un momento te contactará. ¡Gracias por tu paciencia! 💛"
+        "content": "📋 **tarifario de productos**:\n\n1. **yogurt 16 oz** - 12$\n\n2. **tortas frías 12 oz** (8 sabores disponibles)  \n   - precio en bcv: $1.5  \n   - precio en divisas: 1$  \n   - precio por 5 unidades o más: $1.25 c/u\n\n3. **bizcochos marmoleados** - $15\n\n4. **tortas de piña**  \n   - precio en bcv: $1.25  \n   - precio en divisas: 1$  \n   - precio por docena: $1.25 c/u\n\n5. **ponquesitos (paquete de 8 unidades)**  \n   - precio en bcv: $1.25  \n   - precio en divisas: 1$\n\n6. **quesillo**  \n   - precio en bcv: $1.35  \n   - precio en divisas: 1$  \n   - precio por docena: $16\n\n7. **palmeritas** - $14\n\n8. **ponqué 300 gramos**  \n   - precio en bcv: $1.25  \n   - precio en divisas: 1$  \n   - precio por docena: $1.25 c/u\n\n9. **torta ponqué 1.5 kg** - $5 (precio en bcv)"
+      },
+      {
+        "role": "user",
+        "content": "Dónde están ubicados?"
+      },
+      {
+        "role": "assistant",
+        "content": "📍 *¿cómo llegar?*:\nen la av. principal de los pozones, a solo una cuadra antes de llegar al ambulatorio, barinas, barinas.\n\n- ubicación en google maps:  \nhttps://maps.app.goo.gl/2udganytfnfq7j2x7\n\n¡aquí te esperamos!"
+      },
+      {
+        "role": "user",
+        "content": "Eso era lo que requería.. muchas gracias saludos"
+      },
+      {
+        "role": "assistant",
+        "content": "¡muchas gracias por la conversación! 😄  \nsi en algo puedo ayudarte más adelante, aquí estaré. ¡te deseo un día maravilloso! 🌟"
+      },
+      {
+        "role": "user",
+        "content": "La masucamba de aguacate 🥑"
+      },
+      {
+        "role": "assistant",
+        "content": "¡vaya! 😅 parece que no capté del todo tu consulta.\n\npara poder asistirte de la mejor manera, tienes varias opciones:\n* 📝 explicarme en pocas palabras lo que necesitas.\n* 👩 escribir *'hablar con raquel'* si prefieres atención personalizada.\n* 👋 decirme adiós si ya resolviste tu inquietud.\n\n¿hay algo más en lo que te pueda ayudar?"
       }
-    ],
-    "human_since": 1773790298
+    ]
   },
   "584264654702@c.us": {
     "last_interaction": 1773750357,
@@ -170,5 +169,76 @@
         "content": "comunicate con el numero 04263564646, por eahi manuel te atendera los delivery. solo eso"
       }
     ]
+  },
+  "136369674412093@lid": {
+    "last_interaction": 1773793508,
+    "status": "human",
+    "human_since": 1773793508,
+    "history": []
+  },
+  "120363419907997854@g.us": {
+    "last_interaction": 1773793572,
+    "status": "human",
+    "human_since": 1773793572,
+    "history": []
+  },
+  "584121498432@c.us": {
+    "last_interaction": 1773887054,
+    "status": "human",
+    "human_since": 1773887054,
+    "history": []
+  },
+  "56941623264@c.us": {
+    "last_interaction": 1773889752,
+    "status": "human",
+    "human_since": 1773889752,
+    "history": [
+      {
+        "role": "assistant",
+        "content": "⏰ ¡Hola! Aún no hemos abierto hoy.\n\n📅 Recibimos pedidos a partir de las *12:00 PM* (Martes a Sábado).\n\nPuedo ayudarte con preguntas sobre precios, ubicación y horarios. ¡Vuelve en horario de atención! 🎂"
+      },
+      {
+        "role": "user",
+        "content": "Hola"
+      },
+      {
+        "role": "user",
+        "content": "Que vendes"
+      },
+      {
+        "role": "assistant",
+        "content": "📦 *Listas de precios*:\n1. *Yogurt 16 Oz* - 12$\n\n2. *Tortas Frias 12 Oz* - (8 sabores)\n    $1.5 BCV\n    1$ en divisas\n    $1.25 A partir de 5 unidades\n\n3. *Bizcochos Marmoleados* - $15\n\n4. *Tortas de Piña* -\n    $1.25 BCV\n    1$ en divisas\n    1.25$ precio por docena\n\n5. *Ponquesitos paquete de 8 unidades* -\n    $1.25 BCV\n    1$ en divisas\n\n6. *Quesillo* - \n    $1.35 BCV\n    1$ en divisas\n    $16 la docena\n\n7. *Palmeritas* - $14\n\n8. *Ponqué 300 gramos* -\n    $1.25 BCV\n    1$ en divisas\n    $1.25 precio por docena\n\n9. *Torta ponqué 1.5 kg*\n    $5 BCV"
+      },
+      {
+        "role": "user",
+        "content": "Eres una IA"
+      },
+      {
+        "role": "assistant",
+        "content": "¡Ups! 🤖 No estoy seguro de haber entendido bien.\n\nPara ayudarte mejor, puedes:\n* 📝 Describir brevemente tu duda.\n* 👩 Escribir *'Hablar con Raquel'* para que una persona te atienda.\n* 👋 Despedirte si ya tienes todo lo que necesitabas.\n\n¿En qué más puedo apoyarte hoy?"
+      },
+      {
+        "role": "user",
+        "content": "Raquel"
+      },
+      {
+        "role": "assistant",
+        "content": "👩 ¡Perfecto! Ya avisé a *Raquel* y pronto te atenderá personalmente. 🙌\n\nEn un momento te contactará. ¡Gracias por tu paciencia! 💛"
+      },
+      {
+        "role": "user",
+        "content": "Eres una IA"
+      },
+      {
+        "role": "assistant",
+        "content": "¡Ups! 🤖 No estoy seguro de haber entendido bien.\n\nPara ayudarte mejor, puedes:\n* 📝 Describir brevemente tu duda.\n* 👩 Escribir *'Hablar con Raquel'* para que una persona te atienda.\n* 👋 Despedirte si ya tienes todo lo que necesitabas.\n\n¿En qué más puedo apoyarte hoy?"
+      }
+    ]
+  },
+  "573506201828@c.us": {
+    "last_interaction": 1773891821,
+    "status": "human",
+    "human_since": 1773891821,
+    "history": []
   }
 }
