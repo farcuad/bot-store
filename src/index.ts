@@ -68,10 +68,34 @@ client.on("message_create", async (msg) => {
     const chat = await msg.getChat();
     const remoteId = chat.id._serialized;
 
-    const isAutoReply = Object.values(getConfig().respuestas_info).some((r) =>
-      msg.body.startsWith(r.texto.slice(0, 20)),
-    );
-    if (isAutoReply) return;
+    const sessionHistory = sessions[remoteId]?.history;
+    const isHistoryMatch = (() => {
+      if (!sessionHistory || sessionHistory.length === 0) return false;
+      const lastMsg = sessionHistory[sessionHistory.length - 1];
+      if (!lastMsg) return false;
+      return lastMsg.role === "assistant" && lastMsg.content.trim() === msg.body.trim();
+    })();
+
+    const botTexts = [
+      ...Object.values(getConfig().respuestas_info).map((r) => r.texto),
+      ...Object.values(getConfig().respuestas_sistema).map((r) => r.texto),
+      getOutOfHoursMessage(),
+      "📢 Contestale al usuario",
+    ];
+
+    const isTextMatch = botTexts.some((texto) => {
+      if (!texto) return false;
+      const parts = texto.split("{name}");
+      const prefix = (parts[0] || "").trim().slice(0, 25);
+      if (prefix.length > 4 && msg.body.startsWith(prefix)) return true;
+      if (parts.length > 1) {
+        const suffix = (parts[1] || "").trim().slice(0, 25);
+        if (suffix.length > 4 && msg.body.includes(suffix)) return true;
+      }
+      return msg.body.startsWith(texto.trim().slice(0, 25));
+    });
+
+    if (isHistoryMatch || isTextMatch) return;
 
     sessions[remoteId] = {
       last_interaction: nowInSeconds,

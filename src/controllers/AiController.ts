@@ -33,10 +33,21 @@ REGLAS:
 `.trim();
 }
 
-/** Categorías válidas = negocio + fijas */
-function getCategoriasValidas(): string[] {
-  const fijas = ["saludo", "despedida", "noentendi"];
-  return [...Object.keys(getConfig().respuestas_info), ...fijas];
+/**
+ * Mapa lowercase → key original para categorías válidas.
+ * Permite que la salida lowercaseada de la IA se resuelva
+ * correctamente a la key original de Firestore.
+ */
+function buildCategoriasMap(): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const key of Object.keys(getConfig().respuestas_info)) {
+    map.set(key.toLowerCase(), key);
+  }
+  // Categorías fijas (ya están en lowercase)
+  map.set("saludo", "saludo");
+  map.set("despedida", "despedida");
+  map.set("noentendi", "noentendi");
+  return map;
 }
 
 export const clasificarIntencion = async (
@@ -52,18 +63,22 @@ export const clasificarIntencion = async (
     ];
 
     const response = await llamarDeepseek(messages);
+    const fullRaw = response.choices[0].message.content?.trim() ?? "";
     // Tomamos sólo la primera palabra por si el modelo añade algo extra
-    const rawContent: string =
-      (response.choices[0].message.content?.trim().toLowerCase() ?? "")
-        .split(/[\s\n,.;:]+/)[0];
+    const rawContent: string = fullRaw.toLowerCase().split(/[\s\n,.;:]+/)[0];
 
-    const validas = getCategoriasValidas();
-    if (!validas.includes(rawContent)) {
+    console.log(`🤖 IA respuesta completa: "${fullRaw}" → primera palabra: "${rawContent}"`);
+
+    const categoriasMap = buildCategoriasMap();
+    const originalKey = categoriasMap.get(rawContent);
+
+    if (!originalKey) {
       console.warn(`⚠️ IA retornó categoría desconocida: "${rawContent}". Usando 'noentendi'.`);
       return "noentendi";
     }
 
-    return rawContent;
+    console.log(`🔍 IA clasificó: "${rawContent}" → key original: "${originalKey}"`);
+    return originalKey;
   } catch (error) {
     console.error("❌ Error al clasificar intención con IA:", error);
     return "noentendi";

@@ -1,8 +1,8 @@
 {
   "584245435637@c.us": {
-    "last_interaction": 1773860875,
+    "last_interaction": 1774395238,
     "status": "human",
-    "human_since": 1773860875,
+    "human_since": 1774395238,
     "history": [
       {
         "role": "user",
@@ -171,22 +171,106 @@
       }
     ]
   },
-  "584145193744@c.us": {
-    "last_interaction": 1773844342,
-    "status": "human",
-    "human_since": 1773844342,
-    "history": []
-  },
   "120363419907997854@g.us": {
-    "last_interaction": 1773845847,
+    "last_interaction": 1774395436,
     "status": "human",
-    "human_since": 1773845847,
+    "human_since": 1774395436,
     "history": []
   },
   "120363361918369316@g.us": {
-    "last_interaction": 1773861611,
+    "last_interaction": 1774025168,
     "status": "human",
-    "human_since": 1773861611,
+    "human_since": 1774025168,
     "history": []
+  },
+  "584125695100@c.us": {
+    "last_interaction": 1774048420,
+    "status": "human",
+    "human_since": 1774048420,
+    "history": []
+  },
+  "584268691664@c.us": {
+    "last_interaction": 1774048964,
+    "status": "human",
+    "human_since": 1774048964,
+    "history": [
+      {
+        "role": "assistant",
+        "content": "¡Hola! 🌙 En este momento nuestra agencia se encuentra cerrada. Nuestro horario de atención es de *8:00* AM a *5:00 PM*. Déjanos tu consulta y serás el primero en ser atendido al abrir. ¡Gracias!"
+      },
+      {
+        "role": "user",
+        "content": "Buenas noches"
+      }
+    ]
+  },
+  "584145193744@c.us": {
+    "last_interaction": 1774394932,
+    "status": "bot",
+    "history": [
+      {
+        "role": "user",
+        "content": "Servicios"
+      },
+      {
+        "role": "assistant",
+        "content": "Lo siento, no logré entender eso. 😅 ¿Podrías intentar escribirlo de otra forma? También puedes pedir hablar con un admin si necesitas ayuda específica."
+      },
+      {
+        "role": "user",
+        "content": "Hola"
+      },
+      {
+        "role": "assistant",
+        "content": "¡Hola! 👋 Bienvenido a *WhaiBot*, tu asistente virtual. Estoy aquí para resolver tus dudas sobre nuestro servicio. ¿En qué puedo ayudarte hoy?"
+      },
+      {
+        "role": "user",
+        "content": "Quisiera saber sobre sus servicios.."
+      },
+      {
+        "role": "assistant",
+        "content": "¡Es un gusto contarte más! 🤖 *WhaiBot* es un servicio de automatización inteligente para WhatsApp, diseñado para que tu negocio nunca descanse. 🚀\n\nLo que nos hace diferentes:\n✅ *100% Personalizable:* Adaptamos las respuestas a la personalidad de tu marca.\n✅ *Sin API de Meta:* Usamos tecnología propia para que mantengas el control total de tu número.\n✅ *Atención 24/7:* Respondemos dudas, entregamos precios y agendamos citas mientras tú te enfocas en crecer.\n✅ *Gestión de Humano:* Si el cliente necesita algo especial, el bot te avisa para que tú tomes el control."
+      },
+      {
+        "role": "user",
+        "content": "Y a que hora abren?"
+      },
+      {
+        "role": "assistant",
+        "content": "¡Hola! 🌙 En este momento nuestra agencia se encuentra cerrada. Nuestro horario de atención es de *8:00* AM a *5:00 PM*. Déjanos tu consulta y serás el primero en ser atendido al abrir. ¡Gracias!"
+      },
+      {
+        "role": "user",
+        "content": "Ok muchas gracias"
+      },
+      {
+        "role": "assistant",
+        "content": "¡Fue un placer ayudarte hoy! Recuerda que en *WhaiBot* estamos para servirte. Que tengas un excelente día. ✨"
+      }
+    ]
+  },
+  "584149734071@c.us": {
+    "last_interaction": 1774394170,
+    "status": "human",
+    "human_since": 1774394170,
+    "history": [
+      {
+        "role": "assistant",
+        "content": "¡Hola! 🌙 En este momento nuestra agencia se encuentra cerrada. Nuestro horario de atención es de *8:00* AM a *5:00 PM*. Déjanos tu consulta y serás el primero en ser atendido al abrir. ¡Gracias!"
+      },
+      {
+        "role": "user",
+        "content": "Tu has solo vendido?"
+      },
+      {
+        "role": "user",
+        "content": "Mml"
+      },
+      {
+        "role": "assistant",
+        "content": "Lo siento, no logré entender eso. 😅 ¿Podrías intentar escribirlo de otra forma? También puedes pedir hablar con un admin si necesitas ayuda específica."
+      }
+    ]
   }
 }
