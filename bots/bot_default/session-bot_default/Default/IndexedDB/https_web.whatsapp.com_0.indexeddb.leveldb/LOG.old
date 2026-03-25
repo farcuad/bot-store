@@ -1,0 +1,24 @@
+2026/03/25-07:21:49.815 1ecd38 Reusing MANIFEST /Users/macbookpro/Documents/proyectos/bot-store/bots/bot_default/session-bot_default/Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/03/25-07:21:49.816 1ecd38 Recovering log #440
+2026/03/25-07:21:50.172 1ecd38 Reusing old log /Users/macbookpro/Documents/proyectos/bot-store/bots/bot_default/session-bot_default/Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb/000440.log 
+2026/03/25-07:21:52.613 1ecd17 Level-0 table #451: started
+2026/03/25-07:21:52.658 1ecd17 Level-0 table #451: 1624972 bytes OK
+2026/03/25-07:21:52.669 1ecd17 Delete type=0 #440
+2026/03/25-07:21:53.225 1ecd17 Compacting 1@1 + 7@2 files
+2026/03/25-07:21:53.324 1ecd17 Generated table #452@1: 72878 keys, 2245358 bytes
+2026/03/25-07:21:53.744 1ecd17 Generated table #453@1: 31463 keys, 2192536 bytes
+2026/03/25-07:21:54.024 1ecd17 Generated table #454@1: 43859 keys, 2209262 bytes
+2026/03/25-07:21:54.199 1ecd17 Generated table #455@1: 683 keys, 2136975 bytes
+2026/03/25-07:21:54.277 1ecd17 Generated table #456@1: 1107 keys, 2132995 bytes
+2026/03/25-07:21:54.422 1ecd17 Generated table #457@1: 30173 keys, 2220352 bytes
+2026/03/25-07:21:54.454 1ecd17 Generated table #458@1: 9832 keys, 776157 bytes
+2026/03/25-07:21:54.455 1ecd17 Compacted 1@1 + 7@2 files => 13913635 bytes
+2026/03/25-07:21:54.462 1ecd17 compacted to: files[ 0 0 7 0 0 0 0 ]
+2026/03/25-07:21:54.464 1ecd17 Delete type=2 #448
+2026/03/25-07:21:54.464 1ecd17 Delete type=2 #447
+2026/03/25-07:21:54.464 1ecd17 Delete type=2 #446
+2026/03/25-07:21:54.465 1ecd17 Delete type=2 #444
+2026/03/25-07:21:54.465 1ecd17 Delete type=2 #445
+2026/03/25-07:21:54.466 1ecd17 Delete type=2 #451
+2026/03/25-07:21:54.466 1ecd17 Delete type=2 #442
+2026/03/25-07:21:54.466 1ecd17 Delete type=2 #443

@@ -2,25 +2,32 @@ import { llamarDeepseek } from "../config/deepseek.js";
 import type { ConversationMessage } from "../services/sessionManager.js";
 import type { InfoRespuesta } from "../models/BotConfig.js";
 
-function buildSystemPrompt(nombreNegocio: string, respuestasInfo: Record<string, InfoRespuesta>): string {
+function buildSystemPrompt(nombreNegocio: string, respuestasInfo: Record<string, InfoRespuesta>, customPrompt?: string): string {
   const infoText = Object.values(respuestasInfo)
     .filter(r => r.activo !== false)
-    .map(r => `- ${r.texto}`)
+    .map(r => {
+      let line = `- ${r.texto}`;
+      if (r.descripcion_ia) {
+        line += ` (Nota: ${r.descripcion_ia})`;
+      }
+      return line;
+    })
     .join("\n");
 
-  return `
-Sos el asistente virtual de ${nombreNegocio}. Tu trabajo es atender clientes por WhatsApp de forma amable, natural y concisa.
+  const basePrompt = customPrompt || `Sos el asistente virtual de ${nombreNegocio}. Tu trabajo es atender clientes por WhatsApp de forma amable, natural y concisa.`;
 
-INFORMACIÓN DEL NEGOCIO:
+  return `
+${basePrompt}
+
+INFORMACIÓN ESTRICTA DEL NEGOCIO:
 ${infoText}
 
-REGLAS:
+REGLAS CRÍTICAS:
 - Si te preguntan varias cosas, respondé todas.
 - Respondé siempre de forma corta y amigable.
-- Si no sabés algo, decí que lo vas a consultar.
-- No inventes información que no está aquí.
+- Si el cliente te pide información, productos, sabores o detalles que NO ESTÁN en la INFORMACIÓN ESTRICTA, **NO INVENTES NINGÚN DATO**. Debes responder amablemente que vas a consultarlo o que no tienes esa información y AGREGAR OBLIGATORIAMENTE la etiqueta [NO_ENTENDI] al final de tu respuesta.
 - Nunca digas que sos una IA a menos que te lo pregunten.
-- Si no entendés lo que quiere el usuario, o te pide algo que no sabés responder, respondé amablemente y agrega obligatoriamente la etiqueta secreta [NO_ENTENDI] al final de tu respuesta.
+- Si no entendés lo que quiere el usuario o la consulta es ajena al negocio, responde amablemente y agrega la etiqueta [NO_ENTENDI] al final de tu respuesta.
 - Si el usuario indica que necesita hablar con una persona real, un humano, un asesor, o menciona a "Raquel", responde amablemente y agrega obligatoriamente la etiqueta secreta [HABLAR_CON_HUMANO] al final de tu respuesta.
 `.trim();
 }
@@ -29,10 +36,11 @@ export const generarRespuestaBot = async (
   historial: ConversationMessage[],
   nombreNegocio: string,
   respuestasInfo: Record<string, InfoRespuesta>,
-  instruccionExtra?: string
+  instruccionExtra?: string,
+  customPrompt?: string
 ): Promise<string> => {
   try {
-    let systemPrompt = buildSystemPrompt(nombreNegocio, respuestasInfo);
+    let systemPrompt = buildSystemPrompt(nombreNegocio, respuestasInfo, customPrompt);
     if (instruccionExtra) {
       systemPrompt += `\n\nINSTRUCCIÓN ESPECIAL PARA ESTE MENSAJE:\n${instruccionExtra}`;
     }

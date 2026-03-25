@@ -1,8 +1,8 @@
-import { senBotMessage } from "../index.js";
+import { botManager } from "../saas/BotManager.js";
 // Endpoint para intermediario de whatsapp
 export const seendMessageController = async (req, res) => {
     try {
-        const { to, message } = req.body;
+        const { to, message, botId } = req.body;
         const clientKey = req.headers["x-client-key"];
         if (clientKey !== process.env.API_KEY) {
             return res.status(401).json({ error: "API Key incorrecta" });
@@ -10,7 +10,15 @@ export const seendMessageController = async (req, res) => {
         if (!to || !message) {
             return res.status(400).json({ error: "Faltan datos" });
         }
-        await senBotMessage(to, message);
+        // Use the specified bot or fall back to the legacy default bot
+        const targetBotId = botId ?? "bot_default";
+        const instance = botManager.getInstance(targetBotId);
+        if (!instance) {
+            return res
+                .status(404)
+                .json({ error: `Bot '${targetBotId}' not found or not started` });
+        }
+        await instance.sendMessage(to, message);
         res.status(200).json({ succes: true, message: `Mensaje enviado a ${to}` });
     }
     catch (error) {

@@ -187,6 +187,10 @@
     <h2>Bot Admin</h2>
     <p>Ingresa la contraseña para continuar</p>
     <div class="login-field">
+      <label>Número del Bot</label>
+      <input type="text" id="botid-input" placeholder="ej. 5491112345678" onkeydown="if(event.key==='Enter') document.getElementById('pass-input').focus()" />
+    </div>
+    <div class="login-field">
       <label>Contraseña</label>
       <input type="password" id="pass-input" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()" />
     </div>
@@ -299,20 +303,25 @@ const API = '/api';
 
 /* ════════ AUTH ════════ */
 let TOKEN = localStorage.getItem('admin_token') || '';
-function authHeaders() { return { 'Content-Type':'application/json', 'x-admin-token': TOKEN }; }
+let BOT_ID = localStorage.getItem('admin_botId') || '';
+function authHeaders() { return { 'Content-Type':'application/json', 'x-admin-token': TOKEN, 'x-bot-id': BOT_ID }; }
 
 async function doLogin() {
   const pw  = document.getElementById('pass-input').value.trim();
+  const botId = document.getElementById('botid-input').value.trim();
   const btn = document.getElementById('login-btn');
   const err = document.getElementById('login-error');
+  if (!botId) { err.textContent = 'Ingresa el número del bot'; return; }
   if (!pw) { err.textContent = 'Ingresa la contraseña'; return; }
   btn.disabled = true; btn.textContent = 'Verificando…'; err.textContent = '';
   try {
-    const r = await fetch(`${API}/login`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:pw}) });
+    const r = await fetch(`${API}/login`, { method:'POST', headers:{'Content-Type':'application/json', 'x-bot-id': botId}, body:JSON.stringify({password:pw}) });
     const j = await r.json();
     if (!j.ok) throw new Error(j.error);
     TOKEN = j.token;
     localStorage.setItem('admin_token', TOKEN);
+    BOT_ID = botId;
+    localStorage.setItem('admin_botId', BOT_ID);
     showApp();
   } catch(e) {
     err.textContent = '❌ ' + e.message;
@@ -366,7 +375,7 @@ function renderStats(d) {
     ? new Date(d.ultima_actualizacion).toLocaleString('es-VE',{dateStyle:'short',timeStyle:'short'})
     : '—';
 
-  // KPIs — sin intenciones (no se usan)
+  
   document.getElementById('stats-kpi').innerHTML = `
     <div class="kpi-card" style="--kpi-color:var(--accent)">
       <div class="kpi-label">💬 Mensajes respondidos</div>

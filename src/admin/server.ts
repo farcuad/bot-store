@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import adminRoutes from "./routes.js";
+import saasRoutes from "../saas/saasRoutes.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -14,13 +15,24 @@ export function startAdminServer(): void {
   const app = express();
   app.use(express.json());
 
-  // Servir el panel HTML estático
+  // ── Static files ─────────────────────────────────────────────────────────────
+
+  // SaaS dashboard (served at root so /saas/ works nicely)
+  app.use("/saas", express.static(path.join(__dirname, "../../public/saas")));
+
+  // Legacy admin panel
   app.use(express.static(path.join(__dirname, "../../public/admin")));
 
-  // API REST
+  // ── API ───────────────────────────────────────────────────────────────────────
+
+  // SaaS bot management API
+  app.use("/api/saas", saasRoutes);
+
+  // Legacy single-bot admin API
   app.use("/api", adminRoutes);
 
   app.listen(ADMIN_PORT, () => {
-    console.log(`🖥️  Panel admin disponible en http://localhost:${ADMIN_PORT}`);
+    console.log(`🖥️  Panel admin en http://localhost:${ADMIN_PORT}`);
+    console.log(`🤖  SaaS dashboard en http://localhost:${ADMIN_PORT}/saas`);
   });
 }

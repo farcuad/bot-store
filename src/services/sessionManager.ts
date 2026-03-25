@@ -22,98 +22,101 @@ export const TWENTY_FOUR_HOURS = 86_400;
 export const AUTO_REACTIVATE_SECONDS = 30 * 60;
 export const MAX_HISTORY_MESSAGES = 10;
 
-// ─── Caché en memoria ─────────────────────────────────────────────────────────
-// La historia vive aquí para evitar lecturas de Firestore en cada mensaje.
-// El status/last_interaction/human_since SIEMPRE se leen frescos desde Firestore.
+// ─── Factory per-bot ──────────────────────────────────────────────────────────
 
-const memoryCache: SessionsData = {};
+export function createSessionManager(botId: string) {
+  /** In-memory history cache scoped to this bot */
+  const memoryCache: SessionsData = {};
 
-// ─── Referencia de Firestore ──────────────────────────────────────────────────
+  function sessionRef(phone: string) {
+    return db
+      .collection('bots')
+      .doc(botId)
+      .collection('sessions')
+      .doc(phone);
+  }
 
-function sessionRef(phone: string) {
-  return db
-    .collection('bots')
-    .doc(BOT_PHONE_NUMBER)
-    .collection('sessions')
-    .doc(phone);
-}
+  async function getSession(phone: string): Promise<SessionEntry | null> {
+    const snap = await sessionRef(phone).get();
+    if (!snap.exists) return null;
 
-// ─── API pública ──────────────────────────────────────────────────────────────
+    const data = snap.data()!;
+    const status = (data.status as 'bot' | 'human') ?? 'bot';
+    const last_interaction = (data.last_interaction as number) ?? 0;
+    const human_since = data.human_since as number | undefined;
 
-/**
- * Carga la sesión de un usuario desde Firestore.
- * El historial de conversación se mantiene en memoria.
- * Retorna null si el usuario no tiene sesión previa.
- */
-export async function getSession(phone: string): Promise<SessionEntry | null> {
-  const snap = await sessionRef(phone).get();
-  if (!snap.exists) return null;
+    const history = memoryCache[phone]?.history ?? [];
+    const entry: SessionEntry = { last_interaction, status, human_since, history };
+    memoryCache[phone] = entry;
+    return entry;
+  }
 
-  const data = snap.data()!;
-  const status = (data.status as 'bot' | 'human') ?? 'bot';
-  const last_interaction = (data.last_interaction as number) ?? 0;
-  const human_since = data.human_since as number | undefined;
+  async function saveSession(phone: string, entry: SessionEntry): Promise<void> {
+    memoryCache[phone] = entry;
 
-  // Fusionar con historial en memoria (history nunca viene de Firestore)
-  const history = memoryCache[phone]?.history ?? [];
+    const { human_since, ...rest } = entry;
+    const payload: Record<string, unknown> = {
+      ...rest,
+      phone,
+      updated_at: Date.now(),
+    };
+    if (human_since !== undefined) payload.human_since = human_since;
+    delete payload.history;
 
-  const entry: SessionEntry = { last_interaction, status, human_since, history };
-  memoryCache[phone] = entry;
-  return entry;
-}
+    await sessionRef(phone).set(payload, { merge: true });
+  }
 
-/**
- * Guarda (crea o actualiza) una sesión en Firestore y en memoria.
- * Solo persiste los campos de control; el history queda en memoria.
- */
-export async function saveSession(phone: string, entry: SessionEntry): Promise<void> {
-  memoryCache[phone] = entry;
+  async function getStatusFromFirestore(phone: string): Promise<'bot' | 'human' | null> {
+    const snap = await sessionRef(phone).get();
+    if (!snap.exists) return null;
+    return (snap.data()!.status as 'bot' | 'human') ?? 'bot';
+  }
 
-  const { human_since, ...rest } = entry;
-  const payload: Record<string, unknown> = {
-    ...rest,
-    phone,            // útil para queries externas
-    updated_at: Date.now(),
+  function getSessionFromMemory(phone: string): SessionEntry | undefined {
+    return memoryCache[phone];
+  }
+
+  function appendToHistory(session: SessionEntry, role: 'user' | 'assistant', content: string): void {
+    if (!session.history) session.history = [];
+    session.history.push({ role, content });
+    if (session.history.length > MAX_HISTORY_MESSAGES) {
+      session.history = session.history.slice(-MAX_HISTORY_MESSAGES);
+    }
+  }
+
+  /** List all sessions for this bot (Firestore scan) */
+  async function listSessions(): Promise<SessionEntry[]> {
+    const snap = await db.collection('bots').doc(botId).collection('sessions').get();
+    return snap.docs.map(doc => {
+      const d = doc.data();
+      return {
+        last_interaction: d.last_interaction ?? 0,
+        status: d.status ?? 'bot',
+        human_since: d.human_since,
+        history: memoryCache[doc.id]?.history ?? [],
+      } as SessionEntry;
+    });
+  }
+
+  return {
+    TWENTY_FOUR_HOURS,
+    AUTO_REACTIVATE_SECONDS,
+    MAX_HISTORY_MESSAGES,
+    getSession,
+    saveSession,
+    getStatusFromFirestore,
+    getSessionFromMemory,
+    appendToHistory,
+    listSessions,
   };
-  // Solo persiste human_since si está definido (evita undefined en Firestore)
-  if (human_since !== undefined) {
-    payload.human_since = human_since;
-  }
-  // No persistir el historial en Firestore (vive en memoria)
-  delete payload.history;
-
-  await sessionRef(phone).set(payload, { merge: true });
 }
 
-/**
- * Lee SOLO el status desde Firestore (para detectar cambios externos en tiempo real).
- */
-export async function getStatusFromFirestore(
-  phone: string,
-): Promise<'bot' | 'human' | null> {
-  const snap = await sessionRef(phone).get();
-  if (!snap.exists) return null;
-  return (snap.data()!.status as 'bot' | 'human') ?? 'bot';
-}
+// ─── Backward-compatible singleton (uses legacy BOT_PHONE_NUMBER) ──────────────
 
-/**
- * Retorna la sesión del caché en memoria (sin llamadas a Firestore).
- */
-export function getSessionFromMemory(phone: string): SessionEntry | undefined {
-  return memoryCache[phone];
-}
+const _legacy = createSessionManager(BOT_PHONE_NUMBER);
 
-/**
- * Agrega un mensaje al historial en memoria y lo limita al máximo definido.
- */
-export function appendToHistory(
-  session: SessionEntry,
-  role: 'user' | 'assistant',
-  content: string,
-): void {
-  if (!session.history) session.history = [];
-  session.history.push({ role, content });
-  if (session.history.length > MAX_HISTORY_MESSAGES) {
-    session.history = session.history.slice(-MAX_HISTORY_MESSAGES);
-  }
-}
+export const getSession = _legacy.getSession;
+export const saveSession = _legacy.saveSession;
+export const getStatusFromFirestore = _legacy.getStatusFromFirestore;
+export const getSessionFromMemory = _legacy.getSessionFromMemory;
+export const appendToHistory = _legacy.appendToHistory;

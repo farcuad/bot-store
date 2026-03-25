@@ -1,2 +1,2 @@
-export declare function senBotMessage(to: string, message: string): Promise<void>;
+export {};
 //# sourceMappingURL=index.d.ts.map

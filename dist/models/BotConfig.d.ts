@@ -3,9 +3,9 @@
  * Representa una respuesta informativa ligada a una intención de la IA.
  */
 export interface InfoRespuesta {
-    /** Texto que se envía al usuario cuando se detecta esta intención */
+    /** El texto que verá el cliente */
     texto: string;
-    /** Descripción que se le pasa a la IA para que reconozca la intención */
+    /** Instrucción para que la IA sepa cuándo usar esta información */
     descripcion_ia?: string;
     /** Si false, la IA no la considerará y el bot no responderá con este doc. Opcional: si no existe se trata como activo. */
     activo?: boolean;
@@ -41,7 +41,8 @@ export interface BotConfig {
     nombre: string;
     respuestas_info: Record<string, InfoRespuesta>;
     respuestas_sistema: Record<string, SystemRespuesta>;
-    horario: HorarioConfig;
     activo: boolean;
+    /** Prompt base para la IA. Si no existe, se usa uno por defecto. */
+    prompt_ia?: string | undefined;
 }
 //# sourceMappingURL=BotConfig.d.ts.map
