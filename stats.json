@@ -1,17 +1,5 @@
 {
-  "total_mensajes": 64,
-  "por_intencion": {
-    "noentendi": 30,
-    "ubicacion": 6,
-    "horario": 4,
-    "precio": 4,
-    "saludo": 9,
-    "agenda": 4,
-    "redes": 4,
-    "delivery": 1,
-    "informacionWhaiBot": 1,
-    "despedida": 1
-  },
-  "usuarios_unicos": 16,
-  "ultima_actualizacion": "2026-03-24T23:28:54.813Z"
+  "total_mensajes": 78,
+  "usuarios_unicos": 13,
+  "ultima_actualizacion": "2026-03-25T02:24:51.631Z"
 }

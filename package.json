@@ -14,7 +14,9 @@
       "stats.json",
       "dist/**"
     ],
-    "watch": ["src"],
+    "watch": [
+      "src"
+    ],
     "ext": "ts,js,json"
   },
   "keywords": [],
@@ -23,11 +25,13 @@
   "description": "",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@types/qrcode": "^1.5.6",
     "axios": "^1.13.6",
     "body-parser": "^2.2.2",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "firebase-admin": "^13.7.0",
+    "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
     "whatsapp-web.js": "^1.34.6"
   },

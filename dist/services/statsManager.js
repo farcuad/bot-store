@@ -1,53 +1,71 @@
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-// --- Rutas ---
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { db, BOT_PHONE_NUMBER } from "../config/firebase.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const STATS_PATH = path.resolve(__dirname, '../../stats.json');
-// --- Estado en memoria ---
-let stats = {
-    total_mensajes: 0,
-    por_intencion: {},
-    usuarios_unicos: 0,
-    ultima_actualizacion: new Date().toISOString(),
-};
-// --- Funciones ---
-export async function loadStats() {
-    try {
-        const raw = await fs.readFile(STATS_PATH, 'utf-8');
-        stats = JSON.parse(raw);
-        console.log('📊 Estadísticas cargadas desde disco.');
+// ─── Factory per-bot ──────────────────────────────────────────────────────────
+export function createStatsManager(botId) {
+    const STATS_PATH = path.resolve(__dirname, `../../bots/${botId}/stats.json`);
+    const statsRef = () => db.collection("bots").doc(botId).collection("estadisticas").doc("resumen");
+    let stats = {
+        total_mensajes: 0,
+        usuarios_unicos: 0,
+        ultima_actualizacion: new Date().toISOString(),
+    };
+    async function loadStats() {
+        try {
+            const raw = await fs.readFile(STATS_PATH, "utf-8");
+            const parsed = JSON.parse(raw);
+            stats = {
+                total_mensajes: parsed.total_mensajes ?? 0,
+                usuarios_unicos: parsed.usuarios_unicos ?? 0,
+                ultima_actualizacion: parsed.ultima_actualizacion ?? new Date().toISOString(),
+            };
+            console.log(`[${botId}] 📊 Estadísticas cargadas desde disco.`);
+        }
+        catch {
+            console.log(`[${botId}] 📊 stats.json no encontrado. Iniciando en cero.`);
+        }
     }
-    catch {
-        console.log('📊 No se encontró stats.json. Iniciando con contadores en cero.');
+    async function saveStats() {
+        stats.ultima_actualizacion = new Date().toISOString();
+        await fs.writeFile(STATS_PATH, JSON.stringify(stats, null, 2), "utf-8");
+        statsRef()
+            .set(stats, { merge: true })
+            .catch((e) => console.error(`[${botId}] ⚠️ No se pudo sincronizar stats:`, e));
     }
+    function incrementarMensajesRespondidos() {
+        stats.total_mensajes++;
+    }
+    function incrementarUsuariosUnicos() {
+        stats.usuarios_unicos++;
+    }
+    function getStats() {
+        return { ...stats };
+    }
+    return {
+        loadStats,
+        saveStats,
+        incrementarMensajesRespondidos,
+        incrementarUsuariosUnicos,
+        getStats,
+    };
 }
-export async function saveStats() {
-    stats.ultima_actualizacion = new Date().toISOString();
-    await fs.writeFile(STATS_PATH, JSON.stringify(stats, null, 2), 'utf-8');
-}
-export function incrementarIntencion(intencion) {
-    stats.total_mensajes++;
-    stats.por_intencion[intencion] = (stats.por_intencion[intencion] ?? 0) + 1;
-}
-export function incrementarUsuariosUnicos() {
-    stats.usuarios_unicos++;
-}
-export function getStats() {
-    return stats;
-}
+// ─── Backward-compatible singleton ───────────────────────────────────────────
+const _legacy = createStatsManager(BOT_PHONE_NUMBER);
+export const loadStats = _legacy.loadStats;
+export const saveStats = _legacy.saveStats;
+export const incrementarMensajesRespondidos = _legacy.incrementarMensajesRespondidos;
+export const incrementarUsuariosUnicos = _legacy.incrementarUsuariosUnicos;
+export const getStats = _legacy.getStats;
 export function imprimirResumenStats() {
-    const s = getStats();
-    console.log('\n══════════════════════════════════');
-    console.log('📊 ESTADÍSTICAS DEL BOT');
-    console.log('══════════════════════════════════');
+    const s = _legacy.getStats();
+    console.log("\n══════════════════════════════════");
+    console.log("📊 ESTADÍSTICAS DEL BOT");
+    console.log("══════════════════════════════════");
     console.log(`📨 Total mensajes procesados : ${s.total_mensajes}`);
     console.log(`👥 Usuarios únicos           : ${s.usuarios_unicos}`);
-    console.log('📌 Por intención:');
-    for (const [k, v] of Object.entries(s.por_intencion)) {
-        console.log(`   • ${k.padEnd(15)} → ${v} veces`);
-    }
-    console.log('══════════════════════════════════\n');
+    console.log("══════════════════════════════════\n");
 }
 //# sourceMappingURL=statsManager.js.map

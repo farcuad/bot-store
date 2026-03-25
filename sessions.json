@@ -1,275 +1,106 @@
 {
   "584245435637@c.us": {
-    "last_interaction": 1774395238,
-    "status": "human",
-    "human_since": 1774395238,
+    "last_interaction": 1774405487,
+    "status": "bot",
     "history": [
       {
         "role": "user",
-        "content": "Ok y como puedo hacer un pedido?"
+        "content": "No pues por ahora lo que quiero saber son los precios? De las tortas y de los yogures"
       },
       {
         "role": "assistant",
-        "content": "Te informamos que estamos tomando pedidos a través de nuestro grupo exclusivo de WhatsApp y también te esperamos en nuestro punto de venta físico.\n\nCuéntame qué necesitas:\n\n📲 *¿Deseas unirte al grupo de pedidos?*\n📍 *¿Buscas nuestra ubicación física?*\n\n¡Escríbeme tu opción y te ayudo de inmediato! ✨"
+        "content": "¡Claro! Aquí tienes los precios que me preguntas 🍰🥛:\n\n**📦 Precios:**\n\n1. **Yogurt 16 Oz** - 12$  \n2. **Tortas Frías 12 Oz** (8 sabores) -  \n   - $1.5 BCV  \n   - 1$ en divisas  \n   - $1.25 c/u al llevar 5 o más unidades  \n\n3. **Tortas de Piña** -  \n   - $1.25 BCV  \n   - 1$ en divisas  \n   - $1.25 precio por docena  \n\n4. **Torta ponqué 1.5 kg** - $5 BCV  \n\n¿Te interesa algún otro producto de nuestra lista? 😊"
       },
       {
         "role": "user",
-        "content": "Si el grupo de pedido"
+        "content": "Cuales serían esos 8 sabores que dices de tortas frías?"
       },
       {
         "role": "assistant",
-        "content": "Te informamos que estamos tomando pedidos a través de nuestro grupo exclusivo de WhatsApp y también te esperamos en nuestro punto de venta físico.\n\nCuéntame qué necesitas:\n\n📲 *¿Deseas unirte al grupo de pedidos?*\n📍 *¿Buscas nuestra ubicación física?*\n\n¡Escríbeme tu opción y te ayudo de inmediato! ✨"
+        "content": "¡Excelente pregunta! 😊\n\nLamentablemente en la información que tengo **no están detallados los 8 sabores específicos** de las tortas frías de 12 Oz. 🍰\n\nTe recomiendo unirte a nuestro **grupo de WhatsApp** donde podrás consultar directamente los sabores disponibles, ver fotos y hacer pedidos:  \nhttps://chat.whatsapp.com/FHQFn9LgO8u52Zb8o9vufJ\n\n¿Te gustaría el enlace o prefieres que te ayude con algo más? 😊"
       },
       {
         "role": "user",
-        "content": "Si deseo unirme al grupo de pedido."
+        "content": "Nose que más decirte"
       },
       {
         "role": "assistant",
-        "content": "📱 *Síguenos en TikTok*:\n- https://www.tiktok.com/@dulcesporciones\n\n🫂 Abre este enlace para unirte a mi *grupo de WhatsApp*: \n- https://chat.whatsapp.com/FHQFn9LgO8u52Zb8o9vufJ?mode=gi_t\n\n¿Necesitas algo más?"
+        "content": "¡No hay problema! 😊\n\nEstoy aquí para lo que necesites. Si más adelante quieres:\n📍 *Ubicación*\n📦 *Lista de precios completa*\n📲 *Unirte al grupo de pedidos*\n⏰ *Consultar horarios*\n\nSolo me escribes ✨\n\n¡Que tengas una linda noche! 🌙🍪"
       },
       {
         "role": "user",
-        "content": "Hola"
+        "content": "Necesito hablar con una persona real."
       },
       {
         "role": "assistant",
-        "content": "¡Hola David Reyes 🤓! 👋 Bienvenido a *Dulces Porciones*.\n\nPuedes consultarme por:\n- 📦 *Listas de precios*\n- 📍 *Ubicación*\n- 📱 *Redes Sociales*\n- ⏰ *Horarios de Atención*\n\n ¿En qué podemos ayudarte? "
+        "content": "Entiendo, con gusto puedo ayudarte a contactar con una persona del equipo. \n\nTe recomiendo unirte a nuestro grupo de WhatsApp donde la administradora Raquel y el equipo atienden directamente los pedidos y consultas:  \nhttps://chat.whatsapp.com/FHQFn9LgO8u52Zb8o9vufJ\n\nTambién puedes visitarnos en nuestro local en Barinas en el horario de atención. ¿Te gustaría que te comparta nuevamente la dirección y horarios? 😊\n\n👩 ¡Perfecto! Ya avisé a *Raquel* y pronto te atenderá personalmente. 🙌\n\nEn un momento te contactará. ¡Gracias por tu paciencia! 💛"
       },
       {
         "role": "user",
-        "content": "Raquel dónde está?"
+        "content": "Había una vez un patito chiquito, que no podía caminar.?"
       },
       {
         "role": "assistant",
-        "content": "👩 ¡Perfecto! Ya avisé a *Raquel* y pronto te atenderá personalmente. 🙌\n\nEn un momento te contactará. ¡Gracias por tu paciencia! 💛"
+        "content": "¡Qué bonita historia! 😊 Aunque me encantaría seguirla, mi rol aquí es ayudarte con información de **Dulces Porciones**: precios, ubicación, horarios o unirte al grupo de pedidos. \n\n¿Hay algo de eso en lo que pueda asistirte hoy? 🍪✨"
       }
-    ]
+    ],
+    "human_since": 1774405181
   },
-  "584264654702@c.us": {
-    "last_interaction": 1773750357,
-    "status": "human",
-    "human_since": 1773750357,
-    "history": []
-  },
-  "120363420952502394@g.us": {
-    "last_interaction": 1773784714,
-    "status": "human",
-    "human_since": 1773784714,
-    "history": []
-  },
-  "216484169138287@lid": {
-    "last_interaction": 1773785537,
+  "222587351220228@lid": {
+    "last_interaction": 1774403389,
     "status": "bot",
     "history": [
       {
         "role": "assistant",
-        "content": "¡Hola Moosrondon! 👋 Bienvenido a *Dulces Porciones*.\n\nPuedes consultarme por:\n- 📦 *Listas de precios*\n- 📍 *Ubicación*\n- 📱 *Redes Sociales*\n- ⏰ *Horarios de Atención*\n\n ¿En qué podemos ayudarte? "
-      },
-      {
-        "role": "user",
-        "content": "Holaa"
-      },
-      {
-        "role": "user",
-        "content": "Lista de precios"
-      },
-      {
-        "role": "assistant",
-        "content": "📦 *Listas de precios*:\n1. *Yogurt 16 Oz* - 12$\n\n2. *Tortas Frias 12 Oz* - (8 sabores)\n    $1.5 BCV\n    1$ en divisas\n    $1.25 A partir de 5 unidades\n\n3. *Bizcochos Marmoleados* - $15\n\n4. *Tortas de Piña* -\n    $1.25 BCV\n    1$ en divisas\n    1.25$ precio por docena\n\n5. *Ponquesitos paquete de 8 unidades* -\n    $1.25 BCV\n    1$ en divisas\n\n6. *Quesillo* - \n    $1.35 BCV\n    1$ en divisas\n    $16 la docena\n\n7. *Palmeritas* - $14\n\n8. *Ponqué 300 gramos* -\n    $1.25 BCV\n    1$ en divisas\n    $1.25 precio por docena\n\n9. *Torta ponqué 1.5 kg*\n    $5 BCV"
-      },
-      {
-        "role": "user",
-        "content": "Dónde estás ubicado"
-      },
-      {
-        "role": "assistant",
-        "content": "📍 *Ubicación*:\nAv. Principal de los pozones, una cuadra antes del ambulatorio, Barinas Barinas.\n\n- https://maps.app.goo.gl/2UdGAnyTFnFQ7J2x7 \n\nTe esperamos! "
-      },
-      {
-        "role": "user",
-        "content": "Cómo aparecen por las redes sociales"
-      },
-      {
-        "role": "assistant",
-        "content": "📱 *Síguenos en TikTok*:\n- https://www.tiktok.com/@dulcesporciones\n\n🫂 Abre este enlace para unirte a mi *grupo de WhatsApp*: \n- https://chat.whatsapp.com/FHQFn9LgO8u52Zb8o9vufJ?mode=gi_t\n\n¿Necesitas algo más?"
-      }
-    ]
-  },
-  "241059653247187@lid": {
-    "last_interaction": 1773789024,
-    "status": "bot",
-    "history": [
-      {
-        "role": "assistant",
-        "content": "¡Hola Yennys! 👋 Bienvenido a *Dulces Porciones*.\n\nPuedes consultarme por:\n- 📦 *Listas de precios*\n- 📍 *Ubicación*\n- 📱 *Redes Sociales*\n- ⏰ *Horarios de Atención*\n\n ¿En qué podemos ayudarte? "
+        "content": "¡Hola amigo! 👋 Bienvenido a *Dulces Porciones*.\n\nPuedes consultarme por:\n- 📦 *Listas de precios*\n- 📍 *Ubicación*\n- 📱 *Redes Sociales*\n- ⏰ *Horarios de Atención*\n\n ¿En qué podemos ayudarte? "
       },
       {
         "role": "user",
         "content": ""
-      },
-      {
-        "role": "user",
-        "content": ""
-      },
-      {
-        "role": "assistant",
-        "content": "¡Hola yennysgoyo! 👋 Bienvenido a *Dulces Porciones*.\n\nPuedes consultarme por:\n- 📦 *Listas de precios*\n- 📍 *Ubicación*\n- 📱 *Redes Sociales*\n- ⏰ *Horarios de Atención*\n\n ¿En qué podemos ayudarte? "
       }
     ]
   },
-  "120363424882680972@g.us": {
-    "last_interaction": 1773789064,
+  "120363410848280083@g.us": {
+    "last_interaction": 1774403503,
     "status": "human",
-    "human_since": 1773789064,
+    "human_since": 1774403503,
     "history": []
   },
-  "584143507526@c.us": {
-    "last_interaction": 1773790495,
+  "584127575904@c.us": {
+    "last_interaction": 1774404224,
     "status": "bot",
-    "human_since": 1773790258,
-    "history": [
-      {
-        "role": "user",
-        "content": "Cómo estás que haces?"
-      },
-      {
-        "role": "assistant",
-        "content": "¡Hola Dulces Porciones, C.A.! 👋 Bienvenido a *Dulces Porciones*.\n\nPuedes consultarme por:\n- 📦 *Listas de precios*\n- 📍 *Ubicación*\n- 📱 *Redes Sociales*\n- ⏰ *Horarios de Atención*\n\n ¿En qué podemos ayudarte? "
-      },
-      {
-        "role": "user",
-        "content": "Ups"
-      },
-      {
-        "role": "assistant",
-        "content": "¡Hola Dulces Porciones, C.A.! 👋 Bienvenido a *Dulces Porciones*.\n\nPuedes consultarme por:\n- 📦 *Listas de precios*\n- 📍 *Ubicación*\n- 📱 *Redes Sociales*\n- ⏰ *Horarios de Atención*\n\n ¿En qué podemos ayudarte? "
-      },
-      {
-        "role": "user",
-        "content": "Necesito hablar con Raquel"
-      },
-      {
-        "role": "assistant",
-        "content": "👩 ¡Perfecto! Ya avisé a *Raquel* y pronto te atenderá personalmente. 🙌\n\nEn un momento te contactará. ¡Gracias por tu paciencia! 💛"
-      },
-      {
-        "role": "user",
-        "content": "Tienes delivery"
-      },
-      {
-        "role": "assistant",
-        "content": "Te informamos que estamos tomando pedidos a través de nuestro grupo exclusivo de WhatsApp y también te esperamos en nuestro punto de venta físico.\n\nCuéntame qué necesitas:\n\n📲 *¿Deseas unirte al grupo de pedidos?*\n📍 *¿Buscas nuestra ubicación física?*\n\n¡Escríbeme tu opción y te ayudo de inmediato! ✨"
-      },
-      {
-        "role": "user",
-        "content": "Tienes delivery"
-      },
-      {
-        "role": "assistant",
-        "content": "comunicate con el numero 04263564646, por eahi manuel te atendera los delivery. solo eso"
-      }
-    ]
-  },
-  "120363419907997854@g.us": {
-    "last_interaction": 1774395436,
-    "status": "human",
-    "human_since": 1774395436,
-    "history": []
-  },
-  "120363361918369316@g.us": {
-    "last_interaction": 1774025168,
-    "status": "human",
-    "human_since": 1774025168,
-    "history": []
-  },
-  "584125695100@c.us": {
-    "last_interaction": 1774048420,
-    "status": "human",
-    "human_since": 1774048420,
-    "history": []
-  },
-  "584268691664@c.us": {
-    "last_interaction": 1774048964,
-    "status": "human",
-    "human_since": 1774048964,
     "history": [
       {
         "role": "assistant",
-        "content": "¡Hola! 🌙 En este momento nuestra agencia se encuentra cerrada. Nuestro horario de atención es de *8:00* AM a *5:00 PM*. Déjanos tu consulta y serás el primero en ser atendido al abrir. ¡Gracias!"
+        "content": "¡Hola Andres! 👋 Bienvenido a *Dulces Porciones*.\n\nPuedes consultarme por:\n- 📦 *Listas de precios*\n- 📍 *Ubicación*\n- 📱 *Redes Sociales*\n- ⏰ *Horarios de Atención*\n\n ¿En qué podemos ayudarte? "
       },
       {
         "role": "user",
         "content": "Buenas noches"
-      }
-    ]
-  },
-  "584145193744@c.us": {
-    "last_interaction": 1774394932,
-    "status": "bot",
-    "history": [
-      {
-        "role": "user",
-        "content": "Servicios"
-      },
-      {
-        "role": "assistant",
-        "content": "Lo siento, no logré entender eso. 😅 ¿Podrías intentar escribirlo de otra forma? También puedes pedir hablar con un admin si necesitas ayuda específica."
       },
       {
         "role": "user",
-        "content": "Hola"
+        "content": "Listas de precios"
       },
       {
         "role": "assistant",
-        "content": "¡Hola! 👋 Bienvenido a *WhaiBot*, tu asistente virtual. Estoy aquí para resolver tus dudas sobre nuestro servicio. ¿En qué puedo ayudarte hoy?"
+        "content": "¡Buenas noches! 🌙 Aquí tienes nuestra lista de precios actualizada:\n\n📦 *LISTA DE PRECIOS*:\n\n1. *Yogurt 16 Oz* - 12$  \n2. *Tortas Frias 12 Oz* - (8 sabores)  \n   - $1.5 BCV  \n   - 1$ en divisas  \n   - $1.25 A partir de 5 unidades  \n3. *Bizcochos Marmoleados* - $15  \n4. *Tortas de Piña* -  \n   - $1.25 BCV  \n   - 1$ en divisas  \n   - 1.25$ precio por docena  \n5. *Ponquesitos paquete de 8 unidades* -  \n   - $1.25 BCV  \n   - 1$ en divisas  \n6. *Quesillo* -  \n   - $1.35 BCV  \n   - 1$ en divisas  \n   - $16 la docena  \n7. *Palmeritas* - $14  \n8. *Ponqué 300 gramos* -  \n   - $1.25 BCV  \n   - 1$ en divisas  \n   - $1.25 precio por docena  \n9. *Torta ponqué 1.5 kg* - $5 BCV  \n\n¿Te gustaría saber algo más? 😊"
       },
       {
         "role": "user",
-        "content": "Quisiera saber sobre sus servicios.."
+        "content": "En donde se ubican?"
       },
       {
         "role": "assistant",
-        "content": "¡Es un gusto contarte más! 🤖 *WhaiBot* es un servicio de automatización inteligente para WhatsApp, diseñado para que tu negocio nunca descanse. 🚀\n\nLo que nos hace diferentes:\n✅ *100% Personalizable:* Adaptamos las respuestas a la personalidad de tu marca.\n✅ *Sin API de Meta:* Usamos tecnología propia para que mantengas el control total de tu número.\n✅ *Atención 24/7:* Respondemos dudas, entregamos precios y agendamos citas mientras tú te enfocas en crecer.\n✅ *Gestión de Humano:* Si el cliente necesita algo especial, el bot te avisa para que tú tomes el control."
+        "content": "📍 *Ubicación*:\n\nAv. Principal de los pozones, una cuadra antes del ambulatorio, Barinas, Barinas.\n\nAquí está el enlace de Google Maps para que llegues fácilmente:\n👉 https://maps.app.goo.gl/2UdGAnyTFnFQ7J2x7\n\n¡Te esperamos! 🍰"
       },
       {
         "role": "user",
-        "content": "Y a que hora abren?"
+        "content": "Y que mas tienen?"
       },
       {
         "role": "assistant",
-        "content": "¡Hola! 🌙 En este momento nuestra agencia se encuentra cerrada. Nuestro horario de atención es de *8:00* AM a *5:00 PM*. Déjanos tu consulta y serás el primero en ser atendido al abrir. ¡Gracias!"
-      },
-      {
-        "role": "user",
-        "content": "Ok muchas gracias"
-      },
-      {
-        "role": "assistant",
-        "content": "¡Fue un placer ayudarte hoy! Recuerda que en *WhaiBot* estamos para servirte. Que tengas un excelente día. ✨"
-      }
-    ]
-  },
-  "584149734071@c.us": {
-    "last_interaction": 1774394170,
-    "status": "human",
-    "human_since": 1774394170,
-    "history": [
-      {
-        "role": "assistant",
-        "content": "¡Hola! 🌙 En este momento nuestra agencia se encuentra cerrada. Nuestro horario de atención es de *8:00* AM a *5:00 PM*. Déjanos tu consulta y serás el primero en ser atendido al abrir. ¡Gracias!"
-      },
-      {
-        "role": "user",
-        "content": "Tu has solo vendido?"
-      },
-      {
-        "role": "user",
-        "content": "Mml"
-      },
-      {
-        "role": "assistant",
-        "content": "Lo siento, no logré entender eso. 😅 ¿Podrías intentar escribirlo de otra forma? También puedes pedir hablar con un admin si necesitas ayuda específica."
+        "content": "¡Tenemos varias opciones deliciosas! 🍪✨\n\nAdemás de los productos de la lista, también puedes:\n- Unirte a nuestro **grupo exclusivo de WhatsApp** para pedidos:  \n  👉 https://chat.whatsapp.com/FHQFn9LgO8u52Zb8o9vufJ\n- Seguirnos en **TikTok** para ver novedades:  \n  👉 https://www.tiktok.com/@dulcesporciones\n- Visitar nuestro **punto físico** en la ubicación que te compartí.\n\n📅 *Horario de atención*:  \nMartes a Sábados  \n📥 Recepción de pedidos: después de las 12:00 PM  \n🚚 Despacho: desde las 2:00 PM hasta finalizar ruta.\n\n¿Te interesa algún producto en especial o quieres saber más detalles? 😊"
       }
     ]
   }

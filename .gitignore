@@ -3,3 +3,9 @@ node_modules/
 .wwebjs_cache/
 .env
 cloudflared.exe
+.DS_Store
+sessions.json
+stats.json
+.wwebjs_auth
+/bots
+bots/

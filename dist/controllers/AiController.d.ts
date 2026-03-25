@@ -1,17 +1,4 @@
 import type { ConversationMessage } from "../services/sessionManager.js";
-declare const CATEGORIAS_VALIDAS: readonly [
-  "precio",
-  "ubicacion",
-  "redes",
-  "horario",
-  "despedida",
-  "noentendi",
-  "saludo",
-];
-export type Intencion = (typeof CATEGORIAS_VALIDAS)[number];
-export declare const clasificarIntencion: (
-  mensajeCliente: string,
-  historial?: ConversationMessage[],
-) => Promise<Intencion>;
-export {};
+import type { InfoRespuesta } from "../models/BotConfig.js";
+export declare const generarRespuestaBot: (historial: ConversationMessage[], nombreNegocio: string, respuestasInfo: Record<string, InfoRespuesta>, instruccionExtra?: string, customPrompt?: string) => Promise<string>;
 //# sourceMappingURL=AiController.d.ts.map

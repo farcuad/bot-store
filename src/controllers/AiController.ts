@@ -1,86 +1,63 @@
 import { llamarDeepseek } from "../config/deepseek.js";
-import { getConfig, getNombre } from "../services/configService.js";
 import type { ConversationMessage } from "../services/sessionManager.js";
+import type { InfoRespuesta } from "../models/BotConfig.js";
 
-export type Intencion = string;
-
-/**
- * Construye el prompt del clasificador dinámicamente desde Firestore.
- * Las categorías de negocio se leen en tiempo real del cache.
- * "saludo", "despedida" y "noentendi" son siempre fijos.
- */
-function buildClassifierPrompt(): string {
-  const respuestas = getConfig().respuestas_info;
-  const nombre = getNombre();
-
-  const categoriasNegocio = Object.entries(respuestas)
-    .map(([id, r]) => `- ${id.padEnd(15)} → ${r.descripcion_ia}`)
+function buildSystemPrompt(nombreNegocio: string, respuestasInfo: Record<string, InfoRespuesta>, customPrompt?: string): string {
+  const infoText = Object.values(respuestasInfo)
+    .filter(r => r.activo !== false)
+    .map(r => {
+      let line = `- ${r.texto}`;
+      if (r.descripcion_ia) {
+        line += ` (Nota: ${r.descripcion_ia})`;
+      }
+      return line;
+    })
     .join("\n");
 
+  const basePrompt = customPrompt || `Sos el asistente virtual de ${nombreNegocio}. Tu trabajo es atender clientes por WhatsApp de forma amable, natural y concisa.`;
+
   return `
-Eres un clasificador de intenciones para un bot de WhatsApp de "${nombre}".
-Tu única tarea es leer el mensaje del usuario y responder con UNA SOLA PALABRA, exactamente uno de estos valores:
+${basePrompt}
 
-${categoriasNegocio}
-- saludo         → El usuario saluda, dice hola, buenos días, buenas, etc.
-- despedida      → El usuario se está despidiendo, agradeciendo o da por terminada la conversación.
-- noentendi      → El mensaje no encaja con ninguna categoría anterior.
+INFORMACIÓN ESTRICTA DEL NEGOCIO:
+${infoText}
 
-REGLAS:
-- Responde ÚNICAMENTE con una de las palabras exactas de la lista.
-- Sin explicaciones, sin signos de puntuación, sin comillas, sin tildes.
-- Si el usuario pregunta por algo fuera de las categorías, responde exactamente: noentendi
+REGLAS CRÍTICAS:
+- Si te preguntan varias cosas, respondé todas.
+- Respondé siempre de forma corta y amigable.
+- Si el cliente te pide información, productos, sabores o detalles que NO ESTÁN en la INFORMACIÓN ESTRICTA, **NO INVENTES NINGÚN DATO**. Debes responder amablemente que vas a consultarlo o que no tienes esa información y AGREGAR OBLIGATORIAMENTE la etiqueta [NO_ENTENDI] al final de tu respuesta.
+- Nunca digas que sos una IA a menos que te lo pregunten.
+- Si no entendés lo que quiere el usuario o la consulta es ajena al negocio, responde amablemente y agrega la etiqueta [NO_ENTENDI] al final de tu respuesta.
+- Si el usuario indica que necesita hablar con una persona real, un humano, un asesor, o menciona a "Raquel", responde amablemente y agrega obligatoriamente la etiqueta secreta [HABLAR_CON_HUMANO] al final de tu respuesta.
 `.trim();
 }
 
-/**
- * Mapa lowercase → key original para categorías válidas.
- * Permite que la salida lowercaseada de la IA se resuelva
- * correctamente a la key original de Firestore.
- */
-function buildCategoriasMap(): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const key of Object.keys(getConfig().respuestas_info)) {
-    map.set(key.toLowerCase(), key);
-  }
-  // Categorías fijas (ya están en lowercase)
-  map.set("saludo", "saludo");
-  map.set("despedida", "despedida");
-  map.set("noentendi", "noentendi");
-  return map;
-}
-
-export const clasificarIntencion = async (
-  mensajeCliente: string,
-  // El historial NO se pasa al clasificador: el contexto previo corrompe
-  // la salida y el modelo responde con texto en lugar de una sola palabra.
-  _historial: ConversationMessage[] = [],
-): Promise<Intencion> => {
+export const generarRespuestaBot = async (
+  historial: ConversationMessage[],
+  nombreNegocio: string,
+  respuestasInfo: Record<string, InfoRespuesta>,
+  instruccionExtra?: string,
+  customPrompt?: string
+): Promise<string> => {
   try {
+    let systemPrompt = buildSystemPrompt(nombreNegocio, respuestasInfo, customPrompt);
+    if (instruccionExtra) {
+      systemPrompt += `\n\nINSTRUCCIÓN ESPECIAL PARA ESTE MENSAJE:\n${instruccionExtra}`;
+    }
+
+    // Map existing history to OpenAI spec shape
     const messages = [
-      { role: "system", content: buildClassifierPrompt() },
-      { role: "user", content: mensajeCliente },
+      { role: "system", content: systemPrompt },
+      ...historial.map(msg => ({
+        role: msg.role, 
+        content: msg.content
+      }))
     ];
 
     const response = await llamarDeepseek(messages);
-    const fullRaw = response.choices[0].message.content?.trim() ?? "";
-    // Tomamos sólo la primera palabra por si el modelo añade algo extra
-    const rawContent: string = fullRaw.toLowerCase().split(/[\s\n,.;:]+/)[0];
-
-    console.log(`🤖 IA respuesta completa: "${fullRaw}" → primera palabra: "${rawContent}"`);
-
-    const categoriasMap = buildCategoriasMap();
-    const originalKey = categoriasMap.get(rawContent);
-
-    if (!originalKey) {
-      console.warn(`⚠️ IA retornó categoría desconocida: "${rawContent}". Usando 'noentendi'.`);
-      return "noentendi";
-    }
-
-    console.log(`🔍 IA clasificó: "${rawContent}" → key original: "${originalKey}"`);
-    return originalKey;
+    return response.choices[0].message.content?.trim() ?? "Lo siento, tuve un problema para procesar tu mensaje.";
   } catch (error) {
-    console.error("❌ Error al clasificar intención con IA:", error);
-    return "noentendi";
+    console.error("❌ Error generando respuesta con IA:", error);
+    return "Lo siento, tuve un problema. Por favor intentá de nuevo más tarde.";
   }
 };
