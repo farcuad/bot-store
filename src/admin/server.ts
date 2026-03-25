@@ -31,7 +31,7 @@ export function startAdminServer(): void {
   // Legacy single-bot admin API
   app.use("/api", adminRoutes);
 
-  app.listen(ADMIN_PORT, () => {
+  app.listen(ADMIN_PORT, "0.0.0.0", () => {
     console.log(`🖥️  Panel admin en http://localhost:${ADMIN_PORT}`);
     console.log(`🤖  SaaS dashboard en http://localhost:${ADMIN_PORT}/saas`);
   });
