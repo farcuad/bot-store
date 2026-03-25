@@ -1,61 +1,110 @@
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { db, BOT_PHONE_NUMBER } from '../config/firebase.js';
 
-// --- Tipos ---
+// ─── Tipos ─────────────────────────────────────────────────────────────────────
+
 export interface ConversationMessage {
   role: 'user' | 'assistant';
   content: string;
 }
 
 export interface SessionEntry {
-  last_interaction: number; // timestamp en segundos
+  last_interaction: number;
   status: 'bot' | 'human';
-  human_since?: number | undefined; // timestamp cuando se activó modo humano
-  history: ConversationMessage[]; // historial de conversación
+  human_since?: number | undefined;   // acepta undefined explícito (exactOptionalPropertyTypes)
+  history: ConversationMessage[];
 }
 
 export type SessionsData = Record<string, SessionEntry>;
 
-// --- Constantes ---
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const SESSIONS_PATH = path.resolve(__dirname, '../../sessions.json');
+// ─── Constantes ────────────────────────────────────────────────────────────────
 
-export const TWENTY_FOUR_HOURS = 86_400;              // 24h en segundos
-export const AUTO_REACTIVATE_SECONDS = 30 * 60;       // 30 minutos
-export const MAX_HISTORY_MESSAGES = 10;               // máximo de mensajes en historial
+export const TWENTY_FOUR_HOURS = 86_400;
+export const AUTO_REACTIVATE_SECONDS = 30 * 60;
+export const MAX_HISTORY_MESSAGES = 10;
 
-// --- Funciones ---
+// ─── Caché en memoria ─────────────────────────────────────────────────────────
+// La historia vive aquí para evitar lecturas de Firestore en cada mensaje.
+// El status/last_interaction/human_since SIEMPRE se leen frescos desde Firestore.
+
+const memoryCache: SessionsData = {};
+
+// ─── Referencia de Firestore ──────────────────────────────────────────────────
+
+function sessionRef(phone: string) {
+  return db
+    .collection('bots')
+    .doc(BOT_PHONE_NUMBER)
+    .collection('sessions')
+    .doc(phone);
+}
+
+// ─── API pública ──────────────────────────────────────────────────────────────
 
 /**
- * Carga las sesiones desde sessions.json.
- * Si el archivo no existe, retorna un objeto vacío.
+ * Carga la sesión de un usuario desde Firestore.
+ * El historial de conversación se mantiene en memoria.
+ * Retorna null si el usuario no tiene sesión previa.
  */
-export async function loadSessions(): Promise<SessionsData> {
-  try {
-    const raw = await fs.readFile(SESSIONS_PATH, 'utf-8');
-    const parsed = JSON.parse(raw) as SessionsData;
-    // Migración: añadir history vacío a sesiones antiguas sin él
-    for (const key of Object.keys(parsed)) {
-      const entry = parsed[key];
-      if (entry && !entry.history) entry.history = [];
-    }
-    return parsed;
-  } catch {
-    return {};
+export async function getSession(phone: string): Promise<SessionEntry | null> {
+  const snap = await sessionRef(phone).get();
+  if (!snap.exists) return null;
+
+  const data = snap.data()!;
+  const status = (data.status as 'bot' | 'human') ?? 'bot';
+  const last_interaction = (data.last_interaction as number) ?? 0;
+  const human_since = data.human_since as number | undefined;
+
+  // Fusionar con historial en memoria (history nunca viene de Firestore)
+  const history = memoryCache[phone]?.history ?? [];
+
+  const entry: SessionEntry = { last_interaction, status, human_since, history };
+  memoryCache[phone] = entry;
+  return entry;
+}
+
+/**
+ * Guarda (crea o actualiza) una sesión en Firestore y en memoria.
+ * Solo persiste los campos de control; el history queda en memoria.
+ */
+export async function saveSession(phone: string, entry: SessionEntry): Promise<void> {
+  memoryCache[phone] = entry;
+
+  const { human_since, ...rest } = entry;
+  const payload: Record<string, unknown> = {
+    ...rest,
+    phone,            // útil para queries externas
+    updated_at: Date.now(),
+  };
+  // Solo persiste human_since si está definido (evita undefined en Firestore)
+  if (human_since !== undefined) {
+    payload.human_since = human_since;
   }
+  // No persistir el historial en Firestore (vive en memoria)
+  delete payload.history;
+
+  await sessionRef(phone).set(payload, { merge: true });
 }
 
 /**
- * Guarda las sesiones en sessions.json con formato legible.
+ * Lee SOLO el status desde Firestore (para detectar cambios externos en tiempo real).
  */
-export async function saveSessions(data: SessionsData): Promise<void> {
-  await fs.writeFile(SESSIONS_PATH, JSON.stringify(data, null, 2), 'utf-8');
+export async function getStatusFromFirestore(
+  phone: string,
+): Promise<'bot' | 'human' | null> {
+  const snap = await sessionRef(phone).get();
+  if (!snap.exists) return null;
+  return (snap.data()!.status as 'bot' | 'human') ?? 'bot';
 }
 
 /**
- * Agrega un mensaje al historial de la sesión y lo limita al máximo definido.
+ * Retorna la sesión del caché en memoria (sin llamadas a Firestore).
+ */
+export function getSessionFromMemory(phone: string): SessionEntry | undefined {
+  return memoryCache[phone];
+}
+
+/**
+ * Agrega un mensaje al historial en memoria y lo limita al máximo definido.
  */
 export function appendToHistory(
   session: SessionEntry,

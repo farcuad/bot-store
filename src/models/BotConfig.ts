@@ -8,11 +8,11 @@ export interface InfoRespuesta {
   /** Texto que se envía al usuario cuando se detecta esta intención */
   texto: string;
   /** Descripción que se le pasa a la IA para que reconozca la intención */
-  descripcion_ia: string;
+  //descripcion_ia?: string;
   /** Si false, la IA no la considerará y el bot no responderá con este doc. Opcional: si no existe se trata como activo. */
   activo?: boolean;
   /** Si true, solo responde en horario laboral; fuera de él avisa del horario */
-  requiere_horario: boolean;
+  //requiere_horario?: boolean;
 }
 
 /**
@@ -46,6 +46,6 @@ export interface BotConfig {
   nombre: string;
   respuestas_info: Record<string, InfoRespuesta>;
   respuestas_sistema: Record<string, SystemRespuesta>;
-  horario: HorarioConfig;
+  //horario: HorarioConfig;
   activo: boolean;
 }

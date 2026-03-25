@@ -5,20 +5,18 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import {
-  loadSessions,
-  saveSessions,
+  getSession,
+  saveSession,
   appendToHistory,
+  getStatusFromFirestore,
   TWENTY_FOUR_HOURS,
   AUTO_REACTIVATE_SECONDS,
 } from "./services/sessionManager.js";
-import {
-  cambiarMensaje,
-  clasificarIntencion,
-} from "./controllers/AiController.js";
+import { generarRespuestaBot } from "./controllers/AiController.js";
 import {
   loadStats,
   saveStats,
-  incrementarIntencion,
+  incrementarMensajesRespondidos,
   incrementarUsuariosUnicos,
   imprimirResumenStats,
 } from "./services/statsManager.js";
@@ -27,13 +25,16 @@ import {
   startConfigRefresh,
   getConfig,
   getNombre,
-  isWithinBusinessHours,
-  getOutOfHoursMessage,
   registrarNoEntendido,
 } from "./services/configService.js";
 import { startAdminServer } from "./admin/server.js";
 
-const client = new Client({ authStrategy: new LocalAuth() });
+const client = new Client({
+  authStrategy: new LocalAuth(),
+  puppeteer: {
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  },
+});
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -63,7 +64,6 @@ client.on("message_create", async (msg) => {
   if (msg.timestamp * 1000 < bootTime) return;
   if (msg.from === "status@broadcast" || msg.from.includes("@g.us")) return;
 
-  const sessions = await loadSessions();
   const nowInSeconds = Math.floor(Date.now() / 1000);
 
   // ── Intervención humana: mensaje del dueño (fromMe) ───────────────────────
@@ -71,18 +71,44 @@ client.on("message_create", async (msg) => {
     const chat = await msg.getChat();
     const remoteId = chat.id._serialized;
 
-    const isAutoReply = Object.values(getConfig().respuestas_info).some((r) =>
-      msg.body.startsWith(r.texto.slice(0, 20)),
-    );
-    if (isAutoReply) return;
+    const remoteSession = await getSession(remoteId);
+    const sessionHistory = remoteSession?.history;
+    const isHistoryMatch = (() => {
+      if (!sessionHistory || sessionHistory.length === 0) return false;
+      const lastMsg = sessionHistory[sessionHistory.length - 1];
+      if (!lastMsg) return false;
+      return (
+        lastMsg.role === "assistant" &&
+        lastMsg.content.trim() === msg.body.trim()
+      );
+    })();
 
-    sessions[remoteId] = {
+    const botTexts = [
+      ...Object.values(getConfig().respuestas_info).map((r) => r.texto),
+      ...Object.values(getConfig().respuestas_sistema).map((r) => r.texto),
+      "📢 Contestale al usuario",
+    ];
+
+    const isTextMatch = botTexts.some((texto) => {
+      if (!texto) return false;
+      const parts = texto.split("{name}");
+      const prefix = (parts[0] || "").trim().slice(0, 25);
+      if (prefix.length > 4 && msg.body.startsWith(prefix)) return true;
+      if (parts.length > 1) {
+        const suffix = (parts[1] || "").trim().slice(0, 25);
+        if (suffix.length > 4 && msg.body.includes(suffix)) return true;
+      }
+      return msg.body.startsWith(texto.trim().slice(0, 25));
+    });
+
+    if (isHistoryMatch || isTextMatch) return;
+
+    await saveSession(remoteId, {
       last_interaction: nowInSeconds,
       status: "human",
       human_since: nowInSeconds,
-      history: sessions[remoteId]?.history ?? [],
-    };
-    await saveSessions(sessions);
+      history: remoteSession?.history ?? [],
+    });
     console.log(`👤 Intervención humana en ${remoteId}.`);
     return;
   }
@@ -104,21 +130,26 @@ client.on("message_create", async (msg) => {
   if (isMedia) return;
 
   // ── Auto-reactivación tras inactividad humana ─────────────────────────────
-  const session = sessions[from];
-  if (session?.status === "human" && session.human_since !== undefined) {
-    const elapsed = nowInSeconds - session.human_since;
-    if (elapsed >= AUTO_REACTIVATE_SECONDS) {
-      console.log(
-        `🔄 Auto-reactivando bot para ${from} (${Math.floor(elapsed / 60)} min).`,
-      );
-      sessions[from] = {
-        last_interaction: nowInSeconds,
-        status: "bot",
-        history: session.history ?? [],
-      };
-      await saveSessions(sessions);
-      await msg.reply(sys("botReactivado"));
-      return;
+  // Leer status SIEMPRE fresco desde Firestore para detectar cambios externos
+  const session = await getSession(from);
+  const currentStatus = await getStatusFromFirestore(from);
+
+  if (currentStatus === "human") {
+    const humanSince = session?.human_since;
+    if (humanSince !== undefined) {
+      const elapsed = nowInSeconds - humanSince;
+      if (elapsed >= AUTO_REACTIVATE_SECONDS) {
+        console.log(
+          `🔄 Auto-reactivando bot para ${from} (${Math.floor(elapsed / 60)} min).`,
+        );
+        await saveSession(from, {
+          last_interaction: nowInSeconds,
+          status: "bot",
+          history: session?.history ?? [],
+        });
+        await msg.reply(sys("botReactivado"));
+        return;
+      }
     }
     console.log(`⏸️ Modo humano activo para ${from}. Ignorando.`);
     return;
@@ -127,103 +158,87 @@ client.on("message_create", async (msg) => {
   // ── Gestión de sesión ─────────────────────────────────────────────────────
   const contact = await msg.getContact();
   const nombre = contact.pushname || "amigo";
-  let saludoEnviado = false;
+  let instruccionExtra = "";
 
   if (!session) {
-    sessions[from] = {
+    const newSession = {
       last_interaction: nowInSeconds,
-      status: "bot",
+      status: "bot" as const,
       history: [],
     };
+    await saveSession(from, newSession);
     incrementarUsuariosUnicos();
     console.log(`🆕 Nuevo usuario: ${nombre}`);
 
-    const mensajeBienvenida = !isWithinBusinessHours()
-      ? getOutOfHoursMessage()
-      : render(sys("saludoInicial"), nombre);
-
-    await msg.reply(mensajeBienvenida);
-    appendToHistory(sessions[from]!, "assistant", mensajeBienvenida);
-    saludoEnviado = true;
+    const mensajeBienvenida = render(sys("saludoInicial"), nombre);
+    instruccionExtra = `El usuario te está escribiendo por primera vez. Tu tarea es darle una cálida bienvenida basándote en esta plantilla: "${mensajeBienvenida}", y además responder a lo que te acaba de escribir.`;
   } else if (nowInSeconds - session.last_interaction > TWENTY_FOUR_HOURS) {
-    sessions[from] = {
+    const renewedSession = {
       last_interaction: nowInSeconds,
-      status: "bot",
+      status: "bot" as const,
       history: [],
     };
+    await saveSession(from, renewedSession);
     console.log(`🔄 Re-contacto: ${nombre}`);
 
-    const mensajeRecontacto = !isWithinBusinessHours()
-      ? getOutOfHoursMessage()
-      : render(sys("saludoRecontacto"), nombre);
-
-    await msg.reply(mensajeRecontacto);
-    appendToHistory(sessions[from]!, "assistant", mensajeRecontacto);
-    saludoEnviado = true;
+    const mensajeRecontacto = render(sys("saludoRecontacto"), nombre);
+    instruccionExtra = `El usuario volvió a escribir después de mucho tiempo. Tu tarea es saludarlo basándote en esta plantilla: "${mensajeRecontacto}", y además responder a lo que te acaba de escribir.`;
   } else {
-    sessions[from]!.last_interaction = nowInSeconds;
+    session.last_interaction = nowInSeconds;
+    await saveSession(from, session);
   }
 
-  appendToHistory(sessions[from]!, "user", msg.body);
+  // Obtener la sesión actualizada del cache en memoria
+  const activeSession = (await getSession(from))!;
+  appendToHistory(activeSession, "user", msg.body);
 
-  // ── Detector de "Raquel" ──────────────────────────────────────────────────
-  if (msg.body.trim().toLowerCase().includes("raquel")) {
-    const avisoCliente = sys("agenteAviso");
-    await msg.reply(avisoCliente);
-    appendToHistory(sessions[from]!, "assistant", avisoCliente);
+  // (El detector hardcodeado de "Raquel" fue reemplazado por la etiqueta de IA [HABLAR_CON_HUMANO])
 
-    sessions[from]!.status = "human";
-    sessions[from]!.human_since = nowInSeconds;
-
-    const phoneNumber = msg.from.replace(/\D/g, "").slice(0, 12);
-    await client.sendMessage(
-      msg.to,
-      `📢 Contestale al usuario ${nombre}! ${phoneNumber}, que quiere: ${msg.body}`,
+  // ── Generación de respuesta (IA) ──────────────────────────────────────────
+  try {
+    let respuesta = await generarRespuestaBot(
+      activeSession.history,
+      getNombre(),
+      getConfig().respuestas_info,
+      instruccionExtra
     );
-    console.log(`🔔 Raquel notificada. Bot pausado para ${from}.`);
-    await saveSessions(sessions);
-    await saveStats();
-    return;
-  }
 
-  // ── Clasificación de intención + respuesta ────────────────────────────────
-  if (!saludoEnviado) {
-    try {
-      const historialPrevio = sessions[from]!.history.slice(0, -1);
-      const intencion = await clasificarIntencion(msg.body, historialPrevio);
-      console.log(`🧠 "${intencion}" para ${nombre}`);
-      incrementarIntencion(intencion);
-
-      let respuesta: string;
-
-      if (intencion === "saludo") {
-        respuesta = render(sys("saludoInicial"), nombre);
-      } else if (intencion === "noentendi") {
-        respuesta = sys("noentendi");
-        registrarNoEntendido(msg.body, from, nombre).catch(() => {});
-      } else if (intencion === "despedida") {
-        respuesta = sys("despedida");
-      } else {
-        const infoRespuesta = getConfig().respuestas_info[intencion];
-
-        if (!infoRespuesta) {
-          respuesta = sys("noentendi");
-        } else if (infoRespuesta.requiere_horario && !isWithinBusinessHours()) {
-          respuesta = getOutOfHoursMessage();
-        } else {
-          respuesta = infoRespuesta.texto;
-        }
-      }
-      const textoDiferente = await cambiarMensaje(respuesta);
-      await msg.reply(textoDiferente);
-      appendToHistory(sessions[from]!, "assistant", textoDiferente);
-    } catch (error) {
-      console.error("❌ Error procesando intención:", error);
+    // Si la IA no entendió, usamos el tag para registrar en Firestore y purgar el mensaje
+    if (respuesta.includes("[NO_ENTENDI]")) {
+      respuesta = respuesta.replace("[NO_ENTENDI]", "").trim();
+      await registrarNoEntendido(msg.body, from, nombre);
+      console.log(`📝 Mensaje no entendido registrado: ${msg.body}`);
     }
+
+    // Si la IA detecta que el usuario quiere hablar con un humano
+    if (respuesta.includes("[HABLAR_CON_HUMANO]")) {
+      respuesta = respuesta.replace("[HABLAR_CON_HUMANO]", "").trim();
+
+      const avisoCliente = sys("agenteAviso");
+      respuesta = respuesta ? `${respuesta}\n\n${avisoCliente}` : avisoCliente;
+
+      activeSession.status = "human";
+      activeSession.human_since = nowInSeconds;
+      await saveSession(from, activeSession);
+
+      const phoneNumber = msg.from.replace(/\D/g, "").slice(0, 12);
+      await client.sendMessage(
+        msg.to,
+        `📢 Contestale al usuario ${nombre}! ${phoneNumber}, que quiere: ${msg.body}`,
+      );
+      console.log(`🔔 Bot pausado para ${from}. Notificación enviada.`);
+    }
+
+    incrementarMensajesRespondidos();
+    await msg.reply(respuesta);
+    appendToHistory(activeSession, "assistant", respuesta);
+    // Persiste la sesión actualizada (last_interaction y status al día)
+    await saveSession(from, activeSession);
+  } catch (error) {
+    console.error("❌ Error generando respuesta:", error);
   }
 
-  // ── Persistir ─────────────────────────────────────────────────────────────
-  await saveSessions(sessions);
+  // ── Stats ──────────────────────────────────────────────────────────────────
   await saveStats();
 });
 

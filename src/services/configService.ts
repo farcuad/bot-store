@@ -20,7 +20,7 @@ let cache: BotConfig = {
   nombre: "Bot",
   respuestas_info: {},
   respuestas_sistema: {},
-  horario: defaultHorario,
+  //horario: defaultHorario,
   activo: false,
 };
 
@@ -87,7 +87,7 @@ export async function loadConfig(): Promise<void> {
         fetchHorario(),
       ]);
 
-    cache = { nombre, respuestas_info, respuestas_sistema, horario, activo };
+    cache = { nombre, respuestas_info, respuestas_sistema, activo };
 
     console.log(
       `🔥 Config cargada desde Firestore — "${nombre}" | ` +
@@ -127,7 +127,7 @@ export function getNombre(): string {
 }
 
 // ─── Helpers de horario ───────────────────────────────────────────────────────
-
+/* 
 export function isWithinBusinessHours(): boolean {
   const { dias_habiles, hora_apertura, hora_cierre, timezone } =
     getConfig().horario;
@@ -158,7 +158,7 @@ export function getOutOfHoursMessage(): string {
   return isWeekend
     ? `⏰ ¡Hola! Por el momento estamos fuera de horario.\n\n📅 Atendemos de *Martes a Sábado* desde las *${hora_apertura}:00*.\n\nPuedo ayudarte con información de precios, ubicación y horarios. ¡Escríbenos dentro del horario para coordinar tu pedido! 🎂`
     : `⏰ ¡Hola! Aún no hemos abierto hoy.\n\n📅 Recibimos pedidos a partir de las *${hora_apertura}:00* (Martes a Sábado).\n\nPuedo ayudarte con preguntas sobre precios, ubicación y horarios. ¡Vuelve en horario de atención! 🎂`;
-}
+} */
 
 // ─── Analytics: mensajes no entendidos ───────────────────────────────────────
 

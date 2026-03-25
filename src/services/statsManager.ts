@@ -1,13 +1,11 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Intencion } from "../controllers/AiController.js";
 import { db, BOT_PHONE_NUMBER } from "../config/firebase.js";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 export type StatsData = {
   total_mensajes: number;
-  por_intencion: Partial<Record<Intencion, number>>;
   usuarios_unicos: number;
   ultima_actualizacion: string;
 };
@@ -24,7 +22,6 @@ const statsRef = () =>
 // ─── Estado en memoria ────────────────────────────────────────────────────────
 let stats: StatsData = {
   total_mensajes: 0,
-  por_intencion: {},
   usuarios_unicos: 0,
   ultima_actualizacion: new Date().toISOString(),
 };
@@ -34,7 +31,12 @@ let stats: StatsData = {
 export async function loadStats(): Promise<void> {
   try {
     const raw = await fs.readFile(STATS_PATH, "utf-8");
-    stats = JSON.parse(raw) as StatsData;
+    const parsed = JSON.parse(raw) as Partial<StatsData>;
+    stats = {
+      total_mensajes: parsed.total_mensajes ?? 0,
+      usuarios_unicos: parsed.usuarios_unicos ?? 0,
+      ultima_actualizacion: parsed.ultima_actualizacion ?? new Date().toISOString(),
+    };
     console.log("📊 Estadísticas cargadas desde disco.");
   } catch {
     console.log("📊 No se encontró stats.json. Iniciando con contadores en cero.");
@@ -57,9 +59,8 @@ export async function saveStats(): Promise<void> {
 
 // ─── Mutaciones ───────────────────────────────────────────────────────────────
 
-export function incrementarIntencion(intencion: Intencion): void {
+export function incrementarMensajesRespondidos(): void {
   stats.total_mensajes++;
-  stats.por_intencion[intencion] = (stats.por_intencion[intencion] ?? 0) + 1;
 }
 
 export function incrementarUsuariosUnicos(): void {
@@ -79,9 +80,5 @@ export function imprimirResumenStats(): void {
   console.log("══════════════════════════════════");
   console.log(`📨 Total mensajes procesados : ${s.total_mensajes}`);
   console.log(`👥 Usuarios únicos           : ${s.usuarios_unicos}`);
-  console.log("📌 Por intención:");
-  for (const [k, v] of Object.entries(s.por_intencion)) {
-    console.log(`   • ${k.padEnd(15)} → ${v} veces`);
-  }
   console.log("══════════════════════════════════\n");
 }

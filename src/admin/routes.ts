@@ -103,26 +103,22 @@ router.get("/respuestas-info", async (_req, res) => {
 
 router.post("/respuestas-info", async (req, res) => {
   try {
-    const { id, texto, descripcion_ia, activo, requiere_horario } =
+    const { id, texto, activo } =
       req.body as {
         id: string;
         texto: string;
-        descripcion_ia: string;
         activo: boolean;
-        requiere_horario: boolean;
       };
-    if (!id || !texto || !descripcion_ia) {
+    if (!id || !texto ) {
       res.status(400).json({
         ok: false,
-        error: "Faltan campos obligatorios: id, texto, descripcion_ia",
+        error: "Faltan campos obligatorios: id, texto",
       });
       return;
     }
     const payload: InfoRespuesta = {
       texto,
-      descripcion_ia,
       activo: activo ?? true,
-      requiere_horario: requiere_horario ?? false,
     };
     await infoRef().doc(id).set(payload);
     res.json({ ok: true, id });
@@ -134,14 +130,11 @@ router.post("/respuestas-info", async (req, res) => {
 router.put("/respuestas-info/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { texto, descripcion_ia, activo, requiere_horario } =
+    const { texto, activo } =
       req.body as Partial<InfoRespuesta>;
     const updates: Partial<InfoRespuesta> = {};
     if (texto !== undefined) updates.texto = texto;
-    if (descripcion_ia !== undefined) updates.descripcion_ia = descripcion_ia;
     if (activo !== undefined) updates.activo = activo;
-    if (requiere_horario !== undefined)
-      updates.requiere_horario = requiere_horario;
     await infoRef().doc(id).update(updates);
     res.json({ ok: true, id });
   } catch (e: any) {
@@ -188,6 +181,52 @@ router.delete("/no-entendidos/:id", async (req, res) => {
     const { id } = req.params;
     await noEntRef().doc(id).delete();
     res.json({ ok: true, id });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// sessions
+// ══════════════════════════════════════════════════════════════════════════════
+const sessionsRef = () => botRef().collection("sessions");
+
+// GET /sessions — listar todas las sesiones
+router.get("/sessions", async (_req, res) => {
+  try {
+    const snap = await sessionsRef().orderBy("last_interaction", "desc").limit(200).get();
+    const data = snap.docs.map((d) => ({ id: d.id, phone: d.id, ...d.data() }));
+    res.json({ ok: true, data });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// PATCH /sessions/:phone/status — cambiar status bot ↔ human
+router.patch("/sessions/:phone/status", async (req, res) => {
+  try {
+    const { phone } = req.params;
+    const { status } = req.body as { status: "bot" | "human" };
+    if (!["bot", "human"].includes(status)) {
+      res.status(400).json({ ok: false, error: "status debe ser 'bot' o 'human'" });
+      return;
+    }
+    const update: Record<string, unknown> = { status, updated_at: Date.now() };
+    if (status === "human") update.human_since = Math.floor(Date.now() / 1000);
+    else { update.human_since = null; }
+    await sessionsRef().doc(phone).update(update);
+    res.json({ ok: true, phone, status });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// DELETE /sessions/:phone — eliminar sesión
+router.delete("/sessions/:phone", async (req, res) => {
+  try {
+    const { phone } = req.params;
+    await sessionsRef().doc(phone).delete();
+    res.json({ ok: true, phone });
   } catch (e: any) {
     res.status(500).json({ ok: false, error: e.message });
   }
