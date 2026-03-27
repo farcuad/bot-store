@@ -2,9 +2,7 @@
     NIXPACKS_NODE_VERSION = '22.12.0'
 
 [install]
-    # Forzar la instalación de dependencias de desarrollo (vite, tsc, etc.)
-    cmds = ['npm ci --include=dev']
+    cmds = ['npm install --include=optional']
 
-[build]
-    # Compilar el proyecto
-    cmds = ['npm run build']
+[start]
+    cmd = 'npm start'
