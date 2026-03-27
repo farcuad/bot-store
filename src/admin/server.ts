@@ -80,9 +80,9 @@ export function startAdminServer(): void {
   app.use(express.static(landingDist));
 
   // 3. Catch-all para React Router SPA
-  // IMPORTANTE: En Express 5 (path-to-regexp v8), los strings con RegEx necesitan nombres de parámetros.
-  // La forma más robusta y sin errores es usar un objeto RegExp nativo de JS (`/.*/`).
-  app.get(/.*/, (_req: Request, res: Response) => {
+  // Al usar app.use() sin declarar una ruta, Express atrapa TODA petición
+  // que haya sobrevivido hasta aquí, esquivando el error de path-to-regexp.
+  app.use((_req: Request, res: Response) => {
     res.sendFile(path.join(landingDist, "index.html"));
   });
 

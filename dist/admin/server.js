@@ -64,8 +64,9 @@ export function startAdminServer() {
     // 2. Servir el resto de archivos estáticos (logo.png, favicon, etc) desde la raíz de dist
     app.use(express.static(landingDist));
     // 3. Catch-all para React Router SPA
-    // IMPORTANTE: Usa `/(.*)` en lugar de `*` por compatibilidad de path-to-regexp v8 (Express 5+)
-    app.get("/(.*)", (_req, res) => {
+    // Al usar app.use() sin declarar una ruta, Express atrapa TODA petición
+    // que haya sobrevivido hasta aquí, esquivando el error de path-to-regexp.
+    app.use((_req, res) => {
         res.sendFile(path.join(landingDist, "index.html"));
     });
     app.listen(ADMIN_PORT, "0.0.0.0", () => {
