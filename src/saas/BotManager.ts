@@ -47,7 +47,7 @@ class BotManager {
         if (record.active) {
           await this._registerInstance(record.botId);
           this.startBot(record.botId).catch((e) =>
-            console.error(`[${record.botId}] auto-start error:`, e)
+            console.error(`[${record.botId}] auto-start error:`, e),
           );
         } else {
           await this._registerInstance(record.botId);
@@ -75,12 +75,17 @@ class BotManager {
       };
       await this.platformBotsRef().doc(botId).set(record);
     }
-    console.log(`🤖 BotManager: registered legacy default bot (${botPhoneNumber}).`);
+    console.log(
+      `🤖 BotManager: registered legacy default bot (${botPhoneNumber}).`,
+    );
   }
 
   // ── CRUD ────────────────────────────────────────────────────────────────────
 
-  async createBot(payload: { nombre: string; password?: string }): Promise<BotRecord> {
+  async createBot(payload: {
+    nombre: string;
+    password?: string;
+  }): Promise<BotRecord> {
     const botId = `bot_${Date.now()}`;
     const record: BotRecord = {
       botId,
@@ -114,7 +119,9 @@ class BotManager {
 
   async startBot(botId: string): Promise<void> {
     if (this._starting.has(botId)) {
-      console.log(`[${botId}] start already in progress — skipping duplicate call.`);
+      console.log(
+        `[${botId}] start already in progress — skipping duplicate call.`,
+      );
       return;
     }
     this._starting.add(botId);

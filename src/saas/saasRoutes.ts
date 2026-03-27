@@ -54,13 +54,20 @@ router.get("/bots/:id/qr", (req: Request, res: Response) => {
   // Send current QR immediately if already available
   const currentQr = instance.getQR();
   if (currentQr) {
-    toDataUrl(currentQr).then((dataUrl) => send({ qr: dataUrl })).catch(() => {});
+    toDataUrl(currentQr)
+      .then((dataUrl) => send({ qr: dataUrl }))
+      .catch(() => {});
   }
 
   const onQr = (qr: string) => {
-    toDataUrl(qr).then((dataUrl) => send({ qr: dataUrl })).catch(() => {});
+    toDataUrl(qr)
+      .then((dataUrl) => send({ qr: dataUrl }))
+      .catch(() => {});
   };
-  const onReady = () => { send({ ready: true }); cleanup(); };
+  const onReady = () => {
+    send({ ready: true });
+    cleanup();
+  };
   const onDisconnect = () => cleanup();
 
   function cleanup() {
@@ -79,12 +86,14 @@ router.get("/bots/:id/qr", (req: Request, res: Response) => {
 // All other SaaS routes require authentication
 router.use(requireAuth);
 
-
 // ── Bot CRUD ──────────────────────────────────────────────────────────────────
 
 /** POST /api/saas/bots — create new bot */
 router.post("/bots", async (req: Request, res: Response) => {
-  const { nombre, password } = req.body as { nombre?: string, password?: string };
+  const { nombre, password } = req.body as {
+    nombre?: string;
+    password?: string;
+  };
   if (!nombre) return fail(res, 400, "nombre is required");
   try {
     const payload: { nombre: string; password?: string } = { nombre };
