@@ -3,3 +3,6 @@
 
 [install]
     cmds = ['npm install --include=optional']
+
+[start]
+    cmd = 'npm start'
