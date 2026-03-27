@@ -40,7 +40,7 @@ export function startAdminServer(): void {
 
   // ── Static files & SPA fallback ─────────────────────────────────────────────
   
-  const landingDist = path.join(__dirname, "../../landing/dist");
+  const landingDist = path.join(__dirname, "../../dist");
   app.use(express.static(landingDist));
 
   // Catch-all for React Router SPA
@@ -50,6 +50,6 @@ export function startAdminServer(): void {
 
   app.listen(ADMIN_PORT, "0.0.0.0", () => {
     console.log(`🖥️  Servidor de la plataforma en http://localhost:${ADMIN_PORT}`);
-    console.log(`✨  Frontend unificado sirviéndose desde landing/dist`);
+    console.log(`✨  Frontend unificado sirviéndose desde dist/`);
   });
 }

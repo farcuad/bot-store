@@ -33,7 +33,7 @@ export function startAdminServer() {
     // Bot admin API (used by /bot panel) + auth
     app.use("/api", adminRoutes);
     // ── Static files & SPA fallback ─────────────────────────────────────────────
-    const landingDist = path.join(__dirname, "../../landing/dist");
+    const landingDist = path.join(__dirname, "../../dist");
     app.use(express.static(landingDist));
     // Catch-all for React Router SPA
     app.use((_req, res) => {
@@ -41,7 +41,7 @@ export function startAdminServer() {
     });
     app.listen(ADMIN_PORT, "0.0.0.0", () => {
         console.log(`🖥️  Servidor de la plataforma en http://localhost:${ADMIN_PORT}`);
-        console.log(`✨  Frontend unificado sirviéndose desde landing/dist`);
+        console.log(`✨  Frontend unificado sirviéndose desde dist/`);
     });
 }
 //# sourceMappingURL=server.js.map
