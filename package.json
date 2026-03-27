@@ -1,6 +1,9 @@
 {
   "name": "proyecto-attclient",
   "version": "1.0.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "type": "module",
   "main": "index.js",
   "scripts": {
