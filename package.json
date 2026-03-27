@@ -1,18 +1,28 @@
 {
   "name": "proyecto-attclient",
   "version": "1.0.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon --exec \"node --loader ts-node/esm\" src/index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js"
+    "dev:backend": "nodemon --exec \"node --loader ts-node/esm\" src/index.ts",
+    "dev:frontend": "vite",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "build:frontend": "tsc -p tsconfig.client.json && vite build",
+    "build:backend": "tsc -p tsconfig.json",
+    "build": "npm run build:frontend && npm run build:backend",
+    "start": "node dist/index.js",
+    "lint": "eslint .",
+    "preview": "vite preview"
   },
   "nodemonConfig": {
     "ignore": [
       "sessions.json",
       "stats.json",
-      "dist/**"
+      "dist/**",
+      "client/**"
     ],
     "watch": [
       "src"
@@ -24,24 +34,47 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@fortawesome/fontawesome-svg-core": "^7.2.0",
+    "@fortawesome/free-brands-svg-icons": "^7.2.0",
+    "@fortawesome/free-solid-svg-icons": "^7.2.0",
+    "@fortawesome/react-fontawesome": "^3.2.0",
     "@google/generative-ai": "^0.24.1",
+    "@tailwindcss/typography": "^0.5.19",
+    "@tailwindcss/vite": "^4.2.2",
     "@types/qrcode": "^1.5.6",
     "axios": "^1.13.6",
     "body-parser": "^2.2.2",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "firebase": "^12.10.0",
     "firebase-admin": "^13.7.0",
+    "lucide-react": "^1.7.0",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.13.1",
     "whatsapp-web.js": "^1.34.6"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@types/axios": "^0.9.36",
     "@types/express": "^5.0.6",
     "@types/node": "^25.3.5",
     "@types/qrcode-terminal": "^0.12.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.0",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.0.0",
     "nodemon": "^3.1.14",
+    "tailwindcss": "^4.2.2",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.1",
+    "vite": "^8.0.0"
   }
 }

@@ -56,6 +56,21 @@ export class BotInstance extends EventEmitter {
         this.setState({ status: "initializing", qr: null, lastError: null });
         console.log(`[${this.botId}] 🚀 Starting bot instance…`);
         const dataPath = path.join(BOTS_ROOT, this.botId);
+        // ── Clean up stale Chrome lock files left by an abrupt process kill ────────
+        // LocalAuth with a custom `dataPath` stores its Chrome profile under:
+        //   <dataPath>/session-<clientId>/
+        // The SingletonLock lives at the root of that directory.
+        const { promises: fsp } = await import("node:fs");
+        const sessionDir = path.join(dataPath, `session-${this.botId}`);
+        const lockFile = path.join(sessionDir, "SingletonLock");
+        try {
+            await fsp.unlink(lockFile);
+            console.log(`[${this.botId}] 🔓 Removed stale ChromeSingletonLock.`);
+        }
+        catch {
+            // No lock file — normal on first run or clean shutdown
+        }
+        // ──────────────────────────────────────────────────────────────────────────
         this.client = new Client({
             authStrategy: new LocalAuth({
                 clientId: this.botId,
@@ -255,9 +270,11 @@ export class BotInstance extends EventEmitter {
                     await this.client.sendMessage(msg.to, `📢 Contestale al usuario ${nombre}! ${phoneNumber}, que quiere: ${msg.body}`);
                 }
                 this.statsMgr.incrementarMensajesRespondidos();
-                await msg.reply(respuesta);
+                // Save history first so that the `message_create` event (fromMe=true) 
+                // can match `isHistoryMatch`.
                 this.sessionMgr.appendToHistory(activeSession, "assistant", respuesta);
                 await this.sessionMgr.saveSession(from, activeSession);
+                await msg.reply(respuesta);
             }
             catch (error) {
                 console.error(`[${this.botId}] ❌ Error generating response:`, error);

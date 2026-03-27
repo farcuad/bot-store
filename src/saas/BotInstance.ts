@@ -86,6 +86,22 @@ export class BotInstance extends EventEmitter {
 
     const dataPath = path.join(BOTS_ROOT, this.botId);
 
+    // ── Clean up stale Chrome lock files left by an abrupt process kill ────────
+    // LocalAuth with a custom `dataPath` stores its Chrome profile under:
+    //   <dataPath>/session-<clientId>/
+    // The SingletonLock lives at the root of that directory.
+    const { promises: fsp } = await import("node:fs");
+    const sessionDir = path.join(dataPath, `session-${this.botId}`);
+    const lockFile = path.join(sessionDir, "SingletonLock");
+    try {
+      await fsp.unlink(lockFile);
+      console.log(`[${this.botId}] 🔓 Removed stale ChromeSingletonLock.`);
+    } catch {
+      // No lock file — normal on first run or clean shutdown
+    }
+    // ──────────────────────────────────────────────────────────────────────────
+
+
     this.client = new Client({
       authStrategy: new LocalAuth({
         clientId: this.botId,
@@ -132,6 +148,7 @@ export class BotInstance extends EventEmitter {
 
     this.client.initialize();
   }
+
 
   async stop(): Promise<void> {
     if (!this.client) return;
