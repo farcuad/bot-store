@@ -1,0 +1,5 @@
+[variables]
+    NIXPACKS_NODE_VERSION = '22'
+
+[install]
+    cmds = ['npm install --include=optional']
