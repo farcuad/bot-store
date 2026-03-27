@@ -100,7 +100,7 @@ export default function AdminBots() {
           <ArrowLeft className="h-5 w-5 text-gray-400" />
         </button>
         <div>
-          <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
+          <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-linear-to-r from-white to-gray-400">
             ⚙️ Configurar Bots
           </h1>
           <p className="text-gray-400 text-sm mt-1">Todos los bots del sistema — vista de administrador</p>

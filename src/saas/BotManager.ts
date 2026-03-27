@@ -87,6 +87,7 @@ class BotManager {
   async createBot(payload: {
     nombre: string;
     password?: string;
+    ownerUid: string;
   }): Promise<BotRecord> {
     const botId = `bot_${Date.now()}`;
     const record: BotRecord = {

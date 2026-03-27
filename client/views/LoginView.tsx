@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { GoogleAuthProvider, signInWithPopup, getAuth } from 'firebase/auth';
 
 const LoginView: React.FC = () => {
-  const { user, status, dbUser, logout } = useAuth();
+  const { user, status, dbUser, logout, authInstance } = useAuth();
   const navigate = useNavigate();
 
   const [phone, setPhone] = useState('');
@@ -21,9 +21,9 @@ const LoginView: React.FC = () => {
     setLoading(true);
     setError('');
     try {
-      const auth = getAuth();
+      if (!authInstance) return setError('Cargando servicios de autenticación... por favor reintenta en un momento.');
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      await signInWithPopup(authInstance, provider);
       // El onAuthStateChanged en AuthContext disparará la verificación
     } catch (e: any) {
       setError(e.message || 'Error al iniciar sesión con Google');
