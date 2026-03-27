@@ -46,6 +46,7 @@ class BotManager {
             const record = {
                 botId,
                 nombre: "Bot Principal",
+                ownerUid: "admin",
                 createdAt: Date.now(),
                 active: true,
             };
@@ -59,11 +60,10 @@ class BotManager {
         const record = {
             botId,
             nombre: payload.nombre,
+            ownerUid: payload.ownerUid,
             createdAt: Date.now(),
             active: true,
         };
-        if (payload.password)
-            record.password = payload.password;
         // Persist to Firestore
         await this.platformBotsRef().doc(botId).set(record);
         // Create isolated directory
@@ -103,8 +103,16 @@ class BotManager {
         await instance.restart();
     }
     // ── Queries ─────────────────────────────────────────────────────────────────
-    async listBots() {
-        const snap = await this.platformBotsRef().orderBy("createdAt", "asc").get();
+    /**
+     * List bots. If ownerUid is provided (non-admin), returns only their bots.
+     * If ownerUid is undefined (admin), returns all bots.
+     */
+    async listBots(ownerUid) {
+        let query = this.platformBotsRef().orderBy("createdAt", "asc");
+        if (ownerUid) {
+            query = query.where("ownerUid", "==", ownerUid);
+        }
+        const snap = await query.get();
         return snap.docs.map((doc) => {
             const record = doc.data();
             const instance = this.instances.get(record.botId);
@@ -112,6 +120,7 @@ class BotManager {
             return {
                 botId: record.botId,
                 nombre: record.nombre,
+                ownerUid: record.ownerUid,
                 status: liveState?.status ?? "idle",
                 createdAt: record.createdAt,
                 readySince: liveState?.readySince ?? null,
@@ -129,6 +138,7 @@ class BotManager {
         return {
             botId: record.botId,
             nombre: record.nombre,
+            ownerUid: record.ownerUid,
             status: liveState?.status ?? "idle",
             createdAt: record.createdAt,
             readySince: liveState?.readySince ?? null,

@@ -3,13 +3,14 @@ import type { BotStatus } from "./BotInstance.js";
 export interface BotRecord {
     botId: string;
     nombre: string;
-    password?: string;
+    ownerUid: string;
     createdAt: number;
     active: boolean;
 }
 export interface BotPublicState {
     botId: string;
     nombre: string;
+    ownerUid: string;
     status: BotStatus;
     createdAt: number;
     readySince: number | null;
@@ -30,13 +31,17 @@ declare class BotManager {
     registerDefaultBot(botPhoneNumber: string): Promise<void>;
     createBot(payload: {
         nombre: string;
-        password?: string;
+        ownerUid: string;
     }): Promise<BotRecord>;
     deleteBot(botId: string): Promise<void>;
     startBot(botId: string): Promise<void>;
     stopBot(botId: string): Promise<void>;
     restartBot(botId: string): Promise<void>;
-    listBots(): Promise<BotPublicState[]>;
+    /**
+     * List bots. If ownerUid is provided (non-admin), returns only their bots.
+     * If ownerUid is undefined (admin), returns all bots.
+     */
+    listBots(ownerUid?: string): Promise<BotPublicState[]>;
     getBot(botId: string): Promise<BotPublicState | null>;
     getInstance(botId: string): BotInstance | undefined;
     private _registerInstance;

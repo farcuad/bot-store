@@ -56,6 +56,23 @@ export class BotInstance extends EventEmitter {
         this.setState({ status: "initializing", qr: null, lastError: null });
         console.log(`[${this.botId}] 🚀 Starting bot instance…`);
         const dataPath = path.join(BOTS_ROOT, this.botId);
+        // ── Clean up stale Chrome lock files left by an abrupt process kill ────────
+        // Puppeteer's LocalAuth stores its Chrome profile under:
+        //   <dataPath>/.wwebjs_auth/<clientId>/Default (or similar)
+        // The lock lives at the top of the userDataDir.
+        const { promises: fsp } = await import("node:fs");
+        const wwebjsAuthRoot = path.join(dataPath, ".wwebjs_auth");
+        try {
+            const entries = await fsp.readdir(wwebjsAuthRoot);
+            for (const entry of entries) {
+                const lockFile = path.join(wwebjsAuthRoot, entry, "SingletonLock");
+                await fsp.unlink(lockFile).catch(() => { }); // ignore if not present
+            }
+        }
+        catch {
+            // .wwebjs_auth doesn't exist yet on first run — that's fine
+        }
+        // ──────────────────────────────────────────────────────────────────────────
         this.client = new Client({
             authStrategy: new LocalAuth({
                 clientId: this.botId,
@@ -255,9 +272,11 @@ export class BotInstance extends EventEmitter {
                     await this.client.sendMessage(msg.to, `📢 Contestale al usuario ${nombre}! ${phoneNumber}, que quiere: ${msg.body}`);
                 }
                 this.statsMgr.incrementarMensajesRespondidos();
-                await msg.reply(respuesta);
+                // Save history first so that the `message_create` event (fromMe=true) 
+                // can match `isHistoryMatch`.
                 this.sessionMgr.appendToHistory(activeSession, "assistant", respuesta);
                 await this.sessionMgr.saveSession(from, activeSession);
+                await msg.reply(respuesta);
             }
             catch (error) {
                 console.error(`[${this.botId}] ❌ Error generating response:`, error);

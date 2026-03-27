@@ -86,6 +86,23 @@ export class BotInstance extends EventEmitter {
 
     const dataPath = path.join(BOTS_ROOT, this.botId);
 
+    // ── Clean up stale Chrome lock files left by an abrupt process kill ────────
+    // Puppeteer's LocalAuth stores its Chrome profile under:
+    //   <dataPath>/.wwebjs_auth/<clientId>/Default (or similar)
+    // The lock lives at the top of the userDataDir.
+    const { promises: fsp } = await import("node:fs");
+    const wwebjsAuthRoot = path.join(dataPath, ".wwebjs_auth");
+    try {
+      const entries = await fsp.readdir(wwebjsAuthRoot);
+      for (const entry of entries) {
+        const lockFile = path.join(wwebjsAuthRoot, entry, "SingletonLock");
+        await fsp.unlink(lockFile).catch(() => {}); // ignore if not present
+      }
+    } catch {
+      // .wwebjs_auth doesn't exist yet on first run — that's fine
+    }
+    // ──────────────────────────────────────────────────────────────────────────
+
     this.client = new Client({
       authStrategy: new LocalAuth({
         clientId: this.botId,
@@ -132,6 +149,7 @@ export class BotInstance extends EventEmitter {
 
     this.client.initialize();
   }
+
 
   async stop(): Promise<void> {
     if (!this.client) return;

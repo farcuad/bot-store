@@ -114,12 +114,14 @@ export function createConfigService(botId) {
         registrarNoEntendido,
     };
 }
-// ─── Backward-compatible singleton ───────────────────────────────────────────
+// ─── Backward-compatible singleton ───────────────────────────────────────────────
+// Only created when BOT_PHONE_NUMBER is set (legacy single-bot mode).
+// In SaaS mode each BotInstance creates its own ConfigService via createConfigService().
 console.log("TESTING_MODE", TESTING_MODE);
-const _legacy = createConfigService(BOT_PHONE_NUMBER);
-export const loadConfig = _legacy.loadConfig;
-export const startConfigRefresh = _legacy.startConfigRefresh;
-export const getConfig = _legacy.getConfig;
-export const getNombre = _legacy.getNombre;
-export const registrarNoEntendido = _legacy.registrarNoEntendido;
+const _legacy = BOT_PHONE_NUMBER ? createConfigService(BOT_PHONE_NUMBER) : null;
+export const loadConfig = _legacy?.loadConfig ?? (async () => { });
+export const startConfigRefresh = _legacy?.startConfigRefresh ?? (() => { });
+export const getConfig = _legacy?.getConfig ?? (() => ({ nombre: "Bot", respuestas_info: {}, respuestas_sistema: {}, activo: false }));
+export const getNombre = _legacy?.getNombre ?? (() => "Bot");
+export const registrarNoEntendido = _legacy?.registrarNoEntendido ?? (async () => { });
 //# sourceMappingURL=configService.js.map

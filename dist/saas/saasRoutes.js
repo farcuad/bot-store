@@ -1,7 +1,8 @@
 import { Router } from "express";
 import QRCode from "qrcode";
 import { botManager } from "./BotManager.js";
-import { requireAuth } from "../admin/routes.js";
+import { requireFirebaseAuth } from "../admin/routes.js";
+import { db } from "../config/firebase.js";
 import { createConfigService } from "../services/configService.js";
 import { createSessionManager } from "../services/sessionManager.js";
 import { createStatsManager } from "../services/statsManager.js";
@@ -60,29 +61,64 @@ router.get("/bots/:id/qr", (req, res) => {
     instance.on("disconnected", onDisconnect);
     req.on("close", cleanup);
 });
-// All other SaaS routes require authentication
-router.use(requireAuth);
+// All other SaaS routes require Firebase authentication (or admin token)
+router.use(requireFirebaseAuth);
+// Middleware to check approved status for non-admins
+router.use(async (req, res, next) => {
+    if (req.isAdmin) {
+        next();
+        return;
+    }
+    const uid = req.firebaseUid;
+    try {
+        const snap = await db.collection("users").doc(uid).get();
+        const profile = snap.data();
+        if (!profile || profile.status !== "approved") {
+            res.status(403).json({ ok: false, error: "Cuenta pendiente de aprobación" });
+            return;
+        }
+        next();
+    }
+    catch {
+        res.status(500).json({ ok: false, error: "Error verificando estado de cuenta" });
+    }
+});
 // ── Bot CRUD ──────────────────────────────────────────────────────────────────
 /** POST /api/saas/bots — create new bot */
 router.post("/bots", async (req, res) => {
-    const { nombre, password } = req.body;
+    const { nombre } = req.body;
     if (!nombre)
         return fail(res, 400, "nombre is required");
+    const ownerUid = req.isAdmin ? (req.body.ownerUid ?? "admin") : req.firebaseUid;
+    // ── Enforce per-user bot limit (skip for admins creating their own bots) ────
+    if (!req.isAdmin) {
+        try {
+            const userSnap = await db.collection("users").doc(ownerUid).get();
+            const maxBots = userSnap.exists ? (userSnap.data()?.maxBots ?? 1) : 1;
+            const currentBots = await botManager.listBots(ownerUid);
+            if (currentBots.length >= maxBots) {
+                return fail(res, 403, `Límite de bots alcanzado (máximo: ${maxBots})`);
+            }
+        }
+        catch (e) {
+            return fail(res, 500, "Error verificando límite de bots: " + e.message);
+        }
+    }
+    // ────────────────────────────────────────────────────────────────────────────
     try {
-        const payload = { nombre };
-        if (password)
-            payload.password = password;
-        const record = await botManager.createBot(payload);
+        const record = await botManager.createBot({ nombre, ownerUid });
         return ok(res, record);
     }
     catch (e) {
         return fail(res, 500, e.message);
     }
 });
-/** GET /api/saas/bots — list all bots */
-router.get("/bots", async (_req, res) => {
+/** GET /api/saas/bots — list bots (filtered by owner unless admin, or admin passes ?onlyMine=true) */
+router.get("/bots", async (req, res) => {
     try {
-        const bots = await botManager.listBots();
+        const forceOwner = req.query["onlyMine"] === "true";
+        const ownerUid = (!req.isAdmin || forceOwner) ? req.firebaseUid : undefined;
+        const bots = await botManager.listBots(ownerUid);
         return ok(res, bots);
     }
     catch (e) {

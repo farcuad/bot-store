@@ -5,7 +5,10 @@ import { startAdminServer } from "./admin/server.js";
 import { botManager } from "./saas/BotManager.js";
 import { imprimirResumenStats } from "./services/statsManager.js";
 
-const BOT_PHONE_NUMBER = process.env.BOT_PHONE_NUMBER;
+// Catch unhandled promise rejections so errors show clearly instead of crashing silently
+process.on("unhandledRejection", (reason) => {
+  console.error("❌ Unhandled rejection:", reason);
+});
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
@@ -14,12 +17,12 @@ console.log("🚀 Arrancando plataforma SaaS de bots…");
 // 1. Start admin + SaaS HTTP panel
 startAdminServer();
 
-// 2. Register the legacy default bot so existing Firestore data keeps working
-if (BOT_PHONE_NUMBER) {
-  await botManager.registerDefaultBot(BOT_PHONE_NUMBER);
+// 2. Load and auto-start all bots persisted in Firestore
+//    (each bot has its own phone number stored in its own session/config)
+try {
+  await botManager.initFromFirestore();
+} catch (err) {
+  console.error("❌ Error inicalizando bots desde Firestore:", err);
 }
-
-// 3. Load and auto-start all bots persisted in Firestore
-await botManager.initFromFirestore();
 
 imprimirResumenStats();

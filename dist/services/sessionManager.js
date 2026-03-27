@@ -83,10 +83,11 @@ export function createSessionManager(botId) {
     };
 }
 // ─── Backward-compatible singleton (uses legacy BOT_PHONE_NUMBER) ──────────────
-const _legacy = createSessionManager(BOT_PHONE_NUMBER);
-export const getSession = _legacy.getSession;
-export const saveSession = _legacy.saveSession;
-export const getStatusFromFirestore = _legacy.getStatusFromFirestore;
-export const getSessionFromMemory = _legacy.getSessionFromMemory;
-export const appendToHistory = _legacy.appendToHistory;
+// In SaaS mode (no BOT_PHONE_NUMBER) this is null; each BotInstance uses createSessionManager().
+const _legacy = BOT_PHONE_NUMBER ? createSessionManager(BOT_PHONE_NUMBER) : null;
+export const getSession = _legacy?.getSession ?? (async () => null);
+export const saveSession = _legacy?.saveSession ?? (async () => { });
+export const getStatusFromFirestore = _legacy?.getStatusFromFirestore ?? (async () => null);
+export const getSessionFromMemory = _legacy?.getSessionFromMemory ?? (() => undefined);
+export const appendToHistory = _legacy?.appendToHistory ?? (() => { });
 //# sourceMappingURL=sessionManager.js.map
