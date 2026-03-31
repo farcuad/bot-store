@@ -157,7 +157,7 @@ const SaasDashboard: React.FC = () => {
     <div className="max-w-6xl mx-auto">
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">Mis Bots</h1>
+          <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-linear-to-r from-white to-gray-400">Mis Bots</h1>
           <p className="text-gray-400 text-sm mt-1">
             {bots.length} / {isAdmin ? '∞' : maxBots} bots
             {!isAdmin && bots.length >= maxBots && (
@@ -169,7 +169,7 @@ const SaasDashboard: React.FC = () => {
           onClick={() => setIsCreateModalOpen(true)}
           disabled={!isAdmin && bots.length >= maxBots}
           title={!isAdmin && bots.length >= maxBots ? `Límite de ${maxBots} bot(s) alcanzado` : 'Crear nuevo bot'}
-          className="bg-gradient-to-r from-[#25d366] to-[#128c7e] hover:brightness-110 text-black font-bold py-2.5 px-5 rounded-xl transition-all shadow-lg shadow-[#25d366]/20 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:brightness-100"
+          className="bg-linear-to-r from-[#25d366] to-[#128c7e] hover:brightness-110 text-black font-bold py-2.5 px-5 rounded-xl transition-all shadow-lg shadow-[#25d366]/20 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:brightness-100"
         >
           <span>＋</span> Nuevo Bot
         </button>
@@ -295,7 +295,7 @@ const SaasDashboard: React.FC = () => {
             <h2 className="text-xl font-bold mb-2">📱 Vincular WhatsApp</h2>
             <p className="text-gray-400 text-sm mb-6">Abre WhatsApp → Dispositivos vinculados → Vincular dispositivo</p>
             
-            <div className="bg-white p-4 rounded-xl inline-block mb-6 min-h-[200px] min-w-[200px] flex items-center justify-center">
+            <div className="bg-white p-4 rounded-xl mb-6 min-h-[200px] min-w-[200px] flex items-center justify-center">
               {qrCode ? (
                 <img src={qrCode} alt="QR Code" className="w-[200px] h-[200px]" />
               ) : (

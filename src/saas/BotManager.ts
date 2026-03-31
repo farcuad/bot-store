@@ -153,7 +153,8 @@ class BotManager {
    * If ownerUid is undefined (admin), returns all bots.
    */
   async listBots(ownerUid?: string): Promise<BotPublicState[]> {
-    let query: FirebaseFirestore.Query = this.platformBotsRef().orderBy(
+    const botsRef = this.platformBotsRef();
+    let query: FirebaseFirestore.Query = botsRef.orderBy(
       "createdAt",
       "asc",
     );

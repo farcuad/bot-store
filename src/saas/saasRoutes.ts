@@ -153,8 +153,7 @@ router.post("/bots", async (req: Request, res: Response) => {
 /** GET /api/saas/bots — list bots (filtered by owner unless admin, or admin passes ?onlyMine=true) */
 router.get("/bots", async (req: Request, res: Response) => {
   try {
-    const forceOwner = req.query["onlyMine"] === "true";
-    const ownerUid = !req.isAdmin || forceOwner ? req.firebaseUid : undefined;
+    const ownerUid = req.isAdmin ? undefined : req.firebaseUid;
     const bots = await botManager.listBots(ownerUid);
     return ok(res, bots);
   } catch (e: any) {

@@ -2,6 +2,7 @@ import express from "express";
 import type { Request, Response } from "express";
 import path from "path";
 import { fileURLToPath } from "url";
+import cors from "cors";
 import adminRoutes from "./routes.js";
 import saasRoutes from "../saas/saasRoutes.js";
 
@@ -13,6 +14,7 @@ const ADMIN_PORT = process.env.ADMIN_PORT
 
 export function startAdminServer(): void {
   const app = express();
+  app.use(cors());
   app.use(express.json());
 
   // ── API ───────────────────────────────────────────────────────────────────────
