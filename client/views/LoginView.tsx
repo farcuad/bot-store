@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { GoogleAuthProvider, signInWithPopup, getAuth } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
 const LoginView: React.FC = () => {
   const { user, status, dbUser, logout, authInstance } = useAuth();

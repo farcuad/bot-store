@@ -1,20 +1,50 @@
 import type { Response, Request, NextFunction } from "express";
 import dotenv from "dotenv";
+import { botManager } from "../saas/BotManager.js";
 dotenv.config();
+
 // Middleware de validación
-export const validateApiKey = (
+export const validateApiKey = async (
   req: Request,
   res: Response,
   next: NextFunction,
 ) => {
-  const clientKey = req.headers["x-client-key"]; // Buscamos la llave en los headers
+  const clientKey = req.headers["x-client-key"] as string;
 
-  if (!clientKey || clientKey !== process.env.API_KEY) {
+  if (!clientKey) {
     console.warn(`🚫 Intento de acceso no autorizado desde: ${req.ip}`);
-    return res.status(401).json({
+    res.status(401).json({
       error: "No autorizado",
-      message: "API Key inválida o ausente en el header x-api-key",
+      message: "API Key ausente en el header x-client-key",
     });
+    return;
+  }
+
+  // Compatibilidad con la llave maestra global
+  if (clientKey === process.env.API_KEY) {
+    next();
+    return;
+  }
+
+  // Verificación de llave específica por bot
+  const targetBotId = req.body?.botId ?? "bot_default";
+  
+  try {
+    const botKey = await botManager.getBotKey(targetBotId);
+    if (!botKey || botKey !== clientKey) {
+      console.warn(`🚫 Intento de acceso no autorizado al bot ${targetBotId} desde: ${req.ip}`);
+      res.status(401).json({
+        error: "No autorizado",
+        message: "API Key inválida para este bot",
+      });
+      return;
+    }
+  } catch (error) {
+    res.status(500).json({
+      error: "Error interno",
+      message: "Error al validar la API Key del bot",
+    });
+    return;
   }
 
   next(); // Si todo está bien, pasamos a la función de enviar mensaje

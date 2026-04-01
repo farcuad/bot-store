@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import crypto from "node:crypto";
 import { db } from "../config/firebase.js";
 import { BotInstance } from "./BotInstance.js";
 import type { BotStatus } from "./BotInstance.js";
@@ -14,6 +15,7 @@ export interface BotRecord {
   ownerUid: string; // Firebase UID del usuario propietario
   createdAt: number;
   active: boolean;
+  clientKey?: string;
 }
 
 export interface BotPublicState {
@@ -24,6 +26,7 @@ export interface BotPublicState {
   createdAt: number;
   readySince: number | null;
   lastError: string | null;
+  clientKey?: string;
 }
 
 class BotManager {
@@ -46,10 +49,15 @@ class BotManager {
       for (const doc of snap.docs) {
         const record = doc.data() as BotRecord;
         if (record.active) {
-          await this._registerInstance(record.botId);
-          this.startBot(record.botId).catch((e) =>
-            console.error(`[${record.botId}] auto-start error:`, e),
-          );
+          const instance = await this._registerInstance(record.botId);
+          // Only auto-start if the bot already has an established session
+          if (await instance.hasSession()) {
+            this.startBot(record.botId).catch((e) =>
+              console.error(`[${record.botId}] auto-start error:`, e),
+            );
+          } else {
+            console.log(`[${record.botId}] Bot has no session. Kept in idle until user starts it manually.`);
+          }
         } else {
           await this._registerInstance(record.botId);
         }
@@ -90,12 +98,14 @@ class BotManager {
     ownerUid: string;
   }): Promise<BotRecord> {
     const botId = `bot_${Date.now()}`;
+    const clientKey = crypto.randomUUID();
     const record: BotRecord = {
       botId,
       nombre: payload.nombre,
       ownerUid: payload.ownerUid,
       createdAt: Date.now(),
       active: true,
+      clientKey,
     };
 
     // Persist to Firestore
@@ -116,6 +126,19 @@ class BotManager {
     this.instances.delete(botId);
     await this.platformBotsRef().doc(botId).delete();
     // Optionally: remove bot directory (risky — skip for safety)
+  }
+
+  async renameBot(botId: string, nuevoNombre: string): Promise<void> {
+    if (!nuevoNombre || nuevoNombre.trim() === '') {
+      throw new Error("El nombre no puede estar vacío");
+    }
+    await this.platformBotsRef().doc(botId).update({ nombre: nuevoNombre.trim() });
+  }
+
+  async getBotKey(botId: string): Promise<string | null> {
+    const doc = await this.platformBotsRef().doc(botId).get();
+    if (!doc.exists) return null;
+    return (doc.data() as BotRecord).clientKey || null;
   }
 
   // ── Lifecycle ───────────────────────────────────────────────────────────────
@@ -166,7 +189,7 @@ class BotManager {
       const record = doc.data() as BotRecord;
       const instance = this.instances.get(record.botId);
       const liveState = instance?.getState();
-      return {
+      const state: BotPublicState = {
         botId: record.botId,
         nombre: record.nombre,
         ownerUid: record.ownerUid,
@@ -175,6 +198,10 @@ class BotManager {
         readySince: liveState?.readySince ?? null,
         lastError: liveState?.lastError ?? null,
       };
+      if (record.clientKey !== undefined) {
+        state.clientKey = record.clientKey;
+      }
+      return state;
     });
   }
 
@@ -184,7 +211,7 @@ class BotManager {
     const record = doc.data() as BotRecord;
     const instance = this.instances.get(botId);
     const liveState = instance?.getState();
-    return {
+    const state: BotPublicState = {
       botId: record.botId,
       nombre: record.nombre,
       ownerUid: record.ownerUid,
@@ -193,6 +220,10 @@ class BotManager {
       readySince: liveState?.readySince ?? null,
       lastError: liveState?.lastError ?? null,
     };
+    if (record.clientKey !== undefined) {
+      state.clientKey = record.clientKey;
+    }
+    return state;
   }
 
   getInstance(botId: string): BotInstance | undefined {

@@ -5,10 +5,13 @@ import { Activity, MessageSquare, Database, AlertCircle, RefreshCw, Edit2, Trash
 import axios from 'axios';
 
 interface BotStats {
-  mensajes_recibidos: number;
-  mensajes_enviados_ia: number;
-  mensajes_no_entendidos: number;
-  ultima_interaccion: string;
+  mensajes_recibidos?: number;
+  mensajes_enviados_ia?: number;
+  mensajes_no_entendidos?: number;
+  ultima_interaccion?: string;
+  total_mensajes?: number;
+  usuarios_unicos?: number;
+  ultima_actualizacion?: string;
 }
 
 interface RespuestaInfo {
@@ -30,6 +33,12 @@ interface Session {
   phone: string;
   last_interaction: Date;
   estado: string;
+}
+
+interface ApiResponse<T = any> {
+  ok: boolean;
+  data: T;
+  error?: string;
 }
 
 type Tab = 'stats' | 'respuestas' | 'conversaciones' | 'no_ent';
@@ -58,31 +67,77 @@ export default function BotAdmin() {
   const [editingRes, setEditingRes] = useState<RespuestaInfo | null>(null);
   const [resText, setResText]       = useState('');
 
-  useEffect(() => {
-    if (!botId) return;
-    loadData();
-  }, [botId, activeTab]);
+  // Bot metadata state
+  const [botName, setBotName]           = useState<string>('');
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
 
-  const getHeaders = async () => ({
-    'Authorization': `Bearer ${await user?.getIdToken()}`,
-    'x-bot-id': botNumber,
-  });
+  const loadBotInfo = async () => {
+    try {
+      const token = await user?.getIdToken();
+      const res = await axios.get<ApiResponse<{ nombre: string }>>(`${API_URL}/api/saas/bots/${botNumber}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.data.ok) {
+        setBotName(res.data.data.nombre);
+        setEditNameValue(res.data.data.nombre);
+      }
+    } catch (e) {
+      console.error("Error loading bot meta:", e);
+    }
+  };
+
+  useEffect(() => {
+    if (!botId || !user) return;
+    loadBotInfo();
+  }, [botId, user]);
+
+  useEffect(() => {
+    if (!botId || !user) return;
+    loadData();
+  }, [botId, activeTab, user]);
+
+  const getHeaders = async () => {
+    const token = await user?.getIdToken();
+    return {
+      'Authorization': `Bearer ${token}`,
+      'x-bot-id': botNumber,
+    };
+  };
+
+  const saveBotName = async () => {
+    if (!editNameValue.trim() || editNameValue.trim() === botName) {
+      setIsEditingName(false);
+      return;
+    }
+    try {
+      const token = await user?.getIdToken();
+      await axios.put<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/name`, 
+        { nombre: editNameValue.trim() }, 
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      setBotName(editNameValue.trim());
+      setIsEditingName(false);
+    } catch (e: any) {
+      alert("Error actualizando nombre: " + (e.response?.data?.error || e.message));
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
     try {
       const headers = await getHeaders();
       if (activeTab === 'stats') {
-        const res = await axios.get(`${API_URL}/api/stats`, { headers });
+        const res = await axios.get<ApiResponse<BotStats>>(`${API_URL}/api/saas/bots/${botNumber}/stats`, { headers });
         if (res.data.ok) setStats(res.data.data);
       } else if (activeTab === 'respuestas') {
-        const res = await axios.get(`${API_URL}/api/respuestas-info`, { headers });
+        const res = await axios.get<ApiResponse<Record<string, RespuestaInfo>>>(`${API_URL}/api/saas/bots/${botNumber}/respuestas-info`, { headers });
         if (res.data.ok) setRespuestas(Object.values(res.data.data));
       } else if (activeTab === 'conversaciones') {
-        const res = await axios.get(`${API_URL}/api/sessions`, { headers });
+        const res = await axios.get<ApiResponse<Session[]>>(`${API_URL}/api/saas/bots/${botNumber}/sessions`, { headers });
         if (res.data.ok) setSessions(res.data.data);
       } else if (activeTab === 'no_ent') {
-        const res = await axios.get(`${API_URL}/api/no-entendidos`, { headers });
+        const res = await axios.get<ApiResponse<MensajeNoEntendido[]>>(`${API_URL}/api/saas/bots/${botNumber}/no-entendidos`, { headers });
         if (res.data.ok) setNoEntendidos(res.data.data);
       }
     } catch (e) {
@@ -98,10 +153,10 @@ export default function BotAdmin() {
     try {
       const headers = await getHeaders();
       if (editingRes) {
-        await axios.put(`${API_URL}/api/respuestas-info/${editingRes.id}`, { texto: resText }, { headers });
+        await axios.put<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/respuestas-info/${editingRes.id}`, { texto: resText }, { headers });
       } else {
-        const id = 'res_' + Math.random().toString(36).substring(2, 9);
-        await axios.post(`${API_URL}/api/respuestas-info`, { id, texto: resText, activo: true }, { headers });
+        const rid = 'res_' + Math.random().toString(36).substring(2, 9);
+        await axios.post<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/respuestas-info`, { rid, texto: resText, activo: true }, { headers });
       }
       setEditingRes(null);
       setResText('');
@@ -115,7 +170,7 @@ export default function BotAdmin() {
     if (!confirm('¿Eliminar esta información?')) return;
     try {
       const headers = await getHeaders();
-      await axios.delete(`${API_URL}/api/respuestas-info/${id}`, { headers });
+      await axios.delete<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/respuestas-info/${id}`, { headers });
       loadData();
     } catch (e: any) { alert('Error: ' + e.message); }
   };
@@ -123,7 +178,7 @@ export default function BotAdmin() {
   const toggleActiva = async (r: RespuestaInfo) => {
     try {
       const headers = await getHeaders();
-      await axios.put(`${API_URL}/api/respuestas-info/${r.id}`, { activo: !r.activo }, { headers });
+      await axios.put<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/respuestas-info/${r.id}`, { activo: !r.activo }, { headers });
       setRespuestas(respuestas.map(x => x.id === r.id ? { ...x, activo: !x.activo } : x));
     } catch (e: any) { alert('Error: ' + e.message); }
   };
@@ -131,7 +186,7 @@ export default function BotAdmin() {
   const markRevisado = async (id: string) => {
     try {
       const headers = await getHeaders();
-      await axios.patch(`${API_URL}/api/no-entendidos/${id}/revisado`, {}, { headers });
+      await axios.patch<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/no-entendidos/${id}/revisado`, {}, { headers });
       setNoEntendidos(noEntendidos.map(n => n.id === id ? { ...n, revisado: true } : n));
     } catch (e: any) { alert('Error: ' + e.message); }
   };
@@ -139,7 +194,7 @@ export default function BotAdmin() {
   const deleteNoEntendido = async (id: string) => {
     try {
       const headers = await getHeaders();
-      await axios.delete(`${API_URL}/api/no-entendidos/${id}`, { headers });
+      await axios.delete<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/no-entendidos/${id}`, { headers });
       setNoEntendidos(noEntendidos.filter(n => n.id !== id));
     } catch (e: any) { alert('Error: ' + e.message); }
   };
@@ -150,13 +205,36 @@ export default function BotAdmin() {
       {/* ── Page Header ──────────────────────────────────────────────── */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
-            {botNumber}
-          </h1>
-          <p className="text-gray-500 text-sm mt-0.5">Panel de administración del bot</p>
+          <div className="flex items-center gap-3">
+            {isEditingName ? (
+              <input
+                autoFocus
+                type="text"
+                value={editNameValue}
+                onChange={(e) => setEditNameValue(e.target.value)}
+                onBlur={saveBotName}
+                onKeyDown={(e) => e.key === 'Enter' ? saveBotName() : e.key === 'Escape' && setIsEditingName(false)}
+                className="text-2xl font-bold bg-transparent border-b border-[#25d366] text-white focus:outline-none px-1 py-0 min-w-[250px]"
+              />
+            ) : (
+              <>
+                <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+                  {botName || botNumber}
+                </h1>
+                <button 
+                  onClick={() => setIsEditingName(true)} 
+                  className="text-gray-500 hover:text-white transition-colors p-1"
+                  title="Renombrar bot"
+                >
+                  <Edit2 className="h-4 w-4" />
+                </button>
+              </>
+            )}
+          </div>
+          <p className="text-gray-500 text-sm mt-0.5 font-mono">{botNumber} • Panel de administración</p>
         </div>
         <button
-          onClick={loadData}
+          onClick={() => { loadBotInfo(); loadData(); }}
           className="flex items-center gap-2 text-sm text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 px-4 py-2 rounded-xl transition-all"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -193,10 +271,10 @@ export default function BotAdmin() {
           {activeTab === 'stats' && (
             stats ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard label="Mensajes Recibidos"    value={stats.mensajes_recibidos || 0} />
-                <StatCard label="Respuestas IA"         value={stats.mensajes_enviados_ia || 0} />
-                <StatCard label="No Entendidos"         value={stats.mensajes_no_entendidos || 0} accent="red" />
-                <StatCard label="Última Interacción"    value={stats.ultima_interaccion ? new Date(stats.ultima_interaccion).toLocaleString() : 'N/A'} isText />
+                <StatCard label="Total Mensajes"      value={stats.total_mensajes ?? stats.mensajes_recibidos ?? 0} />
+                <StatCard label="Usuarios Únicos"     value={stats.usuarios_unicos ?? 0} />
+                <StatCard label="No Entendidos"       value={stats.mensajes_no_entendidos ?? noEntendidos.length} accent="red" />
+                <StatCard label="Última Actividad"    value={(stats.ultima_actualizacion || stats.ultima_interaccion) ? new Date(stats.ultima_actualizacion || stats.ultima_interaccion!).toLocaleString() : 'N/A'} isText />
               </div>
             ) : (
               <Empty icon={Activity} text="No hay estadísticas disponibles aún." />

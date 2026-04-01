@@ -10,7 +10,7 @@
     "dev:backend": "nodemon --exec \"node --loader ts-node/esm\" src/index.ts",
     "dev:frontend": "vite",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "build:frontend": "tsc -p tsconfig.client.json && vite build",
+    "build:frontend": "tsc -p client/tsconfig.json && vite build",
     "build:backend": "tsc -p tsconfig.json",
     "build": "npm run build:frontend && npm run build:backend",
     "start": "node dist/index.js",

@@ -71,6 +71,17 @@ export class BotInstance extends EventEmitter {
     this.emit("state_change", this.state);
   }
 
+  async hasSession(): Promise<boolean> {
+    const { promises: fsp } = await import("node:fs");
+    const sessionDir = path.join(BOTS_ROOT, this.botId, `session-${this.botId}`, "Default");
+    try {
+      const stats = await fsp.stat(sessionDir);
+      return stats.isDirectory();
+    } catch {
+      return false;
+    }
+  }
+
   async start(): Promise<void> {
     if (
       this.state.status === "initializing" ||
@@ -101,14 +112,22 @@ export class BotInstance extends EventEmitter {
     }
     // ──────────────────────────────────────────────────────────────────────────
 
-
     this.client = new Client({
+      qrMaxRetries: 2, // <--- Stops emitting QR after 2 retries
       authStrategy: new LocalAuth({
         clientId: this.botId,
         dataPath,
       }),
       puppeteer: {
-        args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        args: [
+          "--no-sandbox", 
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-accelerated-2d-canvas",
+          "--disable-gpu"
+        ],
+        timeout: 60000,
+        protocolTimeout: 300000,
       },
     });
 

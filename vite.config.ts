@@ -8,6 +8,9 @@ export default defineConfig({
   // Frontend source lives in client/, not src/ (which is the backend)
   root: ".",
   server: {
+    headers: {
+      "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:3001',
