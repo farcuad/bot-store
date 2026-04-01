@@ -52,14 +52,17 @@ export function createStatsManager(botId) {
         getStats,
     };
 }
-// ─── Backward-compatible singleton ───────────────────────────────────────────
-const _legacy = createStatsManager(BOT_PHONE_NUMBER);
-export const loadStats = _legacy.loadStats;
-export const saveStats = _legacy.saveStats;
-export const incrementarMensajesRespondidos = _legacy.incrementarMensajesRespondidos;
-export const incrementarUsuariosUnicos = _legacy.incrementarUsuariosUnicos;
-export const getStats = _legacy.getStats;
+// ─── Backward-compatible singleton ───────────────────────────────────────────────
+// Only created when BOT_PHONE_NUMBER is set (legacy single-bot mode).
+const _legacy = BOT_PHONE_NUMBER ? createStatsManager(BOT_PHONE_NUMBER) : null;
+export const loadStats = _legacy?.loadStats ?? (async () => { });
+export const saveStats = _legacy?.saveStats ?? (async () => { });
+export const incrementarMensajesRespondidos = _legacy?.incrementarMensajesRespondidos ?? (() => { });
+export const incrementarUsuariosUnicos = _legacy?.incrementarUsuariosUnicos ?? (() => { });
+export const getStats = _legacy?.getStats ?? (() => ({ total_mensajes: 0, usuarios_unicos: 0, ultima_actualizacion: new Date().toISOString() }));
 export function imprimirResumenStats() {
+    if (!_legacy)
+        return; // SaaS mode: no single legacy bot
     const s = _legacy.getStats();
     console.log("\n══════════════════════════════════");
     console.log("📊 ESTADÍSTICAS DEL BOT");

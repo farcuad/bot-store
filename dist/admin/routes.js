@@ -1,9 +1,10 @@
 import { Router } from "express";
-import { randomUUID } from "node:crypto";
+import admin from "firebase-admin";
 import { db } from "../config/firebase.js";
 import { seendMessageController } from "./WhatsappController.js";
 import { validateApiKey } from "../middlewares/authWhatsapp.js";
 const router = Router();
+const usersCol = () => db.collection("users");
 router.post("/send-message", validateApiKey, seendMessageController);
 const botRef = (req) => {
     const botId = req.headers["x-bot-id"];
@@ -29,56 +30,177 @@ const noEntRef = (req) => {
         throw new Error("Falta el número del bot");
     return bot.collection("mensajes_no_entendidos");
 };
-// ══════════════════════════════════════════════════════════════════════════════
-// Auth — token en memoria (válido hasta reinicio del proceso)
-// ══════════════════════════════════════════════════════════════════════════════
-const activeSessions = new Set();
-/** Middleware que protege todas las rutas a excepción de /login */
-export function requireAuth(req, res, next) {
-    const token = req.headers["x-admin-token"];
-    if (token && activeSessions.has(token)) {
-        next();
+/**
+ * Verifies the Firebase Bearer ID Token and attaches req.firebaseUid.
+ * Also sets req.isAdmin = true when the user has role "admin" in Firestore.
+ */
+export async function requireFirebaseAuth(req, res, next) {
+    const authHeader = req.headers["authorization"];
+    if (!authHeader?.startsWith("Bearer ")) {
+        res.status(401).json({ ok: false, error: "Token de Firebase requerido" });
         return;
     }
-    res.status(401).json({ ok: false, error: "No autenticado" });
-}
-// ── POST /login ───────────────────────────────────────────────────────────────
-router.post("/login", async (req, res) => {
+    const idToken = authHeader.slice(7);
     try {
-        const { password } = req.body;
-        if (!password) {
-            res.status(400).json({ ok: false, error: "Falta password" });
-            return;
+        const decoded = await admin.auth().verifyIdToken(idToken);
+        req.firebaseUid = decoded.uid;
+        // Check admin role (non-blocking: default false on error)
+        try {
+            const snap = await usersCol().doc(decoded.uid).get();
+            req.isAdmin = snap.exists && snap.data()?.role === "admin";
         }
-        const botId = req.headers["x-bot-id"];
-        const master = process.env.ADMIN_PASSWORD;
-        let botPassword;
-        if (botId) {
-            const snap = await db.collection("bots").doc(botId).get();
-            botPassword = snap.data()?.password;
+        catch {
+            req.isAdmin = false;
         }
-        if (!master && !botPassword) {
-            res.status(401).json({ ok: false, error: "Contraseña incorrecta" });
-            return;
+        next();
+    }
+    catch {
+        res.status(401).json({ ok: false, error: "Token inválido o expirado" });
+    }
+}
+/**
+ * Verifies the Firebase user has role 'admin' in Firestore.
+ */
+export async function requireAdminRole(req, res, next) {
+    if (!req.firebaseUid) {
+        res.status(401).json({ ok: false, error: "No autenticado" });
+        return;
+    }
+    try {
+        const snap = await usersCol().doc(req.firebaseUid).get();
+        if (snap.exists && snap.data()?.role === "admin") {
+            next();
         }
-        if (password !== master && (!botPassword || password !== botPassword)) {
-            res.status(401).json({ ok: false, error: "Contraseña incorrecta" });
-            return;
+        else {
+            res.status(403).json({ ok: false, error: "No tienes permisos de administrador" });
         }
-        const token = randomUUID();
-        activeSessions.add(token);
-        res.json({ ok: true, token });
+    }
+    catch (e) {
+        res.status(500).json({ ok: false, error: "Error verificando permisos" });
+    }
+}
+// Legacy alias for bot-management routes still using requireAuth
+export function requireAuth(req, res, next) {
+    requireFirebaseAuth(req, res, next);
+}
+// ══════════════════════════════════════════════════════════════════════════════
+// Firebase user registration / profile endpoints
+// ══════════════════════════════════════════════════════════════════════════════
+/**
+ * POST /api/auth/firebase-verify
+ * Verifica el ID Token de Firebase y crea/actualiza el perfil del usuario.
+ * Si es nuevo, queda en estado 'pending'.
+ */
+router.post("/auth/firebase-verify", async (req, res) => {
+    const { idToken, phone } = req.body;
+    if (!idToken) {
+        res.status(400).json({ ok: false, error: "idToken requerido" });
+        return;
+    }
+    try {
+        const decoded = await admin.auth().verifyIdToken(idToken);
+        const uid = decoded.uid;
+        const userRef = usersCol().doc(uid);
+        const snap = await userRef.get();
+        if (!snap.exists) {
+            // New user — create with pending status, default role and bot limit
+            const profile = {
+                uid,
+                email: decoded.email ?? "",
+                displayName: decoded.name ?? "",
+                phone: phone ?? "",
+                role: "user",
+                status: "pending",
+                maxBots: 1,
+                createdAt: Date.now(),
+            };
+            await userRef.set(profile);
+            res.json({ ok: true, status: "pending", profile });
+        }
+        else {
+            // Existing user — optionally update phone
+            const existing = snap.data();
+            if (phone && !existing.phone) {
+                await userRef.update({ phone });
+                existing.phone = phone;
+            }
+            res.json({ ok: true, status: existing.status, profile: existing });
+        }
     }
     catch (e) {
         res.status(500).json({ ok: false, error: e.message });
     }
 });
-// ── POST /logout ──────────────────────────────────────────────────────────────
-router.post("/logout", (req, res) => {
-    const token = req.headers["x-admin-token"];
-    if (token)
-        activeSessions.delete(token);
-    res.json({ ok: true });
+/**
+ * GET /api/auth/me
+ * Retorna el perfil del usuario autenticado vía Firebase ID Token.
+ */
+router.get("/auth/me", async (req, res) => {
+    const authHeader = req.headers["authorization"];
+    if (!authHeader?.startsWith("Bearer ")) {
+        res.status(401).json({ ok: false, error: "Token requerido" });
+        return;
+    }
+    try {
+        const decoded = await admin.auth().verifyIdToken(authHeader.slice(7));
+        const snap = await usersCol().doc(decoded.uid).get();
+        if (!snap.exists) {
+            res.status(404).json({ ok: false, error: "Usuario no registrado" });
+            return;
+        }
+        res.json({ ok: true, profile: snap.data() });
+    }
+    catch (e) {
+        res.status(401).json({ ok: false, error: "Token inválido" });
+    }
+});
+/** GET /api/admin/users — lista todos los usuarios */
+router.get("/admin/users", requireFirebaseAuth, requireAdminRole, async (_req, res) => {
+    try {
+        const snap = await usersCol().orderBy("createdAt", "desc").get();
+        res.json({ ok: true, users: snap.docs.map(d => d.data()) });
+    }
+    catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+/** POST /api/admin/users/:uid/approve */
+router.post("/admin/users/:uid/approve", requireFirebaseAuth, requireAdminRole, async (req, res) => {
+    try {
+        const uid = req.params["uid"];
+        await usersCol().doc(uid).update({ status: "approved", approvedAt: Date.now() });
+        res.json({ ok: true, uid, status: "approved" });
+    }
+    catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+/** PATCH /api/admin/users/:uid/maxBots — admin sets how many bots a user can create */
+router.patch("/admin/users/:uid/maxBots", requireFirebaseAuth, requireAdminRole, async (req, res) => {
+    try {
+        const uid = req.params["uid"];
+        const { maxBots } = req.body;
+        if (typeof maxBots !== "number" || maxBots < 0) {
+            res.status(400).json({ ok: false, error: "maxBots debe ser un número >= 0" });
+            return;
+        }
+        await usersCol().doc(uid).update({ maxBots });
+        res.json({ ok: true, uid, maxBots });
+    }
+    catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+/** POST /api/admin/users/:uid/reject */
+router.post("/admin/users/:uid/reject", requireFirebaseAuth, requireAdminRole, async (req, res) => {
+    try {
+        const uid = req.params["uid"];
+        await usersCol().doc(uid).update({ status: "rejected" });
+        res.json({ ok: true, uid, status: "rejected" });
+    }
+    catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
 });
 // ══════════════════════════════════════════════════════════════════════════════
 // A partir de aquí todas las rutas requieren auth

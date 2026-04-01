@@ -11,7 +11,7 @@ const BOTS_ROOT = path.resolve(__dirname, "../../bots");
 export interface BotRecord {
   botId: string;
   nombre: string;
-  password?: string;
+  ownerUid: string; // Firebase UID del usuario propietario
   createdAt: number;
   active: boolean;
 }
@@ -19,6 +19,7 @@ export interface BotRecord {
 export interface BotPublicState {
   botId: string;
   nombre: string;
+  ownerUid: string;
   status: BotStatus;
   createdAt: number;
   readySince: number | null;
@@ -47,7 +48,7 @@ class BotManager {
         if (record.active) {
           await this._registerInstance(record.botId);
           this.startBot(record.botId).catch((e) =>
-            console.error(`[${record.botId}] auto-start error:`, e)
+            console.error(`[${record.botId}] auto-start error:`, e),
           );
         } else {
           await this._registerInstance(record.botId);
@@ -70,25 +71,32 @@ class BotManager {
       const record: BotRecord = {
         botId,
         nombre: "Bot Principal",
+        ownerUid: "admin",
         createdAt: Date.now(),
         active: true,
       };
       await this.platformBotsRef().doc(botId).set(record);
     }
-    console.log(`🤖 BotManager: registered legacy default bot (${botPhoneNumber}).`);
+    console.log(
+      `🤖 BotManager: registered legacy default bot (${botPhoneNumber}).`,
+    );
   }
 
   // ── CRUD ────────────────────────────────────────────────────────────────────
 
-  async createBot(payload: { nombre: string; password?: string }): Promise<BotRecord> {
+  async createBot(payload: {
+    nombre: string;
+    password?: string;
+    ownerUid: string;
+  }): Promise<BotRecord> {
     const botId = `bot_${Date.now()}`;
     const record: BotRecord = {
       botId,
       nombre: payload.nombre,
+      ownerUid: payload.ownerUid,
       createdAt: Date.now(),
       active: true,
     };
-    if (payload.password) record.password = payload.password;
 
     // Persist to Firestore
     await this.platformBotsRef().doc(botId).set(record);
@@ -114,7 +122,9 @@ class BotManager {
 
   async startBot(botId: string): Promise<void> {
     if (this._starting.has(botId)) {
-      console.log(`[${botId}] start already in progress — skipping duplicate call.`);
+      console.log(
+        `[${botId}] start already in progress — skipping duplicate call.`,
+      );
       return;
     }
     this._starting.add(botId);
@@ -138,8 +148,20 @@ class BotManager {
 
   // ── Queries ─────────────────────────────────────────────────────────────────
 
-  async listBots(): Promise<BotPublicState[]> {
-    const snap = await this.platformBotsRef().orderBy("createdAt", "asc").get();
+  /**
+   * List bots. If ownerUid is provided (non-admin), returns only their bots.
+   * If ownerUid is undefined (admin), returns all bots.
+   */
+  async listBots(ownerUid?: string): Promise<BotPublicState[]> {
+    const botsRef = this.platformBotsRef();
+    let query: FirebaseFirestore.Query = botsRef.orderBy(
+      "createdAt",
+      "asc",
+    );
+    if (ownerUid) {
+      query = query.where("ownerUid", "==", ownerUid);
+    }
+    const snap = await query.get();
     return snap.docs.map((doc) => {
       const record = doc.data() as BotRecord;
       const instance = this.instances.get(record.botId);
@@ -147,6 +169,7 @@ class BotManager {
       return {
         botId: record.botId,
         nombre: record.nombre,
+        ownerUid: record.ownerUid,
         status: liveState?.status ?? "idle",
         createdAt: record.createdAt,
         readySince: liveState?.readySince ?? null,
@@ -164,6 +187,7 @@ class BotManager {
     return {
       botId: record.botId,
       nombre: record.nombre,
+      ownerUid: record.ownerUid,
       status: liveState?.status ?? "idle",
       createdAt: record.createdAt,
       readySince: liveState?.readySince ?? null,
