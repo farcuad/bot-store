@@ -26,56 +26,40 @@ async function toDataUrl(qr: string): Promise<string> {
   return QRCode.toDataURL(qr, { width: 220, margin: 2 });
 }
 
-// ── QR — SSE streaming (unauthenticated: EventSource can't set headers) ─────
+// ── QR Polling endpoint ────────────────────────────────────────────────────────
 
 /**
  * GET /api/saas/bots/:id/qr
- * Server-Sent Events: sends QR as a PNG data URL as soon as it is available.
- * Intentionally unauthenticated because the browser's native EventSource API
- * does not support custom headers (x-admin-token). The QR is only valid ~30s.
+ * Polled by frontend every 3s to get the latest QR or status.
  */
-router.get("/bots/:id/qr", (req: Request, res: Response) => {
+router.get("/bots/:id/qr", async (req: Request, res: Response) => {
   const id = req.params.id as string;
-  const maybeInstance = botManager.getInstance(id);
-  if (!maybeInstance) {
+  const instance = botManager.getInstance(id);
+  
+  if (!instance) {
     res.status(404).json({ ok: false, error: "Bot not found" });
     return;
   }
 
-  const instance = maybeInstance;
-
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders();
-
-  const send = (payload: object) => {
-    res.write(`data: ${JSON.stringify(payload)}\n\n`);
-  };
-
-  // Send current QR immediately if already available
+  const status = instance.getState().status;
   const currentQr = instance.getQR();
+
+  if (status === "ready") {
+    res.json({ ok: true, status: "ready" });
+    return;
+  }
+
   if (currentQr) {
-    toDataUrl(currentQr).then((dataUrl) => send({ qr: dataUrl })).catch(() => {});
+    try {
+      const dataUrl = await toDataUrl(currentQr);
+      res.json({ ok: true, status, qr: dataUrl });
+      return;
+    } catch {
+      // Ignore generation errors
+    }
   }
 
-  const onQr = (qr: string) => {
-    toDataUrl(qr).then((dataUrl) => send({ qr: dataUrl })).catch(() => {});
-  };
-  const onReady = () => { send({ ready: true }); cleanup(); };
-  const onDisconnect = () => cleanup();
-
-  function cleanup() {
-    instance.off("qr", onQr);
-    instance.off("ready", onReady);
-    instance.off("disconnected", onDisconnect);
-    res.end();
-  }
-
-  instance.on("qr", onQr);
-  instance.on("ready", onReady);
-  instance.on("disconnected", onDisconnect);
-  req.on("close", cleanup);
+  res.json({ ok: true, status });
 });
 
 // All other SaaS routes require Firebase authentication (or admin token)
@@ -83,35 +67,48 @@ router.use(requireFirebaseAuth);
 
 // Middleware to check approved status for non-admins
 router.use(async (req: Request, res: Response, next) => {
-  if (req.isAdmin) { next(); return; }
+  if (req.isAdmin) {
+    next();
+    return;
+  }
   const uid = req.firebaseUid!;
   try {
     const snap = await db.collection("users").doc(uid).get();
     const profile = snap.data() as UserProfile | undefined;
     if (!profile || profile.status !== "approved") {
-      res.status(403).json({ ok: false, error: "Cuenta pendiente de aprobación" });
+      res
+        .status(403)
+        .json({ ok: false, error: "Cuenta pendiente de aprobación" });
       return;
     }
     next();
   } catch {
-    res.status(500).json({ ok: false, error: "Error verificando estado de cuenta" });
+    res
+      .status(500)
+      .json({ ok: false, error: "Error verificando estado de cuenta" });
   }
 });
-
 
 // ── Bot CRUD ──────────────────────────────────────────────────────────────────
 
 /** POST /api/saas/bots — create new bot */
 router.post("/bots", async (req: Request, res: Response) => {
-  const { nombre } = req.body as { nombre?: string };
+  const { nombre, password } = req.body as {
+    nombre?: string;
+    password?: string;
+  };
   if (!nombre) return fail(res, 400, "nombre is required");
-  const ownerUid = req.isAdmin ? (req.body.ownerUid ?? "admin") : req.firebaseUid!;
+  const ownerUid = req.isAdmin
+    ? (req.body.ownerUid ?? "admin")
+    : req.firebaseUid!;
 
   // ── Enforce per-user bot limit (skip for admins creating their own bots) ────
   if (!req.isAdmin) {
     try {
       const userSnap = await db.collection("users").doc(ownerUid).get();
-      const maxBots: number = userSnap.exists ? (userSnap.data()?.maxBots ?? 1) : 1;
+      const maxBots: number = userSnap.exists
+        ? (userSnap.data()?.maxBots ?? 1)
+        : 1;
       const currentBots = await botManager.listBots(ownerUid);
       if (currentBots.length >= maxBots) {
         return fail(res, 403, `Límite de bots alcanzado (máximo: ${maxBots})`);
@@ -130,19 +127,16 @@ router.post("/bots", async (req: Request, res: Response) => {
   }
 });
 
-
 /** GET /api/saas/bots — list bots (filtered by owner unless admin, or admin passes ?onlyMine=true) */
 router.get("/bots", async (req: Request, res: Response) => {
   try {
-    const forceOwner = req.query["onlyMine"] === "true";
-    const ownerUid = (!req.isAdmin || forceOwner) ? req.firebaseUid : undefined;
+    const ownerUid = req.isAdmin ? undefined : req.firebaseUid;
     const bots = await botManager.listBots(ownerUid);
     return ok(res, bots);
   } catch (e: any) {
     return fail(res, 500, e.message);
   }
 });
-
 
 /** GET /api/saas/bots/:id — get one bot state */
 router.get("/bots/:id", async (req: Request, res: Response) => {
@@ -156,10 +150,34 @@ router.get("/bots/:id", async (req: Request, res: Response) => {
   }
 });
 
+/** PUT /api/saas/bots/:id/name — rename bot */
+router.put("/bots/:id/name", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const { nombre } = req.body;
+  if (!nombre) return fail(res, 400, "nombre is required");
+  
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, "Bot not found");
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) {
+      return fail(res, 403, "No autorizado");
+    }
+    await botManager.renameBot(id, nombre);
+    return ok(res, { updated: id, nombre });
+  } catch (e: any) {
+    return fail(res, 500, e.message);
+  }
+});
+
 /** DELETE /api/saas/bots/:id — remove bot */
 router.delete("/bots/:id", async (req: Request, res: Response) => {
   const id = req.params.id as string;
   try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, "Bot not found");
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) {
+      return fail(res, 403, "No autorizado");
+    }
     await botManager.deleteBot(id);
     return ok(res, { deleted: id });
   } catch (e: any) {
@@ -239,6 +257,137 @@ router.get("/bots/:id/config", async (req: Request, res: Response) => {
     const configSvc = createConfigService(id);
     await configSvc.loadConfig();
     return ok(res, configSvc.getConfig());
+  } catch (e: any) {
+    return fail(res, 500, e.message);
+  }
+});
+
+// ── No Entendidos ─────────────────────────────────────────────────────────────
+
+/** GET /api/saas/bots/:id/no-entendidos */
+router.get("/bots/:id/no-entendidos", async (req, res) => {
+  const id = req.params.id as string;
+  try {
+    const snap = await db
+      .collection("bots")
+      .doc(id)
+      .collection("mensajes_no_entendidos")
+      .orderBy("timestamp", "desc")
+      .limit(200)
+      .get();
+    const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    return ok(res, data);
+  } catch (e: any) {
+    return fail(res, 500, e.message);
+  }
+});
+
+/** PATCH /api/saas/bots/:id/no-entendidos/:mid/revisado */
+router.patch("/bots/:id/no-entendidos/:mid/revisado", async (req, res) => {
+  const { id, mid } = req.params;
+  try {
+    await db
+      .collection("bots")
+      .doc(id)
+      .collection("mensajes_no_entendidos")
+      .doc(mid)
+      .update({ revisado: true });
+    return ok(res, { id: mid, revisado: true });
+  } catch (e: any) {
+    return fail(res, 500, e.message);
+  }
+});
+
+/** DELETE /api/saas/bots/:id/no-entendidos/:mid */
+router.delete("/bots/:id/no-entendidos/:mid", async (req, res) => {
+  const { id, mid } = req.params;
+  try {
+    await db
+      .collection("bots")
+      .doc(id)
+      .collection("mensajes_no_entendidos")
+      .doc(mid)
+      .delete();
+    return ok(res, { id: mid });
+  } catch (e: any) {
+    return fail(res, 500, e.message);
+  }
+});
+
+// ── Respuestas Info (KB) ──────────────────────────────────────────────────────
+
+/** GET /api/saas/bots/:id/respuestas-info */
+router.get("/bots/:id/respuestas-info", async (req, res) => {
+  const id = req.params.id as string;
+  try {
+    const snap = await db
+      .collection("bots")
+      .doc(id)
+      .collection("respuestas_info")
+      .get();
+    const data: Record<string, any> = {};
+    snap.forEach((doc) => {
+      data[doc.id] = { id: doc.id, ...doc.data() };
+    });
+    return ok(res, data);
+  } catch (e: any) {
+    return fail(res, 500, e.message);
+  }
+});
+
+/** POST /api/saas/bots/:id/respuestas-info */
+router.post("/bots/:id/respuestas-info", async (req, res) => {
+  const id = req.params.id as string;
+  const { rid, texto, activo } = req.body as {
+    rid: string;
+    texto: string;
+    activo: boolean;
+  };
+  if (!rid || !texto) return fail(res, 400, "Faltan campos: rid, texto");
+  try {
+    await db
+      .collection("bots")
+      .doc(id)
+      .collection("respuestas_info")
+      .doc(rid)
+      .set({ texto, activo: activo ?? true });
+    return ok(res, { id: rid });
+  } catch (e: any) {
+    return fail(res, 500, e.message);
+  }
+});
+
+/** PUT /api/saas/bots/:id/respuestas-info/:rid */
+router.put("/bots/:id/respuestas-info/:rid", async (req, res) => {
+  const { id, rid } = req.params;
+  const { texto, activo } = req.body;
+  try {
+    const updates: any = {};
+    if (texto !== undefined) updates.texto = texto;
+    if (activo !== undefined) updates.activo = activo;
+    await db
+      .collection("bots")
+      .doc(id)
+      .collection("respuestas_info")
+      .doc(rid)
+      .update(updates);
+    return ok(res, { id: rid });
+  } catch (e: any) {
+    return fail(res, 500, e.message);
+  }
+});
+
+/** DELETE /api/saas/bots/:id/respuestas-info/:rid */
+router.delete("/bots/:id/respuestas-info/:rid", async (req, res) => {
+  const { id, rid } = req.params;
+  try {
+    await db
+      .collection("bots")
+      .doc(id)
+      .collection("respuestas_info")
+      .doc(rid)
+      .delete();
+    return ok(res, { id: rid });
   } catch (e: any) {
     return fail(res, 500, e.message);
   }

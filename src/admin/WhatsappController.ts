@@ -12,9 +12,6 @@ export const seendMessageController = async (req: Request, res: Response) => {
     };
     const clientKey = req.headers["x-client-key"] as string;
 
-    if (clientKey !== process.env.API_KEY) {
-      return res.status(401).json({ error: "API Key incorrecta" });
-    }
     if (!to || !message) {
       return res.status(400).json({ error: "Faltan datos" });
     }

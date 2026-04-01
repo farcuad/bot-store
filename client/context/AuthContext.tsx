@@ -11,6 +11,7 @@ interface AuthContextType {
   isAdmin: boolean;
   checkUserStatus: (user: User) => Promise<any>;
   logout: () => Promise<void>;
+  authInstance: any | null;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -21,6 +22,7 @@ const AuthContext = createContext<AuthContextType>({
   isAdmin: false,
   checkUserStatus: async () => ({}),
   logout: async () => {},
+  authInstance: null,
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -93,7 +95,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isAdmin = dbUser?.role === 'admin';
 
   return (
-    <AuthContext.Provider value={{ user, dbUser, loading, status, isAdmin, checkUserStatus, logout }}>
+    <AuthContext.Provider value={{ user, dbUser, loading, status, isAdmin, checkUserStatus, logout, authInstance }}>
       {children}
     </AuthContext.Provider>
   );

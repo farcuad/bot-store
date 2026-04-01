@@ -9,3 +9,5 @@ stats.json
 .wwebjs_auth
 /bots
 bots/
+dist/
+/dist
