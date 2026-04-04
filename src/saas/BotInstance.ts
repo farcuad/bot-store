@@ -252,6 +252,7 @@ export class BotInstance extends EventEmitter {
           last_interaction: nowInSeconds,
           status: "human",
           human_since: nowInSeconds,
+          contactName: remoteSession?.contactName,
           history: remoteSession?.history ?? [],
         });
         console.log(`[${this.botId}] 👤 Intervención humana en ${remoteId}.`);
@@ -285,6 +286,7 @@ export class BotInstance extends EventEmitter {
             await this.sessionMgr.saveSession(from, {
               last_interaction: nowInSeconds,
               status: "bot",
+              contactName: session?.contactName,
               history: session?.history ?? [],
             });
             await msg.reply(sys("botReactivado"));
@@ -301,6 +303,7 @@ export class BotInstance extends EventEmitter {
 
       if (!session) {
         await this.sessionMgr.saveSession(from, {
+          contactName: nombre,
           last_interaction: nowInSeconds,
           status: "bot",
           history: [],
@@ -314,6 +317,7 @@ export class BotInstance extends EventEmitter {
         this.sessionMgr.TWENTY_FOUR_HOURS
       ) {
         await this.sessionMgr.saveSession(from, {
+          contactName: nombre,
           last_interaction: nowInSeconds,
           status: "bot",
           history: [],
@@ -322,6 +326,7 @@ export class BotInstance extends EventEmitter {
         instruccionExtra = `El usuario volvió a escribir después de mucho tiempo. Tu tarea es saludarlo basándote en esta plantilla: "${mensajeRecontacto}", y además responder a lo que te acaba de escribir.`;
       } else {
         session.last_interaction = nowInSeconds;
+        session.contactName = nombre;
         await this.sessionMgr.saveSession(from, session);
       }
 

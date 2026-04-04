@@ -95,22 +95,22 @@ export default function AdminBots() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="flex items-center gap-4 mb-8">
+      <div className="flex flex-wrap items-center gap-3 mb-8">
         <button onClick={() => navigate('/saas')} className="p-2 hover:bg-white/5 rounded-lg transition-colors">
           <ArrowLeft className="h-5 w-5 text-gray-400" />
         </button>
-        <div>
-          <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-linear-to-r from-white to-gray-400">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold bg-clip-text text-transparent bg-linear-to-r from-white to-gray-400">
             ⚙️ Configurar Bots
           </h1>
           <p className="text-gray-400 text-sm mt-1">Todos los bots del sistema — vista de administrador</p>
         </div>
         <button
           onClick={loadBots}
-          className="ml-auto flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+          className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          <span className="text-sm">Actualizar</span>
+          <span className="text-sm hidden sm:inline">Actualizar</span>
         </button>
       </div>
 
@@ -127,7 +127,8 @@ export default function AdminBots() {
         </div>
       ) : (
         <div className="bg-[#12121a] border border-white/5 rounded-2xl overflow-hidden shadow-xl">
-          <table className="w-full text-left">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left min-w-[600px]">
             <thead>
               <tr className="bg-black/20 text-gray-400 text-sm border-b border-white/5">
                 <th className="p-4 font-medium">Bot</th>
@@ -194,6 +195,7 @@ export default function AdminBots() {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

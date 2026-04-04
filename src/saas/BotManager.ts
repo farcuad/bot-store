@@ -125,7 +125,14 @@ class BotManager {
     await this.stopBot(botId);
     this.instances.delete(botId);
     await this.platformBotsRef().doc(botId).delete();
-    // Optionally: remove bot directory (risky — skip for safety)
+    // Remove bot directory and all its contents
+    const botDir = path.join(BOTS_ROOT, botId);
+    try {
+      await fs.rm(botDir, { recursive: true, force: true });
+      console.log(`[${botId}] 🗑️ Bot directory removed: ${botDir}`);
+    } catch (e) {
+      console.warn(`[${botId}] Could not remove bot directory:`, e);
+    }
   }
 
   async renameBot(botId: string, nuevoNombre: string): Promise<void> {
@@ -167,6 +174,23 @@ class BotManager {
   async restartBot(botId: string): Promise<void> {
     const instance = this._get(botId);
     await instance.restart();
+  }
+
+  /** Clear bot session: stops bot, deletes the Chrome session directory, re-registers. */
+  async clearSession(botId: string): Promise<void> {
+    // Stop if running
+    const instance = this.instances.get(botId);
+    if (instance) {
+      await instance.stop();
+    }
+    // Delete only the Chrome session subdirectory, not the full bot directory
+    const sessionDir = path.join(BOTS_ROOT, botId, `session-${botId}`);
+    try {
+      await fs.rm(sessionDir, { recursive: true, force: true });
+      console.log(`[${botId}] 🧹 Session directory cleared: ${sessionDir}`);
+    } catch (e) {
+      console.warn(`[${botId}] Could not clear session directory:`, e);
+    }
   }
 
   // ── Queries ─────────────────────────────────────────────────────────────────

@@ -12,17 +12,15 @@ export const seendMessageController = async (req: Request, res: Response) => {
     };
     const clientKey = req.headers["x-client-key"] as string;
 
-    if (!to || !message) {
-      return res.status(400).json({ error: "Faltan datos" });
+    if (!to || !message || !botId) {
+      return res.status(400).json({ error: "Faltan datos requeridos: to, message o botId" });
     }
 
-    // Use the specified bot or fall back to the legacy default bot
-    const targetBotId = botId ?? "bot_default";
-    const instance = botManager.getInstance(targetBotId);
+    const instance = botManager.getInstance(botId);
     if (!instance) {
       return res
         .status(404)
-        .json({ error: `Bot '${targetBotId}' not found or not started` });
+        .json({ error: `Bot '${botId}' no encontrado o no ha iniciado` });
     }
 
     await instance.sendMessage(to, message);

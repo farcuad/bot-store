@@ -220,6 +220,25 @@ router.post("/bots/:id/restart", async (req: Request, res: Response) => {
   }
 });
 
+/** POST /api/saas/bots/:id/clear-session
+ *  Stops the bot, removes the Chrome session directory so the user can re-scan the QR.
+ *  The bot record in Firestore (config, KB, sessions) is kept intact.
+ */
+router.post("/bots/:id/clear-session", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, "Bot not found");
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) {
+      return fail(res, 403, "No autorizado");
+    }
+    await botManager.clearSession(id);
+    return ok(res, { cleared: id });
+  } catch (e: any) {
+    return fail(res, 500, e.message);
+  }
+});
+
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
 /** GET /api/saas/bots/:id/stats */
@@ -234,6 +253,89 @@ router.get("/bots/:id/stats", async (req: Request, res: Response) => {
   }
 });
 
+// ── Export / Import ───────────────────────────────────────────────────────────
+
+/** GET /api/saas/bots/:id/export
+ *  Returns a JSON bundle with all config (respuestas_info + prompt) that can be
+ *  re-imported into another bot.
+ */
+router.get("/bots/:id/export", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, "Bot not found");
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) {
+      return fail(res, 403, "No autorizado");
+    }
+
+    const configSvc = createConfigService(id);
+    await configSvc.loadConfig();
+    const config = configSvc.getConfig();
+
+    // Fetch KB entries from Firestore
+    const kbSnap = await db.collection('bots').doc(id).collection('respuestas_info').get();
+    const respuestasInfo: Record<string, any> = {};
+    kbSnap.forEach(doc => { respuestasInfo[doc.id] = { id: doc.id, ...doc.data() }; });
+
+    const bundle = {
+      exportedAt: new Date().toISOString(),
+      botName: orig.nombre,
+      respuestasInfo,
+      respuestasSistema: config.respuestas_sistema,
+      promptIa: config.prompt_ia,
+    };
+
+    res.setHeader('Content-Disposition', `attachment; filename="${id}-export.json"`);
+    res.setHeader('Content-Type', 'application/json');
+    return res.json(bundle);
+  } catch (e: any) {
+    return fail(res, 500, e.message);
+  }
+});
+
+/** POST /api/saas/bots/:id/import
+ *  Accepts a JSON export bundle and loads it into the target bot.
+ *  Merges KB entries and updates the prompt; does not touch sessions or stats.
+ */
+router.post("/bots/:id/import", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, "Bot not found");
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) {
+      return fail(res, 403, "No autorizado");
+    }
+
+    const bundle = req.body as {
+      respuestasInfo?: Record<string, { texto: string; activo?: boolean }>;
+      promptIa?: string;
+    };
+
+    if (!bundle || typeof bundle !== 'object') {
+      return fail(res, 400, "Cuerpo JSON inválido");
+    }
+
+    // Import KB entries
+    if (bundle.respuestasInfo && typeof bundle.respuestasInfo === 'object') {
+      const batch = db.batch();
+      for (const [key, entry] of Object.entries(bundle.respuestasInfo)) {
+        const ref = db.collection('bots').doc(id).collection('respuestas_info').doc(key);
+        batch.set(ref, { texto: entry.texto, activo: entry.activo ?? true });
+      }
+      await batch.commit();
+    }
+
+    // Import prompt_ia if included
+    if (bundle.promptIa) {
+      await db.collection('bots').doc(id).set({ prompt_ia: bundle.promptIa }, { merge: true });
+    }
+
+    return ok(res, { imported: id, kbEntries: Object.keys(bundle.respuestasInfo ?? {}).length });
+  } catch (e: any) {
+    return fail(res, 500, e.message);
+  }
+});
+
 // ── Sessions ──────────────────────────────────────────────────────────────────
 
 /** GET /api/saas/bots/:id/sessions */
@@ -243,6 +345,40 @@ router.get("/bots/:id/sessions", async (req: Request, res: Response) => {
     const sessionMgr = createSessionManager(id);
     const sessions = await sessionMgr.listSessions();
     return ok(res, sessions);
+  } catch (e: any) {
+    return fail(res, 500, e.message);
+  }
+});
+
+/** PATCH /api/saas/bots/:id/sessions/:sessionId */
+router.patch("/bots/:id/sessions/:sessionId", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const sessionId = req.params.sessionId as string;
+  const { estado, contactName } = req.body;
+  
+  try {
+    const sessionMgr = createSessionManager(id);
+    const session = await sessionMgr.getSession(sessionId);
+    
+    if (!session) {
+      return fail(res, 404, "Sesión no encontrada");
+    }
+
+    if (estado !== undefined) {
+      session.status = estado === 'bot' ? 'bot' : 'human';
+      if (estado === 'human') {
+         session.human_since = Math.floor(Date.now() / 1000);
+      } else {
+         session.human_since = undefined;
+      }
+    }
+    
+    if (contactName !== undefined) {
+      session.contactName = contactName;
+    }
+    
+    await sessionMgr.saveSession(sessionId, session);
+    return ok(res, { id: sessionId, status: session.status, contactName: session.contactName });
   } catch (e: any) {
     return fail(res, 500, e.message);
   }
