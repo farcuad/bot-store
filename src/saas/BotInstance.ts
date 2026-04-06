@@ -3,6 +3,8 @@ const { Client, LocalAuth } = pkg;
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { EventEmitter } from "node:events";
+import axios from "axios";
+import FormData from "form-data";
 import { db } from "../config/firebase.js";
 import { generarRespuestaBot } from "../controllers/AiController.js";
 import { createSessionManager } from "../services/sessionManager.js";
@@ -73,7 +75,12 @@ export class BotInstance extends EventEmitter {
 
   async hasSession(): Promise<boolean> {
     const { promises: fsp } = await import("node:fs");
-    const sessionDir = path.join(BOTS_ROOT, this.botId, `session-${this.botId}`, "Default");
+    const sessionDir = path.join(
+      BOTS_ROOT,
+      this.botId,
+      `session-${this.botId}`,
+      "Default",
+    );
     try {
       const stats = await fsp.stat(sessionDir);
       return stats.isDirectory();
@@ -88,7 +95,9 @@ export class BotInstance extends EventEmitter {
       this.state.status === "qr" ||
       this.state.status === "ready"
     ) {
-      console.log(`[${this.botId}] Already running (${this.state.status}) — skipping duplicate start.`);
+      console.log(
+        `[${this.botId}] Already running (${this.state.status}) — skipping duplicate start.`,
+      );
       return;
     }
 
@@ -120,11 +129,11 @@ export class BotInstance extends EventEmitter {
       }),
       puppeteer: {
         args: [
-          "--no-sandbox", 
+          "--no-sandbox",
           "--disable-setuid-sandbox",
           "--disable-dev-shm-usage",
           "--disable-accelerated-2d-canvas",
-          "--disable-gpu"
+          "--disable-gpu",
         ],
         timeout: 60000,
         protocolTimeout: 300000,
@@ -167,7 +176,6 @@ export class BotInstance extends EventEmitter {
 
     this.client.initialize();
   }
-
 
   async stop(): Promise<void> {
     if (!this.client) return;
@@ -265,14 +273,35 @@ export class BotInstance extends EventEmitter {
       const isMedia =
         msg.hasMedia ||
         ["image", "video", "audio", "ptt", "sticker", "document"].includes(
-          msg.type
+          msg.type,
         );
 
-      if (isMedia && msg.type !== "sticker") {
+      // Audio / voice note → transcribir y pasar a DeepSeek
+      if (isMedia && (msg.type === "audio" || msg.type === "ptt")) {
+        try {
+          const transcription = await this._transcribeAudio(msg);
+          if (!transcription) {
+            await msg.reply(sys("mediaRecibida"));
+            return;
+          }
+          // Usar la transcripción como si fuera texto del usuario
+          msg.body = transcription;
+          // Continuar con el flujo normal de sesión + IA más abajo
+        } catch (err: any) {
+          console.error(
+            `[${this.botId}] ❌ Error transcribiendo audio:`,
+            err.message,
+          );
+          await msg.reply(sys("mediaRecibida"));
+          return;
+        }
+      } else if (isMedia && msg.type !== "sticker") {
         await msg.reply(sys("mediaRecibida"));
         return;
+      } else if (isMedia) {
+        // sticker – ignorar
+        return;
       }
-      if (isMedia) return;
 
       // ── Auto-reactivación ───────────────────────────────────────────────────
       const session = await this.sessionMgr.getSession(from);
@@ -340,7 +369,7 @@ export class BotInstance extends EventEmitter {
           this.configSvc.getNombre(),
           config.respuestas_info,
           instruccionExtra,
-          config.prompt_ia
+          config.prompt_ia,
         );
 
         if (respuesta.includes("[NO_ENTENDI]")) {
@@ -362,13 +391,13 @@ export class BotInstance extends EventEmitter {
           const phoneNumber = msg.from.replace(/\D/g, "").slice(0, 12);
           await this.client!.sendMessage(
             msg.to,
-            `📢 Contestale al usuario ${nombre}! ${phoneNumber}, que quiere: ${msg.body}`
+            `📢 Contestale al usuario ${nombre}! ${phoneNumber}, que quiere: ${msg.body}`,
           );
         }
 
         this.statsMgr.incrementarMensajesRespondidos();
-        
-        // Save history first so that the `message_create` event (fromMe=true) 
+
+        // Save history first so that the `message_create` event (fromMe=true)
         // can match `isHistoryMatch`.
         this.sessionMgr.appendToHistory(activeSession, "assistant", respuesta);
         await this.sessionMgr.saveSession(from, activeSession);
@@ -382,5 +411,46 @@ export class BotInstance extends EventEmitter {
     } catch (outerError) {
       console.error(`[${this.botId}] ❌ Unhandled message error:`, outerError);
     }
+  }
+
+  // ─── Audio transcription helper ──────────────────────────────────────────────
+
+  private async _transcribeAudio(msg: any): Promise<string | null> {
+    console.log(`[${this.botId}] 📥 Audio recibido, descargando...`);
+    const media = await msg.downloadMedia();
+    if (!media) return null;
+
+    const audioBuffer = Buffer.from(media.data, "base64");
+
+    const formData = new FormData();
+    formData.append("file", audioBuffer, {
+      filename: `audio-${Date.now()}.ogg`,
+      contentType: media.mimetype,
+    });
+
+    console.log(`[${this.botId}] 🚀 Enviando al motor de transcripción...`);
+
+    const sttResponse = await axios.post(
+      "https://u2.rsgve.com/gym-api/api/stt/transcribe",
+      formData,
+      {
+        headers: {
+          ...formData.getHeaders(),
+          "x-stt-key": process.env.STT_INTERNAL_KEY || "",
+        },
+      },
+    );
+
+    if (sttResponse.data.success) {
+      const text = sttResponse.data.text;
+      console.log(`[${this.botId}] ✅ Transcripción recibida:`, text);
+      return text;
+    }
+
+    console.warn(
+      `[${this.botId}] ⚠️ STT respondió sin éxito:`,
+      sttResponse.data,
+    );
+    return null;
   }
 }
