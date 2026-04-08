@@ -213,6 +213,9 @@ export class BotInstance extends EventEmitter {
 
       const nowInSeconds = Math.floor(Date.now() / 1000);
       const config = this.configSvc.getConfig();
+      if (config.isAutoResponseEnabled === false) {
+        return;
+      }
 
       const sys = (key: string): string =>
         config.respuestas_sistema[key]?.texto ?? "";
@@ -272,13 +275,54 @@ export class BotInstance extends EventEmitter {
       // ── Media ───────────────────────────────────────────────────────────────
       const isMedia =
         msg.hasMedia ||
-        ["image", "video", "audio", "ptt", "sticker", "document"].includes(
+        ["image", "video", "audio", "ptt", "sticker", "document", "gif"].includes(
           msg.type,
         );
 
-      // Audio / voice note → transcribir y pasar a DeepSeek
+      const mediaTypeLabels: Record<string, string> = {
+        image: "imagen",
+        video: "video",
+        sticker: "sticker",
+        document: "documento",
+        gif: "GIF",
+      };
+
+      // Audio / voice note → enviar "escuchando" y luego transcribir
       if (isMedia && (msg.type === "audio" || msg.type === "ptt")) {
         try {
+          // Enviar mensaje dinámico de "escuchando" generado por IA
+          const listeningPrompt = [
+            {
+              role: "system" as const,
+              content:
+                `Eres un asistente de WhatsApp amigable. El usuario acaba de enviar un audio. ` +
+                `Genera un mensaje corto, natural y variado diciéndole que estás escuchando su audio ` +
+                `y que le darás respuesta en un momento. ` +
+                `Usa frases variadas como: "Dame un momento mientras escucho tu audio 🎧", ` +
+                `"Escuchando tu mensaje de voz 🔊", "Déjame escuchar tu audio, ya te respondo ⏳", ` +
+                `"Un momento, estoy escuchando lo que me enviaste 🎵" y similares. ` +
+                `No repitas siempre la misma frase. Sé creativo. Solo responde el mensaje, nada más.`,
+            },
+            { role: "user" as const, content: "El usuario envió un audio." },
+          ];
+
+          const { llamarDeepseek } = await import("../config/deepseek.js");
+          const listeningRes = await llamarDeepseek(listeningPrompt);
+          const listeningMsg =
+            listeningRes.choices[0].message.content?.trim() ||
+            "Dame un momento, estoy escuchando tu audio 🎧";
+
+          // Guardar el listeningMsg en el historial ANTES de enviarlo,
+          // para que el evento message_create (fromMe) lo reconozca
+          // vía isHistoryMatch y NO marque la sesión como "human".
+          const audioSession = await this.sessionMgr.getSession(from);
+          if (audioSession) {
+            this.sessionMgr.appendToHistory(audioSession, "assistant", listeningMsg);
+            await this.sessionMgr.saveSession(from, audioSession);
+          }
+
+          await msg.reply(listeningMsg);
+
           const transcription = await this._transcribeAudio(msg);
           if (!transcription) {
             await msg.reply(sys("mediaRecibida"));
@@ -295,11 +339,50 @@ export class BotInstance extends EventEmitter {
           await msg.reply(sys("mediaRecibida"));
           return;
         }
-      } else if (isMedia && msg.type !== "sticker") {
-        await msg.reply(sys("mediaRecibida"));
-        return;
       } else if (isMedia) {
-        // sticker – ignorar
+        // Imágenes, videos, stickers, documentos, gifs → responder con IA
+        const mediaLabel = mediaTypeLabels[msg.type] || msg.type;
+        try {
+          const mediaPrompt = [
+            {
+              role: "system" as const,
+              content:
+                `Eres un asistente de WhatsApp amigable del negocio ${this.configSvc.getNombre()}. ` +
+                `El usuario acaba de enviar un archivo de tipo "${mediaLabel}". ` +
+                `Todavía no puedes interpretar este tipo de archivos. ` +
+                `Responde de forma amable, corta y natural explicando que aún no puedes ` +
+                `ver ni interpretar ${mediaLabel === "imagen" ? "imágenes" : mediaLabel === "video" ? "videos" : mediaLabel === "sticker" ? "stickers" : mediaLabel === "documento" ? "documentos" : mediaLabel === "GIF" ? "GIFs" : mediaLabel + "s"}. ` +
+                `Sugiérele al usuario que te escriba en texto lo que necesita. ` +
+                `Solo responde el mensaje, nada más.`,
+            },
+            {
+              role: "user" as const,
+              content: `El usuario envió un/a ${mediaLabel}.`,
+            },
+          ];
+
+          const { llamarDeepseek } = await import("../config/deepseek.js");
+          const mediaRes = await llamarDeepseek(mediaPrompt);
+          const mediaMsg =
+            mediaRes.choices[0].message.content?.trim() ||
+            `Disculpa, aún no puedo interpretar ${mediaLabel}s. ¿Podrías escribirme en texto lo que necesitas? 😊`;
+
+          // Guardar la respuesta de media en el historial ANTES de enviarla,
+          // para que message_create (fromMe) la reconozca vía isHistoryMatch.
+          const mediaSession = await this.sessionMgr.getSession(from);
+          if (mediaSession) {
+            this.sessionMgr.appendToHistory(mediaSession, "assistant", mediaMsg);
+            await this.sessionMgr.saveSession(from, mediaSession);
+          }
+
+          await msg.reply(mediaMsg);
+        } catch (mediaErr: any) {
+          console.error(
+            `[${this.botId}] ❌ Error generando respuesta para media ${mediaLabel}:`,
+            mediaErr.message,
+          );
+          await msg.reply(sys("mediaRecibida"));
+        }
         return;
       }
 

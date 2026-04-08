@@ -48,6 +48,8 @@ export interface BotConfig {
   respuestas_sistema: Record<string, SystemRespuesta>;
   //horario: HorarioConfig;
   activo: boolean;
+  /** Si false, el bot no responde automáticamente a mensajes entrantes. */
+  isAutoResponseEnabled: boolean;
   /** Prompt base para la IA. Si no existe, se usa uno por defecto. */
   prompt_ia?: string | undefined;
 }
