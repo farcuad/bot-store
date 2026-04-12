@@ -214,7 +214,7 @@ class BotManager {
       const instance = this.instances.get(record.botId);
       const liveState = instance?.getState();
       const state: BotPublicState = {
-        botId: record.botId,
+        botId: doc.id,
         nombre: record.nombre,
         ownerUid: record.ownerUid,
         status: liveState?.status ?? "idle",

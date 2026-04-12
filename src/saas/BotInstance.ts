@@ -1,10 +1,10 @@
 import pkg from "whatsapp-web.js";
 const { Client, LocalAuth } = pkg;
 import path from "node:path";
+import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { EventEmitter } from "node:events";
-import axios from "axios";
-import FormData from "form-data";
+import OpenAI from "openai";
 import { db } from "../config/firebase.js";
 import { generarRespuestaBot } from "../controllers/AiController.js";
 import { createSessionManager } from "../services/sessionManager.js";
@@ -13,6 +13,12 @@ import { createStatsManager } from "../services/statsManager.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BOTS_ROOT = path.resolve(__dirname, "../../bots");
+const TEMP_AUDIO_DIR = path.resolve(process.cwd(), "temp_audio");
+
+// Ensure temp_audio directory exists
+if (!fs.existsSync(TEMP_AUDIO_DIR)) {
+  fs.mkdirSync(TEMP_AUDIO_DIR, { recursive: true });
+}
 
 export type BotStatus =
   | "idle"
@@ -40,6 +46,7 @@ export class BotInstance extends EventEmitter {
   private sessionMgr: ReturnType<typeof createSessionManager>;
   private configSvc: ReturnType<typeof createConfigService>;
   private statsMgr: ReturnType<typeof createStatsManager>;
+  private recentlySentMessages = new Set<string>();
 
   constructor(botId: string) {
     super();
@@ -107,9 +114,6 @@ export class BotInstance extends EventEmitter {
     const dataPath = path.join(BOTS_ROOT, this.botId);
 
     // ── Clean up stale Chrome lock files left by an abrupt process kill ────────
-    // LocalAuth with a custom `dataPath` stores its Chrome profile under:
-    //   <dataPath>/session-<clientId>/
-    // The SingletonLock lives at the root of that directory.
     const { promises: fsp } = await import("node:fs");
     const sessionDir = path.join(dataPath, `session-${this.botId}`);
     const lockFile = path.join(sessionDir, "SingletonLock");
@@ -117,12 +121,12 @@ export class BotInstance extends EventEmitter {
       await fsp.unlink(lockFile);
       console.log(`[${this.botId}] 🔓 Removed stale ChromeSingletonLock.`);
     } catch {
-      // No lock file — normal on first run or clean shutdown
+      // No lock file
     }
     // ──────────────────────────────────────────────────────────────────────────
 
     this.client = new Client({
-      qrMaxRetries: 2, // <--- Stops emitting QR after 2 retries
+      qrMaxRetries: 2,
       authStrategy: new LocalAuth({
         clientId: this.botId,
         dataPath,
@@ -142,7 +146,6 @@ export class BotInstance extends EventEmitter {
 
     this.bootTime = Date.now();
 
-    // Load config
     await this.configSvc.loadConfig();
     this.configSvc.startConfigRefresh();
     await this.statsMgr.loadStats();
@@ -183,7 +186,7 @@ export class BotInstance extends EventEmitter {
     try {
       await this.client.destroy();
     } catch (e) {
-      // ignore errors on destroy
+      // ignore
     }
     this.client = null;
     this.configSvc.stopConfigRefresh();
@@ -213,16 +216,21 @@ export class BotInstance extends EventEmitter {
 
       const nowInSeconds = Math.floor(Date.now() / 1000);
       const config = this.configSvc.getConfig();
+      if (config.isAutoResponseEnabled === false) {
+        return;
+      }
 
       const sys = (key: string): string =>
         config.respuestas_sistema[key]?.texto ?? "";
       const render = (text: string, name: string): string =>
         text.replace(/\{name\}/g, name);
 
-      // ── Intervención humana (fromMe) ────────────────────────────────────────
       if (msg.fromMe) {
-        const chat = await msg.getChat();
-        const remoteId = chat.id._serialized;
+        const remoteId = msg.to;
+        console.log(
+          `[${this.botId}] Outgoing message caught. To: ${remoteId}. Body length: ${msg.body?.length || 0}. Media: ${msg.hasMedia}`,
+        );
+
         const remoteSession = await this.sessionMgr.getSession(remoteId);
         const sessionHistory = remoteSession?.history;
 
@@ -254,7 +262,21 @@ export class BotInstance extends EventEmitter {
           return msg.body.startsWith(texto.trim().slice(0, 25));
         });
 
-        if (isHistoryMatch || isTextMatch) return;
+        const isRecentMatch = this.recentlySentMessages.has(msg.body.trim());
+
+        if (isHistoryMatch || isTextMatch || isRecentMatch) {
+          if (isHistoryMatch)
+            console.log(`[${this.botId}] Output ignored (History match).`);
+          if (isTextMatch)
+            console.log(`[${this.botId}] Output ignored (Text config match).`);
+          if (isRecentMatch) {
+            console.log(
+              `[${this.botId}] Output ignored (Recent bot reply match).`,
+            );
+            this.recentlySentMessages.delete(msg.body.trim());
+          }
+          return;
+        }
 
         await this.sessionMgr.saveSession(remoteId, {
           last_interaction: nowInSeconds,
@@ -268,45 +290,167 @@ export class BotInstance extends EventEmitter {
       }
 
       const from = msg.from;
+      const contact = await msg.getContact();
+      const nombre = contact.pushname || "amigo";
+      let session = await this.sessionMgr.getSession(from);
+      let instruccionExtra = "";
 
-      // ── Media ───────────────────────────────────────────────────────────────
+      if (!session) {
+        await this.sessionMgr.saveSession(from, {
+          contactName: nombre,
+          last_interaction: nowInSeconds,
+          status: "bot",
+          history: [],
+        });
+        this.statsMgr.incrementarUsuariosUnicos();
+        session = (await this.sessionMgr.getSession(from))!;
+
+        const mensajeBienvenida = render(sys("saludoInicial"), nombre);
+        if (mensajeBienvenida) {
+          instruccionExtra = `El usuario te está escribiendo por primera vez. Tu tarea es darle una cálida bienvenida basándote en esta plantilla: "${mensajeBienvenida}", y además responder a lo que te acaba de escribir.`;
+        }
+      } else if (
+        nowInSeconds - session.last_interaction >
+        this.sessionMgr.TWENTY_FOUR_HOURS
+      ) {
+        session.history = [];
+        session.last_interaction = nowInSeconds;
+        session.status = "bot";
+        await this.sessionMgr.saveSession(from, session);
+
+        const mensajeRecontacto = render(sys("saludoRecontacto"), nombre);
+        if (mensajeRecontacto) {
+          instruccionExtra = `El usuario volvió a escribir después de mucho tiempo. Tu tarea es saludarlo basándote en esta plantilla: "${mensajeRecontacto}", y además responder a lo que te acaba de escribir.`;
+        }
+      } else {
+        session.last_interaction = nowInSeconds;
+        session.contactName = nombre;
+        await this.sessionMgr.saveSession(from, session);
+      }
+
       const isMedia =
         msg.hasMedia ||
-        ["image", "video", "audio", "ptt", "sticker", "document"].includes(
-          msg.type,
-        );
+        [
+          "image",
+          "video",
+          "audio",
+          "ptt",
+          "sticker",
+          "document",
+          "gif",
+        ].includes(msg.type);
 
-      // Audio / voice note → transcribir y pasar a DeepSeek
+      const mediaTypeLabels: Record<string, string> = {
+        image: "imagen",
+        video: "video",
+        sticker: "sticker",
+        document: "documento",
+        gif: "GIF",
+      };
+
+      // Audio / voice note → verificar config y transcribir
       if (isMedia && (msg.type === "audio" || msg.type === "ptt")) {
         try {
-          const transcription = await this._transcribeAudio(msg);
-          if (!transcription) {
-            await msg.reply(sys("mediaRecibida"));
+          // ── Verificar configuración de audio en Firestore ──────────────────
+          const botDoc = await db.collection("bots").doc(this.botId).get();
+          const botData = botDoc.data() ?? {};
+          const audioEnabled = botData.audioAnalysisEnabled === true;
+          const openaiApiKey = (botData.openaiApiKey as string) || "";
+
+          if (!audioEnabled) {
+            const disabledMsg =
+              "Lo siento pero no puedo procesar audios en este momento. Escribeme 👏🏽👏🏽👏🏽";
+            this.recentlySentMessages.add(disabledMsg);
+            await msg.reply(disabledMsg);
             return;
           }
-          // Usar la transcripción como si fuera texto del usuario
+
+          if (!openaiApiKey) {
+            const noKeyMsg =
+              "Error de configuración: No se pudo procesar el audio (API Key no configurada).";
+            this.recentlySentMessages.add(noKeyMsg);
+            await msg.reply(noKeyMsg);
+            return;
+          }
+
+          // Enviar mensaje de cortesía
+          const listeningPrompt = [
+            {
+              role: "system" as const,
+              content: `Eres un asistente de WhatsApp amigable. El usuario acaba de enviar un audio. Genera un mensaje corto y variado diciendo que estás escuchando y ya le respondes.`,
+            },
+            { role: "user" as const, content: "El usuario envió un audio." },
+          ];
+
+          const { llamarDeepseek } = await import("../config/deepseek.js");
+          const listeningRes = await llamarDeepseek(listeningPrompt);
+          let listeningMsg = listeningRes.choices[0].message.content?.trim();
+          if (!listeningMsg)
+            listeningMsg = "Dame un momento mientras escucho tu audio 🎧";
+
+          if (session) {
+            this.sessionMgr.appendToHistory(session, "assistant", listeningMsg);
+            await this.sessionMgr.saveSession(from, session);
+          }
+
+          this.recentlySentMessages.add(listeningMsg);
+          await msg.reply(listeningMsg);
+
+          const transcription = await this._transcribeAudio(msg, openaiApiKey);
+          if (!transcription) {
+            const fallback = sys("mediaRecibida");
+            if (fallback && fallback.trim()) {
+              this.recentlySentMessages.add(fallback.trim());
+              await msg.reply(fallback);
+            }
+            return;
+          }
           msg.body = transcription;
-          // Continuar con el flujo normal de sesión + IA más abajo
         } catch (err: any) {
-          console.error(
-            `[${this.botId}] ❌ Error transcribiendo audio:`,
-            err.message,
-          );
-          await msg.reply(sys("mediaRecibida"));
+          console.error(`[${this.botId}] ❌ Error procesando audio:`, err);
+          const isApiKeyError =
+            err?.status === 401 || err?.code === "invalid_api_key";
+          if (isApiKeyError) {
+            const apiErrorMsg = "Error de configuración: API Key inválida.";
+            this.recentlySentMessages.add(apiErrorMsg);
+            await msg.reply(apiErrorMsg);
+          } else {
+            const errorFallback = sys("mediaRecibida");
+            if (errorFallback && errorFallback.trim()) {
+              this.recentlySentMessages.add(errorFallback.trim());
+              await msg.reply(errorFallback);
+            }
+          }
           return;
         }
-      } else if (isMedia && msg.type !== "sticker") {
-        await msg.reply(sys("mediaRecibida"));
-        return;
       } else if (isMedia) {
-        // sticker – ignorar
+        const mediaLabel = mediaTypeLabels[msg.type] || msg.type;
+        try {
+          const mediaPrompt = [
+            {
+              role: "system" as const,
+              content: `Eres un asistente de WhatsApp. El usuario envió "${mediaLabel}". Explica amablemente que no puedes verlo todavía y pide texto.`,
+            },
+          ];
+          const { llamarDeepseek } = await import("../config/deepseek.js");
+          const mediaRes = await llamarDeepseek(mediaPrompt);
+          const mediaMsg =
+            mediaRes.choices[0].message.content?.trim() ||
+            `No puedo interpretar ${mediaLabel}s aún.`;
+
+          if (session) {
+            this.sessionMgr.appendToHistory(session, "assistant", mediaMsg);
+            await this.sessionMgr.saveSession(from, session);
+          }
+          await msg.reply(mediaMsg);
+        } catch (err) {
+          const fallback = sys("mediaRecibida");
+          if (fallback) await msg.reply(fallback);
+        }
         return;
       }
 
-      // ── Auto-reactivación ───────────────────────────────────────────────────
-      const session = await this.sessionMgr.getSession(from);
       const currentStatus = await this.sessionMgr.getStatusFromFirestore(from);
-
       if (currentStatus === "human") {
         const humanSince = session?.human_since;
         if (humanSince !== undefined) {
@@ -318,54 +462,28 @@ export class BotInstance extends EventEmitter {
               contactName: session?.contactName,
               history: session?.history ?? [],
             });
-            await msg.reply(sys("botReactivado"));
+            const reactivacionMsg = sys("botReactivado");
+            if (reactivacionMsg) {
+              this.recentlySentMessages.add(reactivacionMsg.trim());
+              await msg.reply(reactivacionMsg);
+            }
+          } else {
             return;
           }
+        } else {
+          return;
         }
-        return;
       }
 
-      // ── Gestión de sesión ────────────────────────────────────────────────────
-      const contact = await msg.getContact();
-      const nombre = contact.pushname || "amigo";
-      let instruccionExtra = "";
+      this.sessionMgr.appendToHistory(
+        session!,
+        "user",
+        msg.body || (msg.hasMedia ? `[Envió ${msg.type}]` : ""),
+      );
 
-      if (!session) {
-        await this.sessionMgr.saveSession(from, {
-          contactName: nombre,
-          last_interaction: nowInSeconds,
-          status: "bot",
-          history: [],
-        });
-        this.statsMgr.incrementarUsuariosUnicos();
-
-        const mensajeBienvenida = render(sys("saludoInicial"), nombre);
-        instruccionExtra = `El usuario te está escribiendo por primera vez. Tu tarea es darle una cálida bienvenida basándote en esta plantilla: "${mensajeBienvenida}", y además responder a lo que te acaba de escribir.`;
-      } else if (
-        nowInSeconds - session.last_interaction >
-        this.sessionMgr.TWENTY_FOUR_HOURS
-      ) {
-        await this.sessionMgr.saveSession(from, {
-          contactName: nombre,
-          last_interaction: nowInSeconds,
-          status: "bot",
-          history: [],
-        });
-        const mensajeRecontacto = render(sys("saludoRecontacto"), nombre);
-        instruccionExtra = `El usuario volvió a escribir después de mucho tiempo. Tu tarea es saludarlo basándote en esta plantilla: "${mensajeRecontacto}", y además responder a lo que te acaba de escribir.`;
-      } else {
-        session.last_interaction = nowInSeconds;
-        session.contactName = nombre;
-        await this.sessionMgr.saveSession(from, session);
-      }
-
-      const activeSession = (await this.sessionMgr.getSession(from))!;
-      this.sessionMgr.appendToHistory(activeSession, "user", msg.body);
-
-      // ── Generación IA ────────────────────────────────────────────────────────
       try {
         let respuesta = await generarRespuestaBot(
-          activeSession.history,
+          session!.history,
           this.configSvc.getNombre(),
           config.respuestas_info,
           instruccionExtra,
@@ -383,11 +501,11 @@ export class BotInstance extends EventEmitter {
           respuesta = respuesta
             ? `${respuesta}\n\n${avisoCliente}`
             : avisoCliente;
-
-          activeSession.status = "human";
-          activeSession.human_since = nowInSeconds;
-          await this.sessionMgr.saveSession(from, activeSession);
-
+          if (session) {
+            session.status = "human";
+            session.human_since = nowInSeconds;
+            await this.sessionMgr.saveSession(from, session);
+          }
           const phoneNumber = msg.from.replace(/\D/g, "").slice(0, 12);
           await this.client!.sendMessage(
             msg.to,
@@ -396,12 +514,14 @@ export class BotInstance extends EventEmitter {
         }
 
         this.statsMgr.incrementarMensajesRespondidos();
+        if (session) {
+          this.sessionMgr.appendToHistory(session, "assistant", respuesta);
+          await this.sessionMgr.saveSession(from, session);
+        }
 
-        // Save history first so that the `message_create` event (fromMe=true)
-        // can match `isHistoryMatch`.
-        this.sessionMgr.appendToHistory(activeSession, "assistant", respuesta);
-        await this.sessionMgr.saveSession(from, activeSession);
+        if (!respuesta || !respuesta.trim()) return;
 
+        this.recentlySentMessages.add(respuesta.trim());
         await msg.reply(respuesta);
       } catch (error) {
         console.error(`[${this.botId}] ❌ Error generating response:`, error);
@@ -413,44 +533,40 @@ export class BotInstance extends EventEmitter {
     }
   }
 
-  // ─── Audio transcription helper ──────────────────────────────────────────────
+  // ─── Audio transcription helper (OpenAI Whisper) ─────────────────────────────
 
-  private async _transcribeAudio(msg: any): Promise<string | null> {
-    console.log(`[${this.botId}] 📥 Audio recibido, descargando...`);
-    const media = await msg.downloadMedia();
-    if (!media) return null;
+  private async _transcribeAudio(msg: any, openaiApiKey: string): Promise<string | null> {
+    const tempFilePath = path.join(TEMP_AUDIO_DIR, `temp_${this.botId}_${Date.now()}.ogg`);
+    try {
+      console.log(`[${this.botId}] 📥 Audio recibido, descargando...`);
+      const media = await msg.downloadMedia();
+      if (!media) return null;
 
-    const audioBuffer = Buffer.from(media.data, "base64");
+      fs.writeFileSync(tempFilePath, media.data, { encoding: 'base64' });
 
-    const formData = new FormData();
-    formData.append("file", audioBuffer, {
-      filename: `audio-${Date.now()}.ogg`,
-      contentType: media.mimetype,
-    });
+      console.log(`[${this.botId}] ☁️ Enviando a OpenAI Whisper...`);
 
-    console.log(`[${this.botId}] 🚀 Enviando al motor de transcripción...`);
+      const openai = new OpenAI({ apiKey: openaiApiKey });
+      const transcription = await openai.audio.transcriptions.create({
+        file: fs.createReadStream(tempFilePath),
+        model: "whisper-1",
+        language: "es",
+      });
 
-    const sttResponse = await axios.post(
-      "https://u2.rsgve.com/gym-api/api/stt/transcribe",
-      formData,
-      {
-        headers: {
-          ...formData.getHeaders(),
-          "x-stt-key": process.env.STT_INTERNAL_KEY || "",
-        },
-      },
-    );
-
-    if (sttResponse.data.success) {
-      const text = sttResponse.data.text;
-      console.log(`[${this.botId}] ✅ Transcripción recibida:`, text);
-      return text;
+      console.log(`[${this.botId}] 📝 Texto transcrito:`, transcription.text);
+      return transcription.text || null;
+    } catch (error: any) {
+      console.error(`[${this.botId}] ❌ Error con OpenAI Whisper:`, error.message);
+      return null;
+    } finally {
+      if (fs.existsSync(tempFilePath)) {
+        try {
+          fs.unlinkSync(tempFilePath);
+          console.log(`[${this.botId}] 🗑️ Archivo temporal borrado: ${path.basename(tempFilePath)}`);
+        } catch (e) {
+          // ignore cleanup errors
+        }
+      }
     }
-
-    console.warn(
-      `[${this.botId}] ⚠️ STT respondió sin éxito:`,
-      sttResponse.data,
-    );
-    return null;
   }
 }

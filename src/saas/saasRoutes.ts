@@ -253,6 +253,66 @@ router.get("/bots/:id/stats", async (req: Request, res: Response) => {
   }
 });
 
+// ── Audio Settings ────────────────────────────────────────────────────────────
+
+/** GET /api/saas/bots/:id/audio-settings */
+router.get("/bots/:id/audio-settings", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, "Bot not found");
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) {
+      return fail(res, 403, "No autorizado");
+    }
+
+    const doc = await db.collection("bots").doc(id).get();
+    const data = doc.data() ?? {};
+    const rawKey = (data.openaiApiKey as string) || "";
+    // Mask the key for the frontend: show first 7 chars + ****
+    const maskedKey = rawKey
+      ? rawKey.slice(0, 7) + "••••" + rawKey.slice(-4)
+      : "";
+
+    return ok(res, {
+      audioAnalysisEnabled: data.audioAnalysisEnabled === true,
+      openaiApiKey: maskedKey,
+      hasKey: !!rawKey,
+    });
+  } catch (e: any) {
+    return fail(res, 500, e.message);
+  }
+});
+
+/** PUT /api/saas/bots/:id/audio-settings */
+router.put("/bots/:id/audio-settings", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const { audioAnalysisEnabled, openaiApiKey } = req.body as {
+    audioAnalysisEnabled?: boolean;
+    openaiApiKey?: string;
+  };
+
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, "Bot not found");
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) {
+      return fail(res, 403, "No autorizado");
+    }
+
+    const updates: Record<string, any> = {};
+    if (audioAnalysisEnabled !== undefined) {
+      updates.audioAnalysisEnabled = audioAnalysisEnabled;
+    }
+    if (openaiApiKey !== undefined) {
+      updates.openaiApiKey = openaiApiKey;
+    }
+
+    await db.collection("bots").doc(id).set(updates, { merge: true });
+    return ok(res, { updated: id });
+  } catch (e: any) {
+    return fail(res, 500, e.message);
+  }
+});
+
 // ── Export / Import ───────────────────────────────────────────────────────────
 
 /** GET /api/saas/bots/:id/export
