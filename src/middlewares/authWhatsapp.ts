@@ -27,7 +27,15 @@ export const validateApiKey = async (
   }
 
   // Verificación de llave específica por bot
-  const targetBotId = req.body?.botId ?? "bot_default";
+  const targetBotId = req.body?.botId;
+  
+  if (!targetBotId) {
+    res.status(400).json({
+      error: "Bad Request",
+      message: "botId es requerido en el cuerpo de la petición",
+    });
+    return;
+  }
   
   try {
     const botKey = await botManager.getBotKey(targetBotId);

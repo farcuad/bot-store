@@ -11,6 +11,7 @@ export interface SessionEntry {
   last_interaction: number;
   status: 'bot' | 'human';
   human_since?: number | undefined;   // acepta undefined explícito (exactOptionalPropertyTypes)
+  contactName?: string | undefined;
   history: ConversationMessage[];
 }
 
@@ -44,9 +45,10 @@ export function createSessionManager(botId: string) {
     const status = (data.status as 'bot' | 'human') ?? 'bot';
     const last_interaction = (data.last_interaction as number) ?? 0;
     const human_since = data.human_since as number | undefined;
+    const contactName = data.contactName as string | undefined;
 
     const history = memoryCache[phone]?.history ?? [];
-    const entry: SessionEntry = { last_interaction, status, human_since, history };
+    const entry: SessionEntry = { last_interaction, status, human_since, contactName, history };
     memoryCache[phone] = entry;
     return entry;
   }
@@ -54,13 +56,14 @@ export function createSessionManager(botId: string) {
   async function saveSession(phone: string, entry: SessionEntry): Promise<void> {
     memoryCache[phone] = entry;
 
-    const { human_since, ...rest } = entry;
+    const { human_since, contactName, ...rest } = entry;
     const payload: Record<string, unknown> = {
       ...rest,
       phone,
       updated_at: Date.now(),
     };
     if (human_since !== undefined) payload.human_since = human_since;
+    if (contactName !== undefined) payload.contactName = contactName;
     delete payload.history;
 
     await sessionRef(phone).set(payload, { merge: true });
@@ -85,16 +88,19 @@ export function createSessionManager(botId: string) {
   }
 
   /** List all sessions for this bot (Firestore scan) */
-  async function listSessions(): Promise<SessionEntry[]> {
+  async function listSessions(): Promise<any[]> {
     const snap = await db.collection('bots').doc(botId).collection('sessions').get();
     return snap.docs.map(doc => {
       const d = doc.data();
       return {
-        last_interaction: d.last_interaction ?? 0,
-        status: d.status ?? 'bot',
+        id: doc.id,
+        phone: doc.id.split('@')[0],
+        contactName: d.contactName,
+        last_interaction: d.last_interaction ? d.last_interaction * 1000 : 0,
+        estado: d.status ?? 'bot',
         human_since: d.human_since,
         history: memoryCache[doc.id]?.history ?? [],
-      } as SessionEntry;
+      };
     });
   }
 

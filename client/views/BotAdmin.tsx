@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Activity, MessageSquare, Database, AlertCircle, RefreshCw, Edit2, Trash2 } from 'lucide-react';
+import { Activity, MessageSquare, Database, AlertCircle, RefreshCw, Edit2, Trash2, Download, Upload, RotateCcw } from 'lucide-react';
 import axios from 'axios';
 
 interface BotStats {
@@ -31,6 +31,7 @@ interface MensajeNoEntendido {
 interface Session {
   id: string;
   phone: string;
+  contactName?: string;
   last_interaction: Date;
   estado: string;
 }
@@ -66,6 +67,12 @@ export default function BotAdmin() {
 
   const [editingRes, setEditingRes] = useState<RespuestaInfo | null>(null);
   const [resText, setResText]       = useState('');
+
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editSessionName, setEditSessionName] = useState('');
+
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
 
   // Bot metadata state
   const [botName, setBotName]           = useState<string>('');
@@ -199,63 +206,165 @@ export default function BotAdmin() {
     } catch (e: any) { alert('Error: ' + e.message); }
   };
 
+  const updateSessionStatus = async (sessionId: string, newStatus: string) => {
+    try {
+      const headers = await getHeaders();
+      await axios.patch<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/sessions/${encodeURIComponent(sessionId)}`, { estado: newStatus }, { headers });
+      setSessions(sessions.map(s => s.id === sessionId ? { ...s, estado: newStatus } : s));
+    } catch (e: any) { alert('Error: ' + e.message); }
+  };
+
+  const saveSessionName = async (sessionId: string) => {
+    const trimmed = editSessionName.trim();
+    try {
+      const headers = await getHeaders();
+      await axios.patch<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/sessions/${encodeURIComponent(sessionId)}`, { contactName: trimmed }, { headers });
+      setSessions(sessions.map(s => s.id === sessionId ? { ...s, contactName: trimmed || undefined } : s));
+      setEditingSessionId(null);
+    } catch (e: any) { alert('Error: ' + e.message); }
+  };
+
+  const handleClearSession = async () => {
+    if (!confirm('¿Limpiar la sesión WhatsApp del bot?\n\nSe detendrá el bot y se borrará la sesión de Chrome. Tendrás que escanear el QR nuevamente.\n\nLa configuración, base de datos y sesiones de chat se conservan.')) return;
+    try {
+      const token = await user?.getIdToken();
+      await axios.post<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/clear-session`, {}, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      alert('✅ Sesión limpiada. Reinicia el bot para ver el QR nuevo.');
+    } catch (e: any) { alert('Error: ' + (e.response?.data?.error || e.message)); }
+  };
+
+  const handleExport = async () => {
+    try {
+      const token = await user?.getIdToken();
+      const res = await axios.get(`${API_URL}/api/saas/bots/${botNumber}/export`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${botNumber}-export.json`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (e: any) { alert('Error exportando: ' + e.message); }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!confirm(`¿Importar configuración desde "${file.name}"?\n\nSe fusionarán las entradas de la base de conocimientos con las actuales.`)) {
+      e.target.value = '';
+      return;
+    }
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const bundle = JSON.parse(text);
+      const token = await user?.getIdToken();
+      const res = await axios.post<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/import`, bundle, {
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+      });
+      if (res.data.ok) {
+        alert(`✅ Importación exitosa. ${res.data.data.kbEntries} entrada(s) cargadas.`);
+        loadData();
+      }
+    } catch (e: any) { alert('Error importando: ' + e.message); }
+    finally {
+      setImporting(false);
+      e.target.value = '';
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-0">
 
-      {/* ── Page Header ──────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <div className="flex items-center gap-3">
-            {isEditingName ? (
-              <input
-                autoFocus
-                type="text"
-                value={editNameValue}
-                onChange={(e) => setEditNameValue(e.target.value)}
-                onBlur={saveBotName}
-                onKeyDown={(e) => e.key === 'Enter' ? saveBotName() : e.key === 'Escape' && setIsEditingName(false)}
-                className="text-2xl font-bold bg-transparent border-b border-[#25d366] text-white focus:outline-none px-1 py-0 min-w-[250px]"
-              />
-            ) : (
-              <>
-                <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-                  {botName || botNumber}
-                </h1>
-                <button 
-                  onClick={() => setIsEditingName(true)} 
-                  className="text-gray-500 hover:text-white transition-colors p-1"
-                  title="Renombrar bot"
-                >
-                  <Edit2 className="h-4 w-4" />
-                </button>
-              </>
-            )}
+      {/* ── Page Header ──────────────────────────────────────── */}
+      <div className="flex flex-col gap-3 mb-6">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-3 flex-wrap">
+              {isEditingName ? (
+                <input
+                  autoFocus
+                  type="text"
+                  value={editNameValue}
+                  onChange={(e) => setEditNameValue(e.target.value)}
+                  onBlur={saveBotName}
+                  onKeyDown={(e) => e.key === 'Enter' ? saveBotName() : e.key === 'Escape' && setIsEditingName(false)}
+                  className="text-xl sm:text-2xl font-bold bg-transparent border-b border-[#25d366] text-white focus:outline-none px-1 py-0 min-w-[200px]"
+                />
+              ) : (
+                <>
+                  <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
+                    {botName || botNumber}
+                  </h1>
+                  <button
+                    onClick={() => setIsEditingName(true)}
+                    className="text-gray-500 hover:text-white transition-colors p-1"
+                    title="Renombrar bot"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </button>
+                </>
+              )}
+            </div>
+            <p className="text-gray-500 text-xs sm:text-sm mt-0.5 font-mono">{botNumber} • Panel de administración</p>
           </div>
-          <p className="text-gray-500 text-sm mt-0.5 font-mono">{botNumber} • Panel de administración</p>
         </div>
-        <button
-          onClick={() => { loadBotInfo(); loadData(); }}
-          className="flex items-center gap-2 text-sm text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 px-4 py-2 rounded-xl transition-all"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Actualizar
-        </button>
+        {/* Action buttons: scrollable row on mobile */}
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
+          <button
+            onClick={() => { loadBotInfo(); loadData(); }}
+            className="flex-shrink-0 flex items-center gap-2 text-sm text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 px-3 py-2 rounded-xl transition-all"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Actualizar</span>
+          </button>
+          <button
+            onClick={handleClearSession}
+            className="flex-shrink-0 flex items-center gap-2 text-sm text-orange-400 hover:text-white bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/20 px-3 py-2 rounded-xl transition-all"
+            title="Elimina la sesión de Chrome para re-escanear el QR sin borrar el bot"
+          >
+            <RotateCcw className="h-4 w-4" />
+            <span className="whitespace-nowrap">Limpiar Sesión</span>
+          </button>
+          <button
+            onClick={handleExport}
+            className="flex-shrink-0 flex items-center gap-2 text-sm text-indigo-400 hover:text-white bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 px-3 py-2 rounded-xl transition-all"
+            title="Descarga la configuración del bot como JSON"
+          >
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Exportar</span>
+          </button>
+          <input ref={importInputRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
+          <button
+            onClick={() => importInputRef.current?.click()}
+            disabled={importing}
+            className="flex-shrink-0 flex items-center gap-2 text-sm text-emerald-400 hover:text-white bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 px-3 py-2 rounded-xl transition-all disabled:opacity-50"
+            title="Importa configuración desde un JSON exportado"
+          >
+            <Upload className="h-4 w-4" />
+            <span className="hidden sm:inline">{importing ? 'Importando…' : 'Importar'}</span>
+          </button>
+        </div>
       </div>
 
-      {/* ── Horizontal Tab Bar ───────────────────────────────────────── */}
-      <div className="flex gap-1 bg-[#12121a] border border-white/5 rounded-2xl p-1.5 mb-6">
+      {/* ── Horizontal Tab Bar ─────────────────────────────── */}
+      <div className="flex gap-1 bg-[#12121a] border border-white/5 rounded-2xl p-1.5 mb-6 overflow-x-auto">
         {TABS.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             onClick={() => setActiveTab(id)}
-            className={`flex items-center gap-2 flex-1 justify-center px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+            className={`flex items-center gap-2 flex-shrink-0 sm:flex-1 justify-center px-3 sm:px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
               activeTab === id
                 ? 'bg-[#25d366]/10 text-[#25d366] shadow-sm'
                 : 'text-gray-400 hover:text-white hover:bg-white/5'
             }`}
           >
             <Icon className="h-4 w-4" />
-            {label}
+            <span className="hidden sm:inline">{label}</span>
           </button>
         ))}
       </div>
@@ -343,7 +452,8 @@ export default function BotAdmin() {
               ? <Empty icon={MessageSquare} text="No hay sesiones activas." />
               : (
                 <div className="bg-[#12121a] border border-white/5 rounded-2xl overflow-hidden">
-                  <table className="w-full text-left">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left min-w-[500px]">
                     <thead>
                       <tr className="bg-black/20 text-gray-400 text-sm">
                         <th className="p-4 font-medium">Teléfono</th>
@@ -354,9 +464,45 @@ export default function BotAdmin() {
                     <tbody className="divide-y divide-white/5">
                       {sessions.map(s => (
                         <tr key={s.id} className="hover:bg-white/5 transition-colors">
-                          <td className="p-4 font-mono text-sm text-gray-300">{s.phone}</td>
+                          <td className="p-4 font-mono text-sm text-gray-300">
+                            {editingSessionId === s.id ? (
+                              <div className="flex flex-col gap-1">
+                                <input
+                                  autoFocus
+                                  value={editSessionName}
+                                  onChange={e => setEditSessionName(e.target.value)}
+                                  onBlur={() => saveSessionName(s.id)}
+                                  onKeyDown={e => e.key === 'Enter' ? saveSessionName(s.id) : e.key === 'Escape' && setEditingSessionId(null)}
+                                  className="text-gray-200 font-sans font-medium bg-black/50 border border-[#25d366]/50 rounded px-2 py-0.5 focus:outline-none w-full max-w-[200px]"
+                                  placeholder="Alias de contacto"
+                                />
+                                <span className="text-xs text-gray-500 font-mono">+{s.phone}</span>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-0.5 group">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-gray-200 font-sans font-medium">{s.contactName || 'Sin Alias'}</span>
+                                  <button onClick={() => { setEditingSessionId(s.id); setEditSessionName(s.contactName || ''); }} className="text-gray-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity" title="Editar alias">
+                                    <Edit2 className="h-3 w-3" />
+                                  </button>
+                                </div>
+                                <span className="text-xs text-gray-500 font-mono">+{s.phone}</span>
+                              </div>
+                            )}
+                          </td>
                           <td className="p-4">
-                            <span className="text-xs px-2 py-1 bg-[#25d366]/10 text-[#25d366] border border-[#25d366]/20 rounded-full">{s.estado || 'Activo'}</span>
+                            <select
+                              value={s.estado || 'bot'}
+                              onChange={(e) => updateSessionStatus(s.id, e.target.value)}
+                              className={`text-xs px-2 py-1 bg-transparent border rounded-full focus:outline-none cursor-pointer hover:brightness-110 transition-all ${
+                                (s.estado || 'bot') === 'bot' 
+                                  ? 'text-[#25d366] border-[#25d366]/20 bg-[#25d366]/10' 
+                                  : 'text-indigo-400 border-indigo-400/20 bg-indigo-400/10'
+                              }`}
+                            >
+                              <option value="bot" className="bg-[#12121a]">bot</option>
+                              <option value="human" className="bg-[#12121a]">human</option>
+                            </select>
                           </td>
                           <td className="p-4 text-sm text-gray-400">
                             {s.last_interaction ? new Date(s.last_interaction).toLocaleString() : 'N/A'}
@@ -365,9 +511,11 @@ export default function BotAdmin() {
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               )
           )}
+
 
           {/* NO ENTENDIDOS */}
           {activeTab === 'no_ent' && (

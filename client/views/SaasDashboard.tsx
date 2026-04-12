@@ -128,7 +128,7 @@ const SaasDashboard: React.FC = () => {
   };
 
   const deleteBot = async (botId: string) => {
-    if (!confirm('¿Seguro que quieres eliminar este bot?')) return;
+    if (!confirm('¿Seguro que quieres eliminar este bot? Esta acción es irreversible y borrará la carpeta del bot.')) return;
     try {
       const token = await user?.getIdToken();
       const res = await fetch(`/api/saas/bots/${botId}`, {
@@ -138,6 +138,26 @@ const SaasDashboard: React.FC = () => {
       const data = await res.json();
       if (!data.ok) alert(data.error);
       fetchBots();
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
+
+  const clearSession = async (botId: string) => {
+    if (!confirm('¿Limpiar la sesión WhatsApp?\n\nSe detendrá el bot y se borrará la sesión de Chrome. Tendrás que escanear el QR para volver a vincularlo.\n\nLa configuración y base de conocimiento se conservan.')) return;
+    try {
+      const token = await user?.getIdToken();
+      const res = await fetch(`/api/saas/bots/${botId}/clear-session`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.ok) {
+        alert('✅ Sesión limpiada. Inicia el bot para ver el nuevo QR.');
+        fetchBots();
+      } else {
+        alert(data.error);
+      }
     } catch (e: any) {
       alert(e.message);
     }
@@ -244,6 +264,9 @@ const SaasDashboard: React.FC = () => {
                 ) : null}
                 <button onClick={() => botAction(bot.botId, 'restart')} title="Reiniciar" className="w-10 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg flex items-center justify-center transition-colors">
                   ↺
+                </button>
+                <button onClick={() => clearSession(bot.botId)} title="Limpiar sesión (re-escanear QR)" className="w-10 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 rounded-lg flex items-center justify-center transition-colors text-base">
+                  🧹
                 </button>
                 <button onClick={() => deleteBot(bot.botId)} title="Eliminar" className="w-10 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg flex items-center justify-center transition-colors">
                   🗑
