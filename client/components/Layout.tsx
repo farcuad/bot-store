@@ -60,7 +60,17 @@ const Layout: React.FC = () => {
               `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${isActive ? 'bg-[#25d366]/10 text-[#25d366] font-medium' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`
             }
           >
-            📊 <span className="text-sm">Mis Bots</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" /></svg>
+            <span className="text-sm">Mis Bots</span>
+          </NavLink>
+
+          <NavLink to="/saas/subscription" onClick={closeNav}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${isActive ? 'bg-[#25d366]/10 text-[#25d366] font-medium' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`
+            }
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" /></svg>
+            <span className="text-sm">Suscripción</span>
           </NavLink>
 
           {isAdmin && (
@@ -71,14 +81,26 @@ const Layout: React.FC = () => {
                   `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${isActive ? 'bg-[#7c5ef5]/10 text-[#7c5ef5] font-medium' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`
                 }
               >
-                ⚙️ <span className="text-sm">Configurar Bots</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M10.34 15.84c-.688 0-1.37-.247-1.896-.74a.494.494 0 00-.698.006c-.464.475-1.096.734-1.761.734H5.25A2.25 2.25 0 013 13.5v-9A2.25 2.25 0 015.25 2.25h13.5A2.25 2.25 0 0121 4.5v9a2.25 2.25 0 01-2.25 2.25h-.735c-.665 0-1.297-.259-1.761-.734a.494.494 0 00-.698-.006c-.526.493-1.208.74-1.896.74.688 0 1.37.247 1.896.74.316.3.81.3 1.127 0a3.743 3.743 0 00.941-1.321 3.738 3.738 0 001.32-1.32c.492-.527.738-1.209.738-1.897v-9C21 3.172 20.156 2.25 19.124 2.25H4.876C3.844 2.25 3 3.172 3 4.204v9C3 14.332 3.844 15 4.876 15H6a3.75 3.75 0 002.438-.89l.86-.807a.75.75 0 011.026 0l.86.807A3.75 3.75 0 0013.62 15h.736a3.737 3.737 0 001.32 1.32 3.743 3.743 0 00.941 1.321c-.316.3-.81.3-1.127 0-.526-.493-1.208-.74-1.896-.74z" /></svg>
+                <span className="text-sm">Configurar Bots</span>
               </NavLink>
+
+              <NavLink to="/saas/admin/subscriptions" onClick={closeNav}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${isActive ? 'bg-[#7c5ef5]/10 text-[#7c5ef5] font-medium' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`
+                }
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span className="text-sm">Facturación</span>
+              </NavLink>
+
               <NavLink to="/saas/users" onClick={closeNav}
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${isActive ? 'bg-[#7c5ef5]/10 text-[#7c5ef5] font-medium' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`
                 }
               >
-                👥 <span className="text-sm">Gestión de Usuarios</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" /></svg>
+                <span className="text-sm">Gestión de Usuarios</span>
               </NavLink>
             </>
           )}

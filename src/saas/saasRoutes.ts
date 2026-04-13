@@ -191,6 +191,19 @@ router.delete("/bots/:id", async (req: Request, res: Response) => {
 router.post("/bots/:id/start", async (req: Request, res: Response) => {
   const id = req.params.id as string;
   try {
+    // Admins siempre pueden iniciar bots
+    if (!req.isAdmin) {
+      const uid = req.firebaseUid!;
+      const { canBotStart } = await import("./billing.js");
+      const check = await canBotStart(id, uid);
+      if (!check.allowed) {
+        const msg =
+          check.reason === "pending_approval"
+            ? "Tu solicitud de suscripción está pendiente de aprobación."
+            : "trial_expired";
+        return fail(res, 402, msg);
+      }
+    }
     await botManager.startBot(id);
     return ok(res, { started: id });
   } catch (e: any) {

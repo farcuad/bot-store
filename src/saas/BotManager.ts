@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import { db } from "../config/firebase.js";
 import { BotInstance } from "./BotInstance.js";
 import type { BotStatus } from "./BotInstance.js";
+import { canBotStart } from "./billing.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BOTS_ROOT = path.resolve(__dirname, "../../bots");
@@ -27,6 +28,7 @@ export interface BotPublicState {
   readySince: number | null;
   lastError: string | null;
   clientKey?: string;
+  hasSession?: boolean;
 }
 
 class BotManager {
@@ -42,28 +44,32 @@ class BotManager {
 
   /** Called at startup: loads all registered bots from Firestore and starts them. */
   async initFromFirestore(): Promise<void> {
-    console.log("🤖 BotManager: loading bots from Firestore…");
+    console.log("🤖 BotManager: cargando bots desde Firestore…");
     try {
       const snap = await this.platformBotsRef().get();
-      console.log(`🤖 BotManager: found ${snap.size} bot(s).`);
+      console.log(`🤖 BotManager: se encontraron ${snap.size} bot(s).`);
       for (const doc of snap.docs) {
         const record = doc.data() as BotRecord;
         if (record.active) {
           const instance = await this._registerInstance(record.botId);
-          // Only auto-start if the bot already has an established session
+          // Solo auto-iniciar si el bot ya tiene una sesión establecida
           if (await instance.hasSession()) {
+            console.log(`[${record.botId}] Sesión existente encontrada — iniciando automáticamente.`);
             this.startBot(record.botId).catch((e) =>
-              console.error(`[${record.botId}] auto-start error:`, e),
+              console.error(`[${record.botId}] Error en auto-inicio:`, e),
             );
           } else {
-            console.log(`[${record.botId}] Bot has no session. Kept in idle until user starts it manually.`);
+            console.log(`[${record.botId}] Sin sesión activa. En espera hasta que el usuario lo inicie manualmente.`);
           }
         } else {
           await this._registerInstance(record.botId);
         }
       }
+
+      // Start the periodic billing check
+      this.startBillingWatcher();
     } catch (e) {
-      console.error("BotManager: error loading from Firestore:", e);
+      console.error("BotManager: error al cargar desde Firestore:", e);
     }
   }
 
@@ -86,7 +92,7 @@ class BotManager {
       await this.platformBotsRef().doc(botId).set(record);
     }
     console.log(
-      `🤖 BotManager: registered legacy default bot (${botPhoneNumber}).`,
+      `🤖 BotManager: bot por defecto registrado (${botPhoneNumber}).`,
     );
   }
 
@@ -125,13 +131,13 @@ class BotManager {
     await this.stopBot(botId);
     this.instances.delete(botId);
     await this.platformBotsRef().doc(botId).delete();
-    // Remove bot directory and all its contents
+    // Eliminar el directorio del bot y todos sus contenidos
     const botDir = path.join(BOTS_ROOT, botId);
     try {
       await fs.rm(botDir, { recursive: true, force: true });
-      console.log(`[${botId}] 🗑️ Bot directory removed: ${botDir}`);
+      console.log(`[${botId}] 🗑️ Directorio del bot eliminado: ${botDir}`);
     } catch (e) {
-      console.warn(`[${botId}] Could not remove bot directory:`, e);
+      console.warn(`[${botId}] No se pudo eliminar el directorio del bot:`, e);
     }
   }
 
@@ -153,7 +159,7 @@ class BotManager {
   async startBot(botId: string): Promise<void> {
     if (this._starting.has(botId)) {
       console.log(
-        `[${botId}] start already in progress — skipping duplicate call.`,
+        `[${botId}] Inicio ya en progreso — omitiendo llamada duplicada.`,
       );
       return;
     }
@@ -176,20 +182,20 @@ class BotManager {
     await instance.restart();
   }
 
-  /** Clear bot session: stops bot, deletes the Chrome session directory, re-registers. */
+  /** Limpia la sesión del bot: detiene el bot, elimina el directorio Chrome de sesión. */
   async clearSession(botId: string): Promise<void> {
-    // Stop if running
+    // Detener si está en ejecución
     const instance = this.instances.get(botId);
     if (instance) {
       await instance.stop();
     }
-    // Delete only the Chrome session subdirectory, not the full bot directory
+    // Eliminar solo el subdirectorio de sesión de Chrome, no el directorio completo del bot
     const sessionDir = path.join(BOTS_ROOT, botId, `session-${botId}`);
     try {
       await fs.rm(sessionDir, { recursive: true, force: true });
-      console.log(`[${botId}] 🧹 Session directory cleared: ${sessionDir}`);
+      console.log(`[${botId}] 🧹 Directorio de sesión limpiado: ${sessionDir}`);
     } catch (e) {
-      console.warn(`[${botId}] Could not clear session directory:`, e);
+      console.warn(`[${botId}] No se pudo limpiar el directorio de sesión:`, e);
     }
   }
 
@@ -209,10 +215,11 @@ class BotManager {
       query = query.where("ownerUid", "==", ownerUid);
     }
     const snap = await query.get();
-    return snap.docs.map((doc) => {
+    const results = await Promise.all(snap.docs.map(async (doc) => {
       const record = doc.data() as BotRecord;
       const instance = this.instances.get(record.botId);
       const liveState = instance?.getState();
+      const sessionExists = instance ? await instance.hasSession() : false;
       const state: BotPublicState = {
         botId: doc.id,
         nombre: record.nombre,
@@ -221,12 +228,14 @@ class BotManager {
         createdAt: record.createdAt,
         readySince: liveState?.readySince ?? null,
         lastError: liveState?.lastError ?? null,
+        hasSession: sessionExists,
       };
       if (record.clientKey !== undefined) {
         state.clientKey = record.clientKey;
       }
       return state;
-    });
+    }));
+    return results;
   }
 
   async getBot(botId: string): Promise<BotPublicState | null> {
@@ -235,6 +244,7 @@ class BotManager {
     const record = doc.data() as BotRecord;
     const instance = this.instances.get(botId);
     const liveState = instance?.getState();
+    const sessionExists = instance ? await instance.hasSession() : false;
     const state: BotPublicState = {
       botId: record.botId,
       nombre: record.nombre,
@@ -243,6 +253,7 @@ class BotManager {
       createdAt: record.createdAt,
       readySince: liveState?.readySince ?? null,
       lastError: liveState?.lastError ?? null,
+      hasSession: sessionExists,
     };
     if (record.clientKey !== undefined) {
       state.clientKey = record.clientKey;
@@ -270,8 +281,41 @@ class BotManager {
 
   private _get(botId: string): BotInstance {
     const instance = this.instances.get(botId);
-    if (!instance) throw new Error(`Bot not found: ${botId}`);
+    if (!instance) throw new Error(`Bot no encontrado: ${botId}`);
     return instance;
+  }
+
+  // ── Billing Enforcement ─────────────────────────────────────────────────────
+
+  private startBillingWatcher() {
+    // Check billing status every hour (3600000ms)
+    // For testing you might want to make this faster, but 1 hour is standard for SaaS.
+    setInterval(async () => {
+      try {
+        console.log("🕒 BotManager: Ejecutando revisión periódica de facturación...");
+        const instancesList = Array.from(this.instances.entries());
+        
+        for (const [botId, instance] of instancesList) {
+          if (instance.getState().status !== "ready") continue;
+
+          // We need the ownerUid to check billing
+          const snap = await this.platformBotsRef().doc(botId).get();
+          if (!snap.exists) continue;
+          
+          const ownerUid = snap.data()?.ownerUid;
+          if (!ownerUid || ownerUid === "admin") continue; // Admins are exempt or there's no owner
+
+          const check = await canBotStart(botId, ownerUid);
+          
+          if (!check.allowed) {
+            console.log(`[${botId}] 🛑 Período de facturación expirado/Inválido (${check.reason}). Deteniendo bot.`);
+            await this.stopBot(botId);
+          }
+        }
+      } catch (e) {
+        console.error("BotManager: Error en la revisión periódica de facturación:", e);
+      }
+    }, 60 * 60 * 1000); // 1 hora
   }
 }
 

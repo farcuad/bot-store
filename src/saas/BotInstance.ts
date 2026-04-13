@@ -1,5 +1,4 @@
 import pkg from "whatsapp-web.js";
-const { Client, LocalAuth } = pkg;
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -38,7 +37,7 @@ export interface BotInstanceState {
 
 export class BotInstance extends EventEmitter {
   readonly botId: string;
-  private client: InstanceType<typeof Client> | null = null;
+  private client: InstanceType<typeof pkg.Client> | null = null;
   private state: BotInstanceState;
   private bootTime = 0;
 
@@ -71,7 +70,7 @@ export class BotInstance extends EventEmitter {
     return this.state.qr;
   }
 
-  getClient(): InstanceType<typeof Client> | null {
+  getClient(): InstanceType<typeof pkg.Client> | null {
     return this.client;
   }
 
@@ -103,31 +102,31 @@ export class BotInstance extends EventEmitter {
       this.state.status === "ready"
     ) {
       console.log(
-        `[${this.botId}] Already running (${this.state.status}) — skipping duplicate start.`,
+        `[${this.botId}] Ya en ejecución (${this.state.status}) — omitiendo inicio duplicado.`,
       );
       return;
     }
 
     this.setState({ status: "initializing", qr: null, lastError: null });
-    console.log(`[${this.botId}] 🚀 Starting bot instance…`);
+    console.log(`[${this.botId}] 🚀 Iniciando instancia del bot…`);
 
     const dataPath = path.join(BOTS_ROOT, this.botId);
 
-    // ── Clean up stale Chrome lock files left by an abrupt process kill ────────
+    // ── Limpiar archivos de bloqueo de Chrome dejados por un cierre abrupto ────
     const { promises: fsp } = await import("node:fs");
     const sessionDir = path.join(dataPath, `session-${this.botId}`);
     const lockFile = path.join(sessionDir, "SingletonLock");
     try {
       await fsp.unlink(lockFile);
-      console.log(`[${this.botId}] 🔓 Removed stale ChromeSingletonLock.`);
+      console.log(`[${this.botId}] 🔓 Archivo de bloqueo de Chrome eliminado.`);
     } catch {
-      // No lock file
+      // Sin archivo de bloqueo
     }
     // ──────────────────────────────────────────────────────────────────────────
 
-    this.client = new Client({
+    this.client = new pkg.Client({
       qrMaxRetries: 2,
-      authStrategy: new LocalAuth({
+      authStrategy: new pkg.LocalAuth({
         clientId: this.botId,
         dataPath,
       }),
@@ -151,25 +150,25 @@ export class BotInstance extends EventEmitter {
     await this.statsMgr.loadStats();
 
     this.client.on("qr", (qr: string) => {
-      console.log(`[${this.botId}] 📱 QR code received`);
+      console.log(`[${this.botId}] 📱 Código QR recibido — esperando escaneo`);
       this.setState({ status: "qr", qr });
       this.emit("qr", qr);
     });
 
     this.client.on("ready", () => {
-      console.log(`[${this.botId}] ✅ Bot ready and operational.`);
+      console.log(`[${this.botId}] ✅ Bot listo y operativo.`);
       this.setState({ status: "ready", qr: null, readySince: Date.now() });
       this.emit("ready");
     });
 
     this.client.on("disconnected", (reason: string) => {
-      console.log(`[${this.botId}] 🔌 Disconnected: ${reason}`);
+      console.log(`[${this.botId}] 🔌 Desconectado: ${reason}`);
       this.setState({ status: "disconnected", qr: null });
       this.emit("disconnected", reason);
     });
 
     this.client.on("auth_failure", (msg: string) => {
-      console.error(`[${this.botId}] ❌ Auth failure: ${msg}`);
+      console.error(`[${this.botId}] ❌ Error de autenticación: ${msg}`);
       this.setState({ status: "error", lastError: msg });
     });
 
@@ -182,16 +181,16 @@ export class BotInstance extends EventEmitter {
 
   async stop(): Promise<void> {
     if (!this.client) return;
-    console.log(`[${this.botId}] 🛑 Stopping…`);
+    console.log(`[${this.botId}] 🛑 Deteniendo bot…`);
     try {
       await this.client.destroy();
     } catch (e) {
-      // ignore
+      // ignorar error de cierre
     }
     this.client = null;
     this.configSvc.stopConfigRefresh();
     this.setState({ status: "idle", qr: null });
-    console.log(`[${this.botId}] ⏹️ Stopped.`);
+    console.log(`[${this.botId}] ⏹️ Bot detenido (sesión preservada).`);
   }
 
   async restart(): Promise<void> {
@@ -207,11 +206,44 @@ export class BotInstance extends EventEmitter {
     await this.client.sendMessage(chatId, message);
   }
 
+  /**
+   * Envía una imagen desde una URL o ruta local.
+   */
+  async sendImage(to: string, source: string, caption?: string): Promise<void> {
+    if (!this.client || this.state.status !== "ready") {
+      throw new Error(`Bot ${this.botId} is not ready.`);
+    }
+    const chatId = to.includes("@c.us") ? to : `${to.replace(/\D/g, "")}@c.us`;
+
+    let media: pkg.MessageMedia;
+
+    if (source.startsWith("http")) {
+      media = await pkg.MessageMedia.fromUrl(source);
+    } else {
+      media = pkg.MessageMedia.fromFilePath(source);
+    }
+
+    const options = caption ? { caption } : {};
+    await this.client.sendMessage(chatId, media, options);
+  }
+
   // ─── Message handler ────────────────────────────────────────────────────────
+
+  // Tipos de mensajes de sistema/notificación que deben ignorarse
+  private static readonly IGNORED_MSG_TYPES = new Set([
+    "e2e_notification",
+    "notification_template",
+    "call_log",
+    "protocol",
+    "notification",
+    "gp2",
+  ]);
 
   private async _handleMessage(msg: any): Promise<void> {
     try {
       if (msg.timestamp * 1000 < this.bootTime) return;
+      // Ignorar mensajes de sistema (chats eliminados, notificaciones, etc.)
+      if (msg.type && BotInstance.IGNORED_MSG_TYPES.has(msg.type)) return;
       if (msg.from === "status@broadcast" || msg.from.includes("@g.us")) return;
 
       const nowInSeconds = Math.floor(Date.now() / 1000);
@@ -228,7 +260,7 @@ export class BotInstance extends EventEmitter {
       if (msg.fromMe) {
         const remoteId = msg.to;
         console.log(
-          `[${this.botId}] Outgoing message caught. To: ${remoteId}. Body length: ${msg.body?.length || 0}. Media: ${msg.hasMedia}`,
+          `[${this.botId}] Mensaje saliente detectado. Para: ${remoteId}. Longitud: ${msg.body?.length || 0}. Multimedia: ${msg.hasMedia}`,
         );
 
         const remoteSession = await this.sessionMgr.getSession(remoteId);
@@ -266,12 +298,16 @@ export class BotInstance extends EventEmitter {
 
         if (isHistoryMatch || isTextMatch || isRecentMatch) {
           if (isHistoryMatch)
-            console.log(`[${this.botId}] Output ignored (History match).`);
+            console.log(
+              `[${this.botId}] Mensaje saliente ignorado (coincide con historial).`,
+            );
           if (isTextMatch)
-            console.log(`[${this.botId}] Output ignored (Text config match).`);
+            console.log(
+              `[${this.botId}] Mensaje saliente ignorado (coincide con texto de configuración).`,
+            );
           if (isRecentMatch) {
             console.log(
-              `[${this.botId}] Output ignored (Recent bot reply match).`,
+              `[${this.botId}] Mensaje saliente ignorado (coincide con respuesta reciente del bot).`,
             );
             this.recentlySentMessages.delete(msg.body.trim());
           }
@@ -285,7 +321,9 @@ export class BotInstance extends EventEmitter {
           contactName: remoteSession?.contactName,
           history: remoteSession?.history ?? [],
         });
-        console.log(`[${this.botId}] 👤 Intervención humana en ${remoteId}.`);
+        console.log(
+          `[${this.botId}] 👤 Intervención humana registrada en ${remoteId}.`,
+        );
         return;
       }
 
@@ -429,7 +467,7 @@ export class BotInstance extends EventEmitter {
           const mediaPrompt = [
             {
               role: "system" as const,
-              content: `Eres un asistente de WhatsApp. El usuario envió "${mediaLabel}". Explica amablemente que no puedes verlo todavía y pide texto.`,
+              content: `Eres un asistente de WhatsApp. El usuario envió "${mediaLabel}". Explica sin saludar, amablemente que no puedes verlo todavía y pide texto.`,
             },
           ];
           const { llamarDeepseek } = await import("../config/deepseek.js");
@@ -524,27 +562,36 @@ export class BotInstance extends EventEmitter {
         this.recentlySentMessages.add(respuesta.trim());
         await msg.reply(respuesta);
       } catch (error) {
-        console.error(`[${this.botId}] ❌ Error generating response:`, error);
+        console.error(`[${this.botId}] ❌ Error al generar respuesta:`, error);
       }
 
       await this.statsMgr.saveStats();
     } catch (outerError) {
-      console.error(`[${this.botId}] ❌ Unhandled message error:`, outerError);
+      console.error(
+        `[${this.botId}] ❌ Error no controlado en mensaje:`,
+        outerError,
+      );
     }
   }
 
   // ─── Audio transcription helper (OpenAI Whisper) ─────────────────────────────
 
-  private async _transcribeAudio(msg: any, openaiApiKey: string): Promise<string | null> {
-    const tempFilePath = path.join(TEMP_AUDIO_DIR, `temp_${this.botId}_${Date.now()}.ogg`);
+  private async _transcribeAudio(
+    msg: any,
+    openaiApiKey: string,
+  ): Promise<string | null> {
+    const tempFilePath = path.join(
+      TEMP_AUDIO_DIR,
+      `temp_${this.botId}_${Date.now()}.ogg`,
+    );
     try {
-      console.log(`[${this.botId}] 📥 Audio recibido, descargando...`);
+      console.log(`[${this.botId}] 📥 Audio recibido, descargando…`);
       const media = await msg.downloadMedia();
       if (!media) return null;
 
-      fs.writeFileSync(tempFilePath, media.data, { encoding: 'base64' });
+      fs.writeFileSync(tempFilePath, media.data, { encoding: "base64" });
 
-      console.log(`[${this.botId}] ☁️ Enviando a OpenAI Whisper...`);
+      console.log(`[${this.botId}] ☁️ Enviando audio a OpenAI Whisper…`);
 
       const openai = new OpenAI({ apiKey: openaiApiKey });
       const transcription = await openai.audio.transcriptions.create({
@@ -556,13 +603,18 @@ export class BotInstance extends EventEmitter {
       console.log(`[${this.botId}] 📝 Texto transcrito:`, transcription.text);
       return transcription.text || null;
     } catch (error: any) {
-      console.error(`[${this.botId}] ❌ Error con OpenAI Whisper:`, error.message);
+      console.error(
+        `[${this.botId}] ❌ Error con OpenAI Whisper:`,
+        error.message,
+      );
       return null;
     } finally {
       if (fs.existsSync(tempFilePath)) {
         try {
           fs.unlinkSync(tempFilePath);
-          console.log(`[${this.botId}] 🗑️ Archivo temporal borrado: ${path.basename(tempFilePath)}`);
+          console.log(
+            `[${this.botId}] 🗑️ Archivo temporal borrado: ${path.basename(tempFilePath)}`,
+          );
         } catch (e) {
           // ignore cleanup errors
         }

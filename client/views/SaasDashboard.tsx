@@ -8,6 +8,7 @@ interface Bot {
   status: string;
   readySince?: number;
   lastError?: string;
+  hasSession?: boolean;
 }
 
 const SaasDashboard: React.FC = () => {
@@ -21,6 +22,8 @@ const SaasDashboard: React.FC = () => {
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newBotName, setNewBotName] = useState('');
+  
+  const [billingData, setBillingData] = useState<any>(null);
   
   const [qrModalBot, setQrModalBot] = useState<string | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
@@ -41,15 +44,25 @@ const SaasDashboard: React.FC = () => {
       const token = await user?.getIdToken();
       if (!token) return;
 
-      // Always fetch only this user's bots (admins use "Configurar Bots" for the global view)
-      const res = await fetch('/api/saas/bots?onlyMine=true', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const [res, billingRes] = await Promise.all([
+        fetch('/api/saas/bots?onlyMine=true', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch('/api/saas/billing/me', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      ]);
       const data = await res.json();
+      const bData = await billingRes.json();
+      
       if (data.ok) {
         setBots(data.data);
       } else {
         setError(data.error || 'Error fetching bots');
+      }
+      
+      if (bData.ok) {
+        setBillingData(bData);
       }
     } catch (e: any) {
       setError(e.message);
@@ -241,8 +254,10 @@ const SaasDashboard: React.FC = () => {
     switch (status) {
       case 'ready': return <span className="px-2 py-1 bg-[#25d366]/20 text-[#25d366] text-xs font-bold rounded-full border border-[#25d366]/30">Activo</span>;
       case 'qr': return <span className="px-2 py-1 bg-blue-500/20 text-blue-400 text-xs font-bold rounded-full border border-blue-500/30">Esperando QR</span>;
+      case 'initializing': return <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs font-bold rounded-full border border-yellow-500/30">Iniciando…</span>;
       case 'error': return <span className="px-2 py-1 bg-red-500/20 text-red-400 text-xs font-bold rounded-full border border-red-500/30">Error</span>;
       case 'disconnected': return <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs font-bold rounded-full border border-yellow-500/30">Desconectado</span>;
+      case 'idle': return <span className="px-2 py-1 bg-gray-500/20 text-gray-400 text-xs font-bold rounded-full border border-gray-500/30">Pausado</span>;
       default: return <span className="px-2 py-1 bg-gray-500/20 text-gray-400 text-xs font-bold rounded-full border border-gray-500/30">{status}</span>;
     }
   };
@@ -295,12 +310,27 @@ const SaasDashboard: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {bots.map(bot => (
+          {bots.map(bot => {
+            // Find subscription for this bot
+            const sub = billingData?.subscriptions?.find((s: any) => s.botId === bot.botId);
+            const trialActive = billingData?.trial?.active ?? false;
+            
+            // Check if it can run
+            const canRun = trialActive || (sub?.isActive ?? false);
+            
+            return (
             <div key={bot.botId} className="bg-[#12121a] border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-all shadow-xl flex flex-col">
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h3 className="text-lg font-bold text-white mb-1">{bot.nombre}</h3>
-                  <code className="text-xs text-gray-500 bg-black/50 px-2 py-1 rounded">{bot.botId}</code>
+                  <p className="font-mono text-xs text-gray-500 mb-4">{bot.botId}</p>
+                  
+                  {!isAdmin && !canRun && (
+                    <div className="mb-4 text-xs font-semibold px-3 py-2 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg flex justify-between items-center">
+                      <span>No tienes plan activo</span>
+                      <button onClick={() => navigate('/saas/subscription')} className="underline">Suscribir</button>
+                    </div>
+                  )}
                 </div>
                 {getStatusBadge(bot.status)}
               </div>
@@ -322,20 +352,38 @@ const SaasDashboard: React.FC = () => {
                 >
                   ⚙️ Gestionar
                 </button>
-                {(bot.status === 'qr' || bot.status === 'initializing') && (
+
+                {/* Vincular: solo cuando hay proceso QR activo Y aun sin sesión guardada */}
+                {(bot.status === 'qr' || bot.status === 'initializing') && !bot.hasSession && (
                   <button onClick={() => setQrModalBot(bot.botId)} className="flex-1 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 py-2 rounded-lg text-sm font-medium transition-colors">
                     📱 Vincular
                   </button>
                 )}
-                {bot.status === 'ready' ? (
+
+                {/* Parar: solo cuando está activo */}
+                {bot.status === 'ready' && (
                   <button onClick={() => botAction(bot.botId, 'stop')} className="flex-1 bg-white/5 text-white hover:bg-white/10 py-2 rounded-lg text-sm font-medium transition-colors">
                     ⏹ Parar
                   </button>
-                ) : (bot.status === 'idle' || bot.status === 'disconnected' || bot.status === 'error') ? (
-                  <button onClick={() => botAction(bot.botId, 'start')} className="flex-1 bg-[#25d366]/10 text-[#25d366] hover:bg-[#25d366]/20 py-2 rounded-lg text-sm font-medium transition-colors">
-                    ▶ Iniciar
+                )}
+
+                {/* Iniciar: cuando está detenido (con sesión) o desconectado */}
+                {(bot.status === 'idle' || bot.status === 'disconnected' || bot.status === 'error') && (
+                  <button
+                    onClick={() => {
+                      if (!bot.hasSession) {
+                        // Sin sesión: iniciar y abrir modal de QR
+                        botAction(bot.botId, 'start').then(() => setQrModalBot(bot.botId));
+                      } else {
+                        botAction(bot.botId, 'start');
+                      }
+                    }}
+                    className="flex-1 bg-[#25d366]/10 text-[#25d366] hover:bg-[#25d366]/20 py-2 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    {bot.hasSession ? '▶ Iniciar' : '📱 Iniciar y Vincular'}
                   </button>
-                ) : null}
+                )}
+
                 <button onClick={() => botAction(bot.botId, 'restart')} title="Reiniciar" className="w-10 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg flex items-center justify-center transition-colors">
                   ↺
                 </button>
@@ -350,7 +398,8 @@ const SaasDashboard: React.FC = () => {
                 </button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
