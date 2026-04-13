@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import cors from "cors";
 import adminRoutes from "./routes.js";
 import saasRoutes from "../saas/saasRoutes.js";
+import billingRouter from "../saas/billing.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -39,6 +40,9 @@ export function startAdminServer(): void {
 
   // SaaS bot management API
   app.use("/api/saas", saasRoutes);
+
+  // Billing & subscriptions API
+  app.use("/api/saas/billing", billingRouter);
 
   // Bot admin API (used by /bot panel) + auth
   app.use("/api", adminRoutes);

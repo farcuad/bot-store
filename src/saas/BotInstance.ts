@@ -1,8 +1,9 @@
 import pkg from "whatsapp-web.js";
-const { Client, LocalAuth } = pkg;
 import path from "node:path";
+import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { EventEmitter } from "node:events";
+import OpenAI from "openai";
 import { db } from "../config/firebase.js";
 import { generarRespuestaBot } from "../controllers/AiController.js";
 import { createSessionManager } from "../services/sessionManager.js";
@@ -11,6 +12,12 @@ import { createStatsManager } from "../services/statsManager.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BOTS_ROOT = path.resolve(__dirname, "../../bots");
+const TEMP_AUDIO_DIR = path.resolve(process.cwd(), "temp_audio");
+
+// Ensure temp_audio directory exists
+if (!fs.existsSync(TEMP_AUDIO_DIR)) {
+  fs.mkdirSync(TEMP_AUDIO_DIR, { recursive: true });
+}
 
 export type BotStatus =
   | "idle"
@@ -30,7 +37,7 @@ export interface BotInstanceState {
 
 export class BotInstance extends EventEmitter {
   readonly botId: string;
-  private client: InstanceType<typeof Client> | null = null;
+  private client: InstanceType<typeof pkg.Client> | null = null;
   private state: BotInstanceState;
   private bootTime = 0;
 
@@ -38,6 +45,7 @@ export class BotInstance extends EventEmitter {
   private sessionMgr: ReturnType<typeof createSessionManager>;
   private configSvc: ReturnType<typeof createConfigService>;
   private statsMgr: ReturnType<typeof createStatsManager>;
+  private recentlySentMessages = new Set<string>();
 
   constructor(botId: string) {
     super();
@@ -62,7 +70,7 @@ export class BotInstance extends EventEmitter {
     return this.state.qr;
   }
 
-  getClient(): InstanceType<typeof Client> | null {
+  getClient(): InstanceType<typeof pkg.Client> | null {
     return this.client;
   }
 
@@ -73,7 +81,12 @@ export class BotInstance extends EventEmitter {
 
   async hasSession(): Promise<boolean> {
     const { promises: fsp } = await import("node:fs");
-    const sessionDir = path.join(BOTS_ROOT, this.botId, `session-${this.botId}`, "Default");
+    const sessionDir = path.join(
+      BOTS_ROOT,
+      this.botId,
+      `session-${this.botId}`,
+      "Default",
+    );
     try {
       const stats = await fsp.stat(sessionDir);
       return stats.isDirectory();
@@ -88,43 +101,42 @@ export class BotInstance extends EventEmitter {
       this.state.status === "qr" ||
       this.state.status === "ready"
     ) {
-      console.log(`[${this.botId}] Already running (${this.state.status}) — skipping duplicate start.`);
+      console.log(
+        `[${this.botId}] Ya en ejecución (${this.state.status}) — omitiendo inicio duplicado.`,
+      );
       return;
     }
 
     this.setState({ status: "initializing", qr: null, lastError: null });
-    console.log(`[${this.botId}] 🚀 Starting bot instance…`);
+    console.log(`[${this.botId}] 🚀 Iniciando instancia del bot…`);
 
     const dataPath = path.join(BOTS_ROOT, this.botId);
 
-    // ── Clean up stale Chrome lock files left by an abrupt process kill ────────
-    // LocalAuth with a custom `dataPath` stores its Chrome profile under:
-    //   <dataPath>/session-<clientId>/
-    // The SingletonLock lives at the root of that directory.
+    // ── Limpiar archivos de bloqueo de Chrome dejados por un cierre abrupto ────
     const { promises: fsp } = await import("node:fs");
     const sessionDir = path.join(dataPath, `session-${this.botId}`);
     const lockFile = path.join(sessionDir, "SingletonLock");
     try {
       await fsp.unlink(lockFile);
-      console.log(`[${this.botId}] 🔓 Removed stale ChromeSingletonLock.`);
+      console.log(`[${this.botId}] 🔓 Archivo de bloqueo de Chrome eliminado.`);
     } catch {
-      // No lock file — normal on first run or clean shutdown
+      // Sin archivo de bloqueo
     }
     // ──────────────────────────────────────────────────────────────────────────
 
-    this.client = new Client({
-      qrMaxRetries: 2, // <--- Stops emitting QR after 2 retries
-      authStrategy: new LocalAuth({
+    this.client = new pkg.Client({
+      qrMaxRetries: 2,
+      authStrategy: new pkg.LocalAuth({
         clientId: this.botId,
         dataPath,
       }),
       puppeteer: {
         args: [
-          "--no-sandbox", 
+          "--no-sandbox",
           "--disable-setuid-sandbox",
           "--disable-dev-shm-usage",
           "--disable-accelerated-2d-canvas",
-          "--disable-gpu"
+          "--disable-gpu",
         ],
         timeout: 60000,
         protocolTimeout: 300000,
@@ -133,31 +145,30 @@ export class BotInstance extends EventEmitter {
 
     this.bootTime = Date.now();
 
-    // Load config
     await this.configSvc.loadConfig();
     this.configSvc.startConfigRefresh();
     await this.statsMgr.loadStats();
 
     this.client.on("qr", (qr: string) => {
-      console.log(`[${this.botId}] 📱 QR code received`);
+      console.log(`[${this.botId}] 📱 Código QR recibido — esperando escaneo`);
       this.setState({ status: "qr", qr });
       this.emit("qr", qr);
     });
 
     this.client.on("ready", () => {
-      console.log(`[${this.botId}] ✅ Bot ready and operational.`);
+      console.log(`[${this.botId}] ✅ Bot listo y operativo.`);
       this.setState({ status: "ready", qr: null, readySince: Date.now() });
       this.emit("ready");
     });
 
     this.client.on("disconnected", (reason: string) => {
-      console.log(`[${this.botId}] 🔌 Disconnected: ${reason}`);
+      console.log(`[${this.botId}] 🔌 Desconectado: ${reason}`);
       this.setState({ status: "disconnected", qr: null });
       this.emit("disconnected", reason);
     });
 
     this.client.on("auth_failure", (msg: string) => {
-      console.error(`[${this.botId}] ❌ Auth failure: ${msg}`);
+      console.error(`[${this.botId}] ❌ Error de autenticación: ${msg}`);
       this.setState({ status: "error", lastError: msg });
     });
 
@@ -168,19 +179,18 @@ export class BotInstance extends EventEmitter {
     this.client.initialize();
   }
 
-
   async stop(): Promise<void> {
     if (!this.client) return;
-    console.log(`[${this.botId}] 🛑 Stopping…`);
+    console.log(`[${this.botId}] 🛑 Deteniendo bot…`);
     try {
       await this.client.destroy();
     } catch (e) {
-      // ignore errors on destroy
+      // ignorar error de cierre
     }
     this.client = null;
     this.configSvc.stopConfigRefresh();
     this.setState({ status: "idle", qr: null });
-    console.log(`[${this.botId}] ⏹️ Stopped.`);
+    console.log(`[${this.botId}] ⏹️ Bot detenido (sesión preservada).`);
   }
 
   async restart(): Promise<void> {
@@ -196,25 +206,63 @@ export class BotInstance extends EventEmitter {
     await this.client.sendMessage(chatId, message);
   }
 
+  /**
+   * Envía una imagen desde una URL o ruta local.
+   */
+  async sendImage(to: string, source: string, caption?: string): Promise<void> {
+    if (!this.client || this.state.status !== "ready") {
+      throw new Error(`Bot ${this.botId} is not ready.`);
+    }
+    const chatId = to.includes("@c.us") ? to : `${to.replace(/\D/g, "")}@c.us`;
+
+    let media: pkg.MessageMedia;
+
+    if (source.startsWith("http")) {
+      media = await pkg.MessageMedia.fromUrl(source);
+    } else {
+      media = pkg.MessageMedia.fromFilePath(source);
+    }
+
+    const options = caption ? { caption } : {};
+    await this.client.sendMessage(chatId, media, options);
+  }
+
   // ─── Message handler ────────────────────────────────────────────────────────
+
+  // Tipos de mensajes de sistema/notificación que deben ignorarse
+  private static readonly IGNORED_MSG_TYPES = new Set([
+    "e2e_notification",
+    "notification_template",
+    "call_log",
+    "protocol",
+    "notification",
+    "gp2",
+  ]);
 
   private async _handleMessage(msg: any): Promise<void> {
     try {
       if (msg.timestamp * 1000 < this.bootTime) return;
+      // Ignorar mensajes de sistema (chats eliminados, notificaciones, etc.)
+      if (msg.type && BotInstance.IGNORED_MSG_TYPES.has(msg.type)) return;
       if (msg.from === "status@broadcast" || msg.from.includes("@g.us")) return;
 
       const nowInSeconds = Math.floor(Date.now() / 1000);
       const config = this.configSvc.getConfig();
+      if (config.isAutoResponseEnabled === false) {
+        return;
+      }
 
       const sys = (key: string): string =>
         config.respuestas_sistema[key]?.texto ?? "";
       const render = (text: string, name: string): string =>
         text.replace(/\{name\}/g, name);
 
-      // ── Intervención humana (fromMe) ────────────────────────────────────────
       if (msg.fromMe) {
-        const chat = await msg.getChat();
-        const remoteId = chat.id._serialized;
+        const remoteId = msg.to;
+        console.log(
+          `[${this.botId}] Mensaje saliente detectado. Para: ${remoteId}. Longitud: ${msg.body?.length || 0}. Multimedia: ${msg.hasMedia}`,
+        );
+
         const remoteSession = await this.sessionMgr.getSession(remoteId);
         const sessionHistory = remoteSession?.history;
 
@@ -246,7 +294,25 @@ export class BotInstance extends EventEmitter {
           return msg.body.startsWith(texto.trim().slice(0, 25));
         });
 
-        if (isHistoryMatch || isTextMatch) return;
+        const isRecentMatch = this.recentlySentMessages.has(msg.body.trim());
+
+        if (isHistoryMatch || isTextMatch || isRecentMatch) {
+          if (isHistoryMatch)
+            console.log(
+              `[${this.botId}] Mensaje saliente ignorado (coincide con historial).`,
+            );
+          if (isTextMatch)
+            console.log(
+              `[${this.botId}] Mensaje saliente ignorado (coincide con texto de configuración).`,
+            );
+          if (isRecentMatch) {
+            console.log(
+              `[${this.botId}] Mensaje saliente ignorado (coincide con respuesta reciente del bot).`,
+            );
+            this.recentlySentMessages.delete(msg.body.trim());
+          }
+          return;
+        }
 
         await this.sessionMgr.saveSession(remoteId, {
           last_interaction: nowInSeconds,
@@ -255,29 +321,174 @@ export class BotInstance extends EventEmitter {
           contactName: remoteSession?.contactName,
           history: remoteSession?.history ?? [],
         });
-        console.log(`[${this.botId}] 👤 Intervención humana en ${remoteId}.`);
+        console.log(
+          `[${this.botId}] 👤 Intervención humana registrada en ${remoteId}.`,
+        );
         return;
       }
 
       const from = msg.from;
+      const contact = await msg.getContact();
+      const nombre = contact.pushname || "amigo";
+      let session = await this.sessionMgr.getSession(from);
+      let instruccionExtra = "";
 
-      // ── Media ───────────────────────────────────────────────────────────────
+      if (!session) {
+        await this.sessionMgr.saveSession(from, {
+          contactName: nombre,
+          last_interaction: nowInSeconds,
+          status: "bot",
+          history: [],
+        });
+        this.statsMgr.incrementarUsuariosUnicos();
+        session = (await this.sessionMgr.getSession(from))!;
+
+        const mensajeBienvenida = render(sys("saludoInicial"), nombre);
+        if (mensajeBienvenida) {
+          instruccionExtra = `El usuario te está escribiendo por primera vez. Tu tarea es darle una cálida bienvenida basándote en esta plantilla: "${mensajeBienvenida}", y además responder a lo que te acaba de escribir.`;
+        }
+      } else if (
+        nowInSeconds - session.last_interaction >
+        this.sessionMgr.TWENTY_FOUR_HOURS
+      ) {
+        session.history = [];
+        session.last_interaction = nowInSeconds;
+        session.status = "bot";
+        await this.sessionMgr.saveSession(from, session);
+
+        const mensajeRecontacto = render(sys("saludoRecontacto"), nombre);
+        if (mensajeRecontacto) {
+          instruccionExtra = `El usuario volvió a escribir después de mucho tiempo. Tu tarea es saludarlo basándote en esta plantilla: "${mensajeRecontacto}", y además responder a lo que te acaba de escribir.`;
+        }
+      } else {
+        session.last_interaction = nowInSeconds;
+        session.contactName = nombre;
+        await this.sessionMgr.saveSession(from, session);
+      }
+
       const isMedia =
         msg.hasMedia ||
-        ["image", "video", "audio", "ptt", "sticker", "document"].includes(
-          msg.type
-        );
+        [
+          "image",
+          "video",
+          "audio",
+          "ptt",
+          "sticker",
+          "document",
+          "gif",
+        ].includes(msg.type);
 
-      if (isMedia && msg.type !== "sticker") {
-        await msg.reply(sys("mediaRecibida"));
+      const mediaTypeLabels: Record<string, string> = {
+        image: "imagen",
+        video: "video",
+        sticker: "sticker",
+        document: "documento",
+        gif: "GIF",
+      };
+
+      // Audio / voice note → verificar config y transcribir
+      if (isMedia && (msg.type === "audio" || msg.type === "ptt")) {
+        try {
+          // ── Verificar configuración de audio en Firestore ──────────────────
+          const botDoc = await db.collection("bots").doc(this.botId).get();
+          const botData = botDoc.data() ?? {};
+          const audioEnabled = botData.audioAnalysisEnabled === true;
+          const openaiApiKey = (botData.openaiApiKey as string) || "";
+
+          if (!audioEnabled) {
+            const disabledMsg =
+              "Lo siento pero no puedo procesar audios en este momento. Escribeme 👏🏽👏🏽👏🏽";
+            this.recentlySentMessages.add(disabledMsg);
+            await msg.reply(disabledMsg);
+            return;
+          }
+
+          if (!openaiApiKey) {
+            const noKeyMsg =
+              "Error de configuración: No se pudo procesar el audio (API Key no configurada).";
+            this.recentlySentMessages.add(noKeyMsg);
+            await msg.reply(noKeyMsg);
+            return;
+          }
+
+          // Enviar mensaje de cortesía
+          const listeningPrompt = [
+            {
+              role: "system" as const,
+              content: `Eres un asistente de WhatsApp amigable. El usuario acaba de enviar un audio. Genera un mensaje corto y variado diciendo que estás escuchando y ya le respondes.`,
+            },
+            { role: "user" as const, content: "El usuario envió un audio." },
+          ];
+
+          const { llamarDeepseek } = await import("../config/deepseek.js");
+          const listeningRes = await llamarDeepseek(listeningPrompt);
+          let listeningMsg = listeningRes.choices[0].message.content?.trim();
+          if (!listeningMsg)
+            listeningMsg = "Dame un momento mientras escucho tu audio 🎧";
+
+          if (session) {
+            this.sessionMgr.appendToHistory(session, "assistant", listeningMsg);
+            await this.sessionMgr.saveSession(from, session);
+          }
+
+          this.recentlySentMessages.add(listeningMsg);
+          await msg.reply(listeningMsg);
+
+          const transcription = await this._transcribeAudio(msg, openaiApiKey);
+          if (!transcription) {
+            const fallback = sys("mediaRecibida");
+            if (fallback && fallback.trim()) {
+              this.recentlySentMessages.add(fallback.trim());
+              await msg.reply(fallback);
+            }
+            return;
+          }
+          msg.body = transcription;
+        } catch (err: any) {
+          console.error(`[${this.botId}] ❌ Error procesando audio:`, err);
+          const isApiKeyError =
+            err?.status === 401 || err?.code === "invalid_api_key";
+          if (isApiKeyError) {
+            const apiErrorMsg = "Error de configuración: API Key inválida.";
+            this.recentlySentMessages.add(apiErrorMsg);
+            await msg.reply(apiErrorMsg);
+          } else {
+            const errorFallback = sys("mediaRecibida");
+            if (errorFallback && errorFallback.trim()) {
+              this.recentlySentMessages.add(errorFallback.trim());
+              await msg.reply(errorFallback);
+            }
+          }
+          return;
+        }
+      } else if (isMedia) {
+        const mediaLabel = mediaTypeLabels[msg.type] || msg.type;
+        try {
+          const mediaPrompt = [
+            {
+              role: "system" as const,
+              content: `Eres un asistente de WhatsApp. El usuario envió "${mediaLabel}". Explica sin saludar, amablemente que no puedes verlo todavía y pide texto.`,
+            },
+          ];
+          const { llamarDeepseek } = await import("../config/deepseek.js");
+          const mediaRes = await llamarDeepseek(mediaPrompt);
+          const mediaMsg =
+            mediaRes.choices[0].message.content?.trim() ||
+            `No puedo interpretar ${mediaLabel}s aún.`;
+
+          if (session) {
+            this.sessionMgr.appendToHistory(session, "assistant", mediaMsg);
+            await this.sessionMgr.saveSession(from, session);
+          }
+          await msg.reply(mediaMsg);
+        } catch (err) {
+          const fallback = sys("mediaRecibida");
+          if (fallback) await msg.reply(fallback);
+        }
         return;
       }
-      if (isMedia) return;
 
-      // ── Auto-reactivación ───────────────────────────────────────────────────
-      const session = await this.sessionMgr.getSession(from);
       const currentStatus = await this.sessionMgr.getStatusFromFirestore(from);
-
       if (currentStatus === "human") {
         const humanSince = session?.human_since;
         if (humanSince !== undefined) {
@@ -289,58 +500,32 @@ export class BotInstance extends EventEmitter {
               contactName: session?.contactName,
               history: session?.history ?? [],
             });
-            await msg.reply(sys("botReactivado"));
+            const reactivacionMsg = sys("botReactivado");
+            if (reactivacionMsg) {
+              this.recentlySentMessages.add(reactivacionMsg.trim());
+              await msg.reply(reactivacionMsg);
+            }
+          } else {
             return;
           }
+        } else {
+          return;
         }
-        return;
       }
 
-      // ── Gestión de sesión ────────────────────────────────────────────────────
-      const contact = await msg.getContact();
-      const nombre = contact.pushname || "amigo";
-      let instruccionExtra = "";
+      this.sessionMgr.appendToHistory(
+        session!,
+        "user",
+        msg.body || (msg.hasMedia ? `[Envió ${msg.type}]` : ""),
+      );
 
-      if (!session) {
-        await this.sessionMgr.saveSession(from, {
-          contactName: nombre,
-          last_interaction: nowInSeconds,
-          status: "bot",
-          history: [],
-        });
-        this.statsMgr.incrementarUsuariosUnicos();
-
-        const mensajeBienvenida = render(sys("saludoInicial"), nombre);
-        instruccionExtra = `El usuario te está escribiendo por primera vez. Tu tarea es darle una cálida bienvenida basándote en esta plantilla: "${mensajeBienvenida}", y además responder a lo que te acaba de escribir.`;
-      } else if (
-        nowInSeconds - session.last_interaction >
-        this.sessionMgr.TWENTY_FOUR_HOURS
-      ) {
-        await this.sessionMgr.saveSession(from, {
-          contactName: nombre,
-          last_interaction: nowInSeconds,
-          status: "bot",
-          history: [],
-        });
-        const mensajeRecontacto = render(sys("saludoRecontacto"), nombre);
-        instruccionExtra = `El usuario volvió a escribir después de mucho tiempo. Tu tarea es saludarlo basándote en esta plantilla: "${mensajeRecontacto}", y además responder a lo que te acaba de escribir.`;
-      } else {
-        session.last_interaction = nowInSeconds;
-        session.contactName = nombre;
-        await this.sessionMgr.saveSession(from, session);
-      }
-
-      const activeSession = (await this.sessionMgr.getSession(from))!;
-      this.sessionMgr.appendToHistory(activeSession, "user", msg.body);
-
-      // ── Generación IA ────────────────────────────────────────────────────────
       try {
         let respuesta = await generarRespuestaBot(
-          activeSession.history,
+          session!.history,
           this.configSvc.getNombre(),
           config.respuestas_info,
           instruccionExtra,
-          config.prompt_ia
+          config.prompt_ia,
         );
 
         if (respuesta.includes("[NO_ENTENDI]")) {
@@ -354,33 +539,86 @@ export class BotInstance extends EventEmitter {
           respuesta = respuesta
             ? `${respuesta}\n\n${avisoCliente}`
             : avisoCliente;
-
-          activeSession.status = "human";
-          activeSession.human_since = nowInSeconds;
-          await this.sessionMgr.saveSession(from, activeSession);
-
+          if (session) {
+            session.status = "human";
+            session.human_since = nowInSeconds;
+            await this.sessionMgr.saveSession(from, session);
+          }
           const phoneNumber = msg.from.replace(/\D/g, "").slice(0, 12);
           await this.client!.sendMessage(
             msg.to,
-            `📢 Contestale al usuario ${nombre}! ${phoneNumber}, que quiere: ${msg.body}`
+            `📢 Contestale al usuario ${nombre}! ${phoneNumber}, que quiere: ${msg.body}`,
           );
         }
 
         this.statsMgr.incrementarMensajesRespondidos();
-        
-        // Save history first so that the `message_create` event (fromMe=true) 
-        // can match `isHistoryMatch`.
-        this.sessionMgr.appendToHistory(activeSession, "assistant", respuesta);
-        await this.sessionMgr.saveSession(from, activeSession);
+        if (session) {
+          this.sessionMgr.appendToHistory(session, "assistant", respuesta);
+          await this.sessionMgr.saveSession(from, session);
+        }
 
+        if (!respuesta || !respuesta.trim()) return;
+
+        this.recentlySentMessages.add(respuesta.trim());
         await msg.reply(respuesta);
       } catch (error) {
-        console.error(`[${this.botId}] ❌ Error generating response:`, error);
+        console.error(`[${this.botId}] ❌ Error al generar respuesta:`, error);
       }
 
       await this.statsMgr.saveStats();
     } catch (outerError) {
-      console.error(`[${this.botId}] ❌ Unhandled message error:`, outerError);
+      console.error(
+        `[${this.botId}] ❌ Error no controlado en mensaje:`,
+        outerError,
+      );
+    }
+  }
+
+  // ─── Audio transcription helper (OpenAI Whisper) ─────────────────────────────
+
+  private async _transcribeAudio(
+    msg: any,
+    openaiApiKey: string,
+  ): Promise<string | null> {
+    const tempFilePath = path.join(
+      TEMP_AUDIO_DIR,
+      `temp_${this.botId}_${Date.now()}.ogg`,
+    );
+    try {
+      console.log(`[${this.botId}] 📥 Audio recibido, descargando…`);
+      const media = await msg.downloadMedia();
+      if (!media) return null;
+
+      fs.writeFileSync(tempFilePath, media.data, { encoding: "base64" });
+
+      console.log(`[${this.botId}] ☁️ Enviando audio a OpenAI Whisper…`);
+
+      const openai = new OpenAI({ apiKey: openaiApiKey });
+      const transcription = await openai.audio.transcriptions.create({
+        file: fs.createReadStream(tempFilePath),
+        model: "whisper-1",
+        language: "es",
+      });
+
+      console.log(`[${this.botId}] 📝 Texto transcrito:`, transcription.text);
+      return transcription.text || null;
+    } catch (error: any) {
+      console.error(
+        `[${this.botId}] ❌ Error con OpenAI Whisper:`,
+        error.message,
+      );
+      return null;
+    } finally {
+      if (fs.existsSync(tempFilePath)) {
+        try {
+          fs.unlinkSync(tempFilePath);
+          console.log(
+            `[${this.botId}] 🗑️ Archivo temporal borrado: ${path.basename(tempFilePath)}`,
+          );
+        } catch (e) {
+          // ignore cleanup errors
+        }
+      }
     }
   }
 }

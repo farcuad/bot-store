@@ -19,6 +19,7 @@ export interface UserProfile {
   status: "pending" | "approved" | "rejected";
   maxBots: number;
   createdAt: number;
+  trialEndsAt: number;
   approvedAt?: number;
 }
 
@@ -148,6 +149,7 @@ router.post("/auth/firebase-verify", async (req, res) => {
 
     if (!snap.exists) {
       // New user — create with pending status, default role and bot limit
+      const TRIAL_DAYS = 15;
       const profile: UserProfile = {
         uid,
         email: decoded.email ?? "",
@@ -157,6 +159,7 @@ router.post("/auth/firebase-verify", async (req, res) => {
         status: "pending",
         maxBots: 1,
         createdAt: Date.now(),
+        trialEndsAt: Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000,
       };
       await userRef.set(profile);
       res.json({ ok: true, status: "pending", profile });

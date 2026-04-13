@@ -42,15 +42,17 @@ POST /api/send-message
 {
   "to": "584245435637",
   "message": "Hola! Tu pedido está listo 🎉",
-  "botId": "584268691664"
+  "botId": "584268691664",
+  "fromMe": "Nombre de quien está apuntando a la api"
 }
 ```
 
-| Campo     | Tipo     | Requerido      | Descripción                                                            |
-| --------- | -------- | -------------- | ---------------------------------------------------------------------- |
-| `to`      | `string` | ✅ Sí          | Número de destino en formato internacional sin `+`. Ej: `584245435637` |
-| `message` | `string` | ✅ Sí          | Texto del mensaje a enviar                                             |
-| `botId`   | `string` | ✅ Sí          | ID del bot que enviará el mensaje.                                     |
+| Campo     | Tipo     | Requerido | Descripción                                                            |
+| --------- | -------- | --------- | ---------------------------------------------------------------------- |
+| `to`      | `string` | ✅ Sí     | Número de destino en formato internacional sin `+`. Ej: `584245435637` |
+| `message` | `string` | ✅ Sí     | Texto del mensaje a enviar                                             |
+| `botId`   | `string` | ✅ Sí     | ID del bot que enviará el mensaje.                                     |
+| `fromMe`  | `string` | ✅ Sí     | Nombre de quien está apuntando a la api                                |
 
 ### Respuesta exitosa (200)
 
@@ -116,7 +118,8 @@ curl -X POST localhost:3000/api/send-message \
   -d '{
     "to": "584245435637",
     "message": "Tu pedido #1234 está listo para retirar 🛍️",
-    "botId": "584268691664"
+    "botId": "584268691664",
+    "fromMe": "Andres"
   }'
 ```
 
@@ -133,6 +136,7 @@ const response = await fetch("https://tudominio.com/api/send-message", {
     to: "584245435637",
     message: "Tu pedido está listo 🎉",
     botId: "584268691664",
+    fromMe: "Andres",
   }),
 });
 
@@ -155,6 +159,7 @@ response = requests.post(
         'to': '584245435637',
         'message': 'Tu pedido está listo 🎉',
         'botId': '584268691664',
+        'fromMe': 'Andres'
     }
 )
 print(response.json())
@@ -174,7 +179,8 @@ Usa un nodo **HTTP Request** con:
   {
     "to": "{{numero_destino}}",
     "message": "{{texto_del_mensaje}}",
-    "botId": "584268691664"
+    "botId": "584268691664",
+    "fromMe": "Andres"
   }
   ```
 

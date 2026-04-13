@@ -25,6 +25,7 @@ export function createConfigService(botId: string) {
     respuestas_info: {},
     respuestas_sistema: {},
     activo: false,
+    isAutoResponseEnabled: true,
   };
 
   let refreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -32,6 +33,7 @@ export function createConfigService(botId: string) {
   async function fetchNombreYActivo(): Promise<{
     nombre: string;
     activo: boolean;
+    isAutoResponseEnabled: boolean;
     prompt_ia?: string | undefined;
   }> {
     const doc = await botRef().get();
@@ -39,6 +41,7 @@ export function createConfigService(botId: string) {
     return {
       nombre: (data?.nombre as string) ?? "Bot",
       activo: (data?.activo as boolean) ?? false,
+      isAutoResponseEnabled: (data?.isAutoResponseEnabled as boolean) ?? true,
       prompt_ia: data?.prompt_ia as string | undefined,
     };
   }
@@ -73,7 +76,7 @@ export function createConfigService(botId: string) {
   async function loadConfig(): Promise<void> {
     try {
       const [
-        { nombre, activo, prompt_ia },
+        { nombre, activo, isAutoResponseEnabled, prompt_ia },
         respuestas_info,
         respuestas_sistema,
       ] = await Promise.all([
@@ -87,6 +90,7 @@ export function createConfigService(botId: string) {
         respuestas_info,
         respuestas_sistema,
         activo,
+        isAutoResponseEnabled,
         prompt_ia,
       };
       console.log(

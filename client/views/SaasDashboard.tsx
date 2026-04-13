@@ -8,6 +8,7 @@ interface Bot {
   status: string;
   readySince?: number;
   lastError?: string;
+  hasSession?: boolean;
 }
 
 const SaasDashboard: React.FC = () => {
@@ -22,24 +23,46 @@ const SaasDashboard: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newBotName, setNewBotName] = useState('');
   
+  const [billingData, setBillingData] = useState<any>(null);
+  
   const [qrModalBot, setQrModalBot] = useState<string | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [qrStatus, setQrStatus] = useState<string>('');
+
+  // Audio settings modal
+  const [audioModalBot, setAudioModalBot] = useState<string | null>(null);
+  const [audioEnabled, setAudioEnabled] = useState(false);
+  const [audioApiKey, setAudioApiKey] = useState('');
+  const [audioHasKey, setAudioHasKey] = useState(false);
+  const [audioSaving, setAudioSaving] = useState(false);
+  const [audioLoading, setAudioLoading] = useState(false);
+  const [audioMessage, setAudioMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showApiKey, setShowApiKey] = useState(false);
 
   const fetchBots = async () => {
     try {
       const token = await user?.getIdToken();
       if (!token) return;
 
-      // Always fetch only this user's bots (admins use "Configurar Bots" for the global view)
-      const res = await fetch('/api/saas/bots?onlyMine=true', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const [res, billingRes] = await Promise.all([
+        fetch('/api/saas/bots?onlyMine=true', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch('/api/saas/billing/me', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      ]);
       const data = await res.json();
+      const bData = await billingRes.json();
+      
       if (data.ok) {
         setBots(data.data);
       } else {
         setError(data.error || 'Error fetching bots');
+      }
+      
+      if (bData.ok) {
+        setBillingData(bData);
       }
     } catch (e: any) {
       setError(e.message);
@@ -86,6 +109,70 @@ const SaasDashboard: React.FC = () => {
       if (interval) clearInterval(interval);
     };
   }, [qrModalBot, user]);
+
+  // Load audio settings when modal opens
+  useEffect(() => {
+    if (!audioModalBot) return;
+    const loadAudioSettings = async () => {
+      setAudioLoading(true);
+      setAudioMessage(null);
+      setAudioApiKey('');
+      setShowApiKey(false);
+      try {
+        const token = await user?.getIdToken();
+        const res = await fetch(`/api/saas/bots/${audioModalBot}/audio-settings`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.ok) {
+          setAudioEnabled(data.data.audioAnalysisEnabled);
+          setAudioHasKey(data.data.hasKey);
+          setAudioApiKey(''); // Don't prefill the key field
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setAudioLoading(false);
+      }
+    };
+    loadAudioSettings();
+  }, [audioModalBot, user]);
+
+  const handleSaveAudioSettings = async () => {
+    if (!audioModalBot) return;
+    setAudioSaving(true);
+    setAudioMessage(null);
+    try {
+      const token = await user?.getIdToken();
+      const body: Record<string, any> = { audioAnalysisEnabled: audioEnabled };
+      // Only send the key if user typed a new one
+      if (audioApiKey.trim()) {
+        body.openaiApiKey = audioApiKey.trim();
+      }
+      const res = await fetch(`/api/saas/bots/${audioModalBot}/audio-settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setAudioMessage({ type: 'success', text: '✅ Configuración guardada correctamente.' });
+        if (audioApiKey.trim()) {
+          setAudioHasKey(true);
+          setAudioApiKey('');
+        }
+      } else {
+        setAudioMessage({ type: 'error', text: data.error || 'Error al guardar.' });
+      }
+    } catch (e: any) {
+      setAudioMessage({ type: 'error', text: e.message });
+    } finally {
+      setAudioSaving(false);
+    }
+  };
 
   const handleCreateBot = async () => {
     if (!newBotName) return;
@@ -167,8 +254,10 @@ const SaasDashboard: React.FC = () => {
     switch (status) {
       case 'ready': return <span className="px-2 py-1 bg-[#25d366]/20 text-[#25d366] text-xs font-bold rounded-full border border-[#25d366]/30">Activo</span>;
       case 'qr': return <span className="px-2 py-1 bg-blue-500/20 text-blue-400 text-xs font-bold rounded-full border border-blue-500/30">Esperando QR</span>;
+      case 'initializing': return <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs font-bold rounded-full border border-yellow-500/30">Iniciando…</span>;
       case 'error': return <span className="px-2 py-1 bg-red-500/20 text-red-400 text-xs font-bold rounded-full border border-red-500/30">Error</span>;
       case 'disconnected': return <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs font-bold rounded-full border border-yellow-500/30">Desconectado</span>;
+      case 'idle': return <span className="px-2 py-1 bg-gray-500/20 text-gray-400 text-xs font-bold rounded-full border border-gray-500/30">Pausado</span>;
       default: return <span className="px-2 py-1 bg-gray-500/20 text-gray-400 text-xs font-bold rounded-full border border-gray-500/30">{status}</span>;
     }
   };
@@ -221,12 +310,27 @@ const SaasDashboard: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {bots.map(bot => (
+          {bots.map(bot => {
+            // Find subscription for this bot
+            const sub = billingData?.subscriptions?.find((s: any) => s.botId === bot.botId);
+            const trialActive = billingData?.trial?.active ?? false;
+            
+            // Check if it can run
+            const canRun = trialActive || (sub?.isActive ?? false);
+            
+            return (
             <div key={bot.botId} className="bg-[#12121a] border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-all shadow-xl flex flex-col">
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h3 className="text-lg font-bold text-white mb-1">{bot.nombre}</h3>
-                  <code className="text-xs text-gray-500 bg-black/50 px-2 py-1 rounded">{bot.botId}</code>
+                  <p className="font-mono text-xs text-gray-500 mb-4">{bot.botId}</p>
+                  
+                  {!isAdmin && !canRun && (
+                    <div className="mb-4 text-xs font-semibold px-3 py-2 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg flex justify-between items-center">
+                      <span>No tienes plan activo</span>
+                      <button onClick={() => navigate('/saas/subscription')} className="underline">Suscribir</button>
+                    </div>
+                  )}
                 </div>
                 {getStatusBadge(bot.status)}
               </div>
@@ -248,22 +352,43 @@ const SaasDashboard: React.FC = () => {
                 >
                   ⚙️ Gestionar
                 </button>
-                {(bot.status === 'qr' || bot.status === 'initializing') && (
+
+                {/* Vincular: solo cuando hay proceso QR activo Y aun sin sesión guardada */}
+                {(bot.status === 'qr' || bot.status === 'initializing') && !bot.hasSession && (
                   <button onClick={() => setQrModalBot(bot.botId)} className="flex-1 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 py-2 rounded-lg text-sm font-medium transition-colors">
                     📱 Vincular
                   </button>
                 )}
-                {bot.status === 'ready' ? (
+
+                {/* Parar: solo cuando está activo */}
+                {bot.status === 'ready' && (
                   <button onClick={() => botAction(bot.botId, 'stop')} className="flex-1 bg-white/5 text-white hover:bg-white/10 py-2 rounded-lg text-sm font-medium transition-colors">
                     ⏹ Parar
                   </button>
-                ) : (bot.status === 'idle' || bot.status === 'disconnected' || bot.status === 'error') ? (
-                  <button onClick={() => botAction(bot.botId, 'start')} className="flex-1 bg-[#25d366]/10 text-[#25d366] hover:bg-[#25d366]/20 py-2 rounded-lg text-sm font-medium transition-colors">
-                    ▶ Iniciar
+                )}
+
+                {/* Iniciar: cuando está detenido (con sesión) o desconectado */}
+                {(bot.status === 'idle' || bot.status === 'disconnected' || bot.status === 'error') && (
+                  <button
+                    onClick={() => {
+                      if (!bot.hasSession) {
+                        // Sin sesión: iniciar y abrir modal de QR
+                        botAction(bot.botId, 'start').then(() => setQrModalBot(bot.botId));
+                      } else {
+                        botAction(bot.botId, 'start');
+                      }
+                    }}
+                    className="flex-1 bg-[#25d366]/10 text-[#25d366] hover:bg-[#25d366]/20 py-2 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    {bot.hasSession ? '▶ Iniciar' : '📱 Iniciar y Vincular'}
                   </button>
-                ) : null}
+                )}
+
                 <button onClick={() => botAction(bot.botId, 'restart')} title="Reiniciar" className="w-10 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg flex items-center justify-center transition-colors">
                   ↺
+                </button>
+                <button onClick={() => setAudioModalBot(bot.botId)} title="Configurar análisis de audio" className="w-10 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 rounded-lg flex items-center justify-center transition-colors text-base">
+                  🎙️
                 </button>
                 <button onClick={() => clearSession(bot.botId)} title="Limpiar sesión (re-escanear QR)" className="w-10 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 rounded-lg flex items-center justify-center transition-colors text-base">
                   🧹
@@ -273,7 +398,8 @@ const SaasDashboard: React.FC = () => {
                 </button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -340,8 +466,123 @@ const SaasDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Audio Settings Modal */}
+      {audioModalBot && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#12121a] border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center text-xl">🎙️</div>
+              <div>
+                <h2 className="text-xl font-bold text-white">Análisis de Audio</h2>
+                <p className="text-gray-500 text-xs">Transcripción con OpenAI Whisper</p>
+              </div>
+            </div>
+
+            {audioLoading ? (
+              <div className="text-center py-8 text-gray-500">
+                <div className="animate-spin text-2xl mb-2">⚙️</div>
+                <p className="text-sm">Cargando configuración...</p>
+              </div>
+            ) : (
+              <>
+                {/* Toggle */}
+                <div className="flex items-center justify-between bg-[#1a1a26] border border-white/5 rounded-xl px-4 py-3 mb-4">
+                  <div>
+                    <p className="text-sm font-medium text-white">Activar análisis de audio</p>
+                    <p className="text-xs text-gray-500 mt-0.5">El bot transcribirá los audios recibidos</p>
+                  </div>
+                  <button
+                    onClick={() => setAudioEnabled(!audioEnabled)}
+                    className={`relative w-12 h-7 rounded-full transition-colors duration-200 ${
+                      audioEnabled ? 'bg-purple-500' : 'bg-gray-700'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform duration-200 ${
+                        audioEnabled ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* API Key input */}
+                <div className="mb-4">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    OpenAI API Key
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showApiKey ? 'text' : 'password'}
+                      className="w-full bg-[#1a1a26] border border-white/5 rounded-xl px-4 py-3 pr-20 text-white text-sm font-mono focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all"
+                      placeholder={audioHasKey ? '••••••••  (ya configurada)' : 'sk-...'}
+                      value={audioApiKey}
+                      onChange={(e) => setAudioApiKey(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                    >
+                      {showApiKey ? '🙈 Ocultar' : '👁 Ver'}
+                    </button>
+                  </div>
+                  {audioHasKey && !audioApiKey && (
+                    <p className="text-xs text-green-400/70 mt-1.5 flex items-center gap-1">
+                      <span>✓</span> Ya hay una API Key guardada. Deja en blanco para mantenerla.
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-600 mt-1.5">
+                    Obtén tu key en{' '}
+                    <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="text-purple-400 hover:text-purple-300 underline">
+                      platform.openai.com/api-keys
+                    </a>
+                  </p>
+                </div>
+
+                {/* Status message */}
+                {audioMessage && (
+                  <div className={`rounded-xl px-4 py-3 mb-4 text-sm ${
+                    audioMessage.type === 'success'
+                      ? 'bg-green-500/10 border border-green-500/20 text-green-400'
+                      : 'bg-red-500/10 border border-red-500/20 text-red-400'
+                  }`}>
+                    {audioMessage.text}
+                  </div>
+                )}
+
+                {/* Info box */}
+                <div className="bg-purple-500/5 border border-purple-500/10 rounded-xl px-4 py-3 mb-6">
+                  <p className="text-xs text-purple-300/70 leading-relaxed">
+                    <strong className="text-purple-300">ℹ️ Información:</strong> El bot usará tu API Key de OpenAI para transcribir audios con el modelo Whisper. 
+                    Se cobra por uso directamente en tu cuenta de OpenAI. Si la función está desactivada, 
+                    el bot responderá que el análisis de audio no está activo.
+                  </p>
+                </div>
+              </>
+            )}
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => { setAudioModalBot(null); setAudioMessage(null); }}
+                className="px-5 py-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-colors font-medium"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveAudioSettings}
+                disabled={audioSaving || audioLoading}
+                className="bg-purple-500 hover:bg-purple-400 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {audioSaving ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default SaasDashboard;
+
