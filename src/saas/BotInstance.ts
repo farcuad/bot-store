@@ -391,6 +391,13 @@ export class BotInstance extends EventEmitter {
         config.prompt_ia
       );
 
+      // 6. Finalizar respuesta (Validando estado humano nuevamente)
+      const currentStatus = await this.sessionMgr.getStatusFromFirestore(from);
+      if (currentStatus === "human") {
+        console.log(`[${this.botId}] 👤 Abortando respuesta IA en ${from} (Intervención humana detectada durante generación).`);
+        return;
+      }
+
       await this._finalizeResponse(from, nombre, session, respuesta, fullText, config);
       await this.statsMgr.saveStats();
 
@@ -448,7 +455,16 @@ export class BotInstance extends EventEmitter {
 
     this.statsMgr.incrementarMensajesRespondidos();
     this.sessionMgr.appendToHistory(session, "assistant", respuesta);
-    await this.sessionMgr.saveSession(from, session);
+    
+    // Solo guardamos si el estado sigue siendo bot para no sobreescribir intervenciones humanas
+    const currentStatus = await this.sessionMgr.getStatusFromFirestore(from);
+    if (currentStatus === "bot") {
+      await this.sessionMgr.saveSession(from, session);
+    } else {
+      console.log(`[${this.botId}] 👤 No se sobreescribe estado humano en ${from}.`);
+      // Aún así guardamos la historia en memoria si es necesario, pero saveSession ya lo hace.
+      // Sin embargo, queremos evitar que el "status: bot" de 'session' machaque el "human" de Firestore.
+    }
 
     if (respuesta.trim()) {
       this.recentlySentMessages.add(respuesta.trim());

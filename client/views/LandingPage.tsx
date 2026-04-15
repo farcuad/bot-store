@@ -103,6 +103,49 @@ const faqItems: FaqItem[] = [
   },
 ];
 
+const pricingPlans = [
+  {
+    name: "Basic",
+    price: "$19",
+    description: "Ideal para pequeños negocios que están empezando.",
+    features: [
+      "Respuestas 24/7 con IA",
+      "Base de conocimiento ilimitada",
+      "Configuración en 5 minutos",
+      "1 Bot activo",
+    ],
+    color: "from-blue-500/20 to-indigo-500/10 border-blue-500/20 text-blue-400",
+    buttonColor: "bg-white/5 hover:bg-white/10 text-white border-white/10",
+  },
+  {
+    name: "Pro",
+    price: "$29",
+    popular: true,
+    description: "Para empresas que necesitan automatización avanzada.",
+    features: [
+      "Todo lo del plan Basic",
+      "API de comunicación (REST)",
+      "Responde audios",
+      "Integraciones con sistemas",
+    ],
+    color: "from-[#25d366]/20 to-teal-500/10 border-[#25d366]/40 text-[#25d366]",
+    buttonColor: "bg-[#25d366] hover:bg-[#20c55d] text-black",
+  },
+  {
+    name: "Premium",
+    price: "$39",
+    description: "La solución completa para agencias y grandes equipos.",
+    features: [
+      "Todo lo del plan Pro",
+      "Múltiples bots (Multi-número)",
+      "Gestión de equipos",
+      "Soporte prioritario 1-a-1",
+    ],
+    color: "from-violet-500/20 to-purple-500/10 border-violet-500/20 text-violet-400",
+    buttonColor: "bg-white/5 hover:bg-white/10 text-white border-white/10",
+  },
+];
+
 // ── Icons ───────────────────────────────────────────────────────────────────
 
 const CheckIcon = () => (
@@ -215,10 +258,10 @@ function Hero() {
             <h1 className="text-5xl lg:text-6xl xl:text-7xl font-bold leading-[1.07] tracking-tight mb-6 text-white">
               Vende más mientras{" "}
               <span className="relative">
-                <span className="relative z-10 bg-gradient-to-r from-[#25d366] to-teal-400 bg-clip-text text-transparent">
+                <span className="relative z-10 bg-linear-to-r from-[#25d366] to-teal-400 bg-clip-text text-transparent">
                   duermes
                 </span>
-                <span className="absolute -bottom-1 left-0 w-full h-px bg-gradient-to-r from-[#25d366] to-teal-400 opacity-50" />
+                <span className="absolute -bottom-1 left-0 w-full h-px bg-linear-to-r from-[#25d366] to-teal-400 opacity-50" />
               </span>
             </h1>
 
@@ -358,7 +401,7 @@ function Features() {
           <h2 className="text-4xl lg:text-5xl font-bold text-white mb-4 tracking-tight">
             Todo lo que necesitas para{" "}
             <br className="hidden lg:block" />
-            <span className="text-slate-400">automatizar tu WhatsApp</span>
+            <span className="text-slate-400">automatizar tu WhatsApp con IA</span>
           </h2>
           <p className="text-slate-500 max-w-2xl mx-auto text-lg leading-relaxed">
             Desde IA conversacional hasta analíticas avanzadas. Whaibot tiene todo lo que necesitas para transformar tu WhatsApp en un canal de ventas automatizado.
@@ -369,9 +412,9 @@ function Features() {
           {features.map((f) => (
             <div
               key={f.title}
-              className={`group relative p-6 rounded-2xl bg-gradient-to-br ${f.color} border backdrop-blur-sm hover:scale-[1.02] transition-all duration-300 cursor-default`}
+              className={`group relative p-6 rounded-2xl bg-linear-to-br ${f.color} border backdrop-blur-sm hover:scale-[1.02] transition-all duration-300 cursor-default`}
             >
-              <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${f.color} border flex items-center justify-center mb-5`}>
+              <div className={`w-12 h-12 rounded-xl bg-linear-to-br ${f.color} border flex items-center justify-center mb-5`}>
                 {f.icon}
               </div>
               <h3 className="text-lg font-bold text-white mb-2">{f.title}</h3>
@@ -428,7 +471,7 @@ function HowItWorks() {
             <div key={step.number} className="relative group">
               {/* Connector */}
               {i < steps.length - 1 && (
-                <div className="hidden lg:block absolute top-8 left-full w-full h-px bg-gradient-to-r from-white/10 to-transparent z-10" />
+                <div className="hidden lg:block absolute top-8 left-full w-full h-px bg-linear-to-r from-white/10 to-transparent z-10" />
               )}
               <div className="bg-[#0d0d1a] border border-white/8 rounded-2xl p-6 hover:border-[#25d366]/30 transition-all duration-300 h-full">
                 <div className="text-4xl font-black text-[#25d366]/20 mb-4 font-mono">{step.number}</div>
@@ -438,6 +481,80 @@ function HowItWorks() {
             </div>
           ))}
         </div>
+      </div>
+    </section>
+  );
+}
+
+function Pricing() {
+  return (
+    <section id="precios" className="py-24 px-6 relative overflow-hidden">
+      {/* Background decoration */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-[#25d366]/5 rounded-full blur-[120px] -z-10" />
+      
+      <div className="max-w-7xl mx-auto">
+        <div className="text-center mb-16">
+          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 text-slate-400 text-xs font-semibold px-4 py-1.5 rounded-full mb-6">
+            Planes
+          </div>
+          <h2 className="text-4xl lg:text-5xl font-bold text-white mb-4 tracking-tight">
+            Elige el plan perfecto para <span className="text-[#25d366]">tu negocio</span> con IA
+          </h2>
+          <p className="text-slate-500 text-lg max-w-2xl mx-auto">
+            Sin costos ocultos. Escalabilidad total para acompañar el crecimiento de tu empresa.
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-8">
+          {pricingPlans.map((plan) => (
+            <div
+              key={plan.name}
+              className={`relative flex flex-col p-8 rounded-3xl bg-[#0d0d1a] border transition-all duration-500 hover:translate-y-[-8px] ${
+                plan.popular ? "border-[#25d366]/50 shadow-2xl shadow-[#25d366]/10 scale-105 z-10" : "border-white/5"
+              }`}
+            >
+              {plan.popular && (
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-[#25d366] text-black text-[10px] font-black uppercase tracking-widest px-4 py-1 rounded-full shadow-lg shadow-[#25d366]/20">
+                  Más Popular
+                </div>
+              )}
+
+              <div className="mb-8">
+                <h3 className="text-xl font-bold text-white mb-2">{plan.name}</h3>
+                <p className="text-slate-500 text-sm leading-relaxed">{plan.description}</p>
+              </div>
+
+              <div className="mb-8 flex items-baseline gap-1">
+                <span className="text-4xl font-bold text-white">{plan.price}</span>
+                {plan.price !== "Consultar" && <span className="text-slate-500 text-sm">/mes</span>}
+              </div>
+
+              <div className="space-y-4 mb-10 flex-grow">
+                {plan.features.map((feature, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <div className={`mt-1 shrink-0 ${plan.popular ? "text-[#25d366]" : "text-slate-400"}`}>
+                      <CheckIcon />
+                    </div>
+                    <span className="text-slate-400 text-sm leading-tight">{feature}</span>
+                  </div>
+                ))}
+              </div>
+
+              <a
+                href="https://wa.me/584127575904"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`w-full py-4 px-6 rounded-xl font-bold text-center transition-all duration-200 border ${plan.buttonColor}`}
+              >
+                {plan.name === "Premium" ? "Contactar Ventas" : "Empezar ahora"}
+              </a>
+            </div>
+          ))}
+        </div>
+        
+        <p className="text-center text-slate-600 text-sm mt-12">
+          ¿Necesitas un plan personalizado? <a href="https://wa.me/584127575904" className="text-[#25d366] hover:underline">Habla con nosotros</a>
+        </p>
       </div>
     </section>
   );
@@ -497,7 +614,7 @@ function CTA() {
   return (
     <section className="py-24 px-6">
       <div className="max-w-4xl mx-auto">
-        <div className="relative bg-gradient-to-br from-[#0f1f14] to-[#0d0d1a] border border-[#25d366]/20 rounded-3xl p-12 text-center overflow-hidden">
+        <div className="relative bg-linear-to-br from-[#0f1f14] to-[#0d0d1a] border border-[#25d366]/20 rounded-3xl p-12 text-center overflow-hidden">
           {/* Background glow */}
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-48 bg-[#25d366]/10 rounded-full blur-[80px]" />
 
@@ -597,6 +714,7 @@ export default function WhaibotLanding() {
         <Hero />
         <Features />
         <HowItWorks />
+        <Pricing />
         <FaqAccordion />
         <CTA />
       </main>
