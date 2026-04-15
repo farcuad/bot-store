@@ -227,7 +227,12 @@ export class BotInstance extends EventEmitter {
   // ─── Outgoing Message Handler (Human Intervention Detection) ──────────────
 
   private async _handleOutgoingMessage(msg: any): Promise<void> {
-    const remoteId = msg.to;
+    const rawTo = typeof msg.to === "string" ? msg.to : msg.to._serialized;
+    // Normalizar ID: eliminar sufijos de dispositivo (:1, :2...) y lids si es posible,
+    // o simplemente confiar en que el mensaje fue enviado a un ID que queremos rastrear.
+    // Usualmente para sesiones usamos el ID principal.
+    const remoteId = rawTo.split(':')[0].split('@')[0] + "@c.us";
+
     const config = this.configSvc.getConfig();
     const nowInSeconds = Math.floor(Date.now() / 1000);
 
@@ -325,21 +330,26 @@ export class BotInstance extends EventEmitter {
       const sys = (key: string): string => config.respuestas_sistema[key]?.texto ?? "";
 
       // 1. Obtener datos de sesión y contacto de forma segura
-      let session = await this.sessionMgr.getSession(from);
       const firstMsg = pending.rawMessages[0];
       const contact = await firstMsg.getContact();
+      
+      // Normalización del ID: usamos el ID serializado del contacto (canonical JID)
+      // para asegurar que la sesión se guarde por número y no por IDs temporales/lids.
+      const realFrom = contact.id._serialized;
+
+      let session = await this.sessionMgr.getSession(realFrom);
       const nombre = contact.pushname || "amigo";
       let instruccionExtra = "";
 
       // 2. Manejo de Sesión Nueva / Recontacto
       if (!session) {
-        await this.sessionMgr.saveSession(from, {
+        await this.sessionMgr.saveSession(realFrom, {
           contactName: nombre,
           last_interaction: nowInSeconds,
           status: "bot",
           history: [],
         });
-        session = (await this.sessionMgr.getSession(from))!;
+        session = (await this.sessionMgr.getSession(realFrom))!;
         const welcomeTemplate = sys("saludoInicial");
         if (welcomeTemplate) {
           instruccionExtra = `Saluda cálidamente a ${nombre} usando: "${welcomeTemplate.replace(/\{name\}/g, nombre)}".`;
@@ -358,14 +368,14 @@ export class BotInstance extends EventEmitter {
         const humanSince = session.human_since || 0;
         if (nowInSeconds - humanSince >= this.sessionMgr.AUTO_REACTIVATE_SECONDS) {
           session.status = "bot";
-          await this.sessionMgr.saveSession(from, session);
+          await this.sessionMgr.saveSession(realFrom, session);
           const reactivacionMsg = sys("botReactivado");
           if (reactivacionMsg) {
             this.recentlySentMessages.add(reactivacionMsg.trim());
             await firstMsg.reply(reactivacionMsg);
           }
         } else {
-          console.log(`[${this.botId}] 👤 Ignorando ráfaga en ${from} (Estado Humano).`);
+          console.log(`[${this.botId}] 👤 Ignorando ráfaga en ${realFrom} (Estado Humano).`);
           return;
         }
       }
@@ -392,13 +402,13 @@ export class BotInstance extends EventEmitter {
       );
 
       // 6. Finalizar respuesta (Validando estado humano nuevamente)
-      const currentStatus = await this.sessionMgr.getStatusFromFirestore(from);
+      const currentStatus = await this.sessionMgr.getStatusFromFirestore(realFrom);
       if (currentStatus === "human") {
-        console.log(`[${this.botId}] 👤 Abortando respuesta IA en ${from} (Intervención humana detectada durante generación).`);
+        console.log(`[${this.botId}] 👤 Abortando respuesta IA en ${realFrom} (Intervención humana detectada durante generación).`);
         return;
       }
 
-      await this._finalizeResponse(from, nombre, session, respuesta, fullText, config);
+      await this._finalizeResponse(realFrom, nombre, session, respuesta, fullText, config);
       await this.statsMgr.saveStats();
 
     } catch (err) {
