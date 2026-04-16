@@ -51,6 +51,7 @@ export class BotInstance extends EventEmitter {
   private aggregationMap = new Map<string, {
     timer: NodeJS.Timeout;
     rawMessages: any[];
+    isProcessing?: boolean;
   }>();
   private readonly DEBOUNCE_MS = 5000;
   private processedMsgIds = new Set<string>();
@@ -275,6 +276,15 @@ export class BotInstance extends EventEmitter {
       status: "human",
       human_since: nowInSeconds,
     });
+
+    // Cancelar cualquier agregación pendiente si el humano respondió
+    const pending = this.aggregationMap.get(remoteId);
+    if (pending) {
+      if (pending.timer) clearTimeout(pending.timer);
+      this.aggregationMap.delete(remoteId);
+      console.log(`[${this.botId}] 🛑 Agregación cancelada en ${remoteId} por intervención humana.`);
+    }
+
     console.log(`[${this.botId}] 👤 Intervención humana detectada en ${remoteId}.`);
   }
 
@@ -310,9 +320,15 @@ export class BotInstance extends EventEmitter {
         this.aggregationMap.set(from, pending);
         console.log(`[${this.botId}] 📥 Iniciando agregación para ${from}...`);
       } else {
-        clearTimeout(pending.timer);
+        // Si ya se está procesando en la IA, no reiniciamos el timer de esa instancia,
+        // pero acumulamos los mensajes para que se procesen después o se ignoren si ya terminó.
         pending.rawMessages.push(msg);
-        pending.timer = setTimeout(() => this._triggerAggregation(from), this.DEBOUNCE_MS);
+
+        // Solo reiniciamos el timer si NO se está procesando actualmente en la IA
+        if (!pending.isProcessing) {
+          clearTimeout(pending.timer);
+          pending.timer = setTimeout(() => this._triggerAggregation(from), this.DEBOUNCE_MS);
+        }
       }
     } catch (err) {
       console.error(`[${this.botId}] ❌ Error crítico en _handleMessage:`, err);
@@ -322,7 +338,9 @@ export class BotInstance extends EventEmitter {
   private async _triggerAggregation(from: string) {
     const pending = this.aggregationMap.get(from);
     if (!pending) return;
-    this.aggregationMap.delete(from);
+
+    // Marcar como procesando en lugar de borrar inmediatamente
+    pending.isProcessing = true;
 
     try {
       const nowInSeconds = Math.floor(Date.now() / 1000);
@@ -330,7 +348,10 @@ export class BotInstance extends EventEmitter {
       const sys = (key: string): string => config.respuestas_sistema[key]?.texto ?? "";
 
       // 1. Obtener datos de sesión y contacto de forma segura
-      const firstMsg = pending.rawMessages[0];
+      const snapshotMessages = [...pending.rawMessages];
+      pending.rawMessages = []; // Limpiamos el buffer actual para capturar nuevos mensajes durante el await
+
+      const firstMsg = snapshotMessages[0];
       const contact = await firstMsg.getContact();
       
       // Normalización del ID: usamos el ID serializado del contacto (canonical JID)
@@ -380,9 +401,9 @@ export class BotInstance extends EventEmitter {
         }
       }
 
-      // 4. Procesar todos los mensajes acumulados
+      // 4. Procesar todos los mensajes del snapshot
       const resolvedContents: string[] = [];
-      for (const msg of pending.rawMessages) {
+      for (const msg of snapshotMessages) {
         const content = await this._resolveMessageContent(msg, session, sys);
         if (content) resolvedContents.push(content);
       }
@@ -413,6 +434,16 @@ export class BotInstance extends EventEmitter {
 
     } catch (err) {
       console.error(`[${this.botId}] ❌ Error en agregación (${from}):`, err);
+    } finally {
+      pending.isProcessing = false;
+      
+      // Si llegaron nuevos mensajes mientras procesábamos, re-enviamos la agregación
+      if (pending.rawMessages.length > 0) {
+        console.log(`[${this.botId}] 🔄 Re-programando agregación para ${from} (nuevos mensajes durante proceso).`);
+        pending.timer = setTimeout(() => this._triggerAggregation(from), this.DEBOUNCE_MS);
+      } else {
+        this.aggregationMap.delete(from);
+      }
     }
   }
 
@@ -454,6 +485,7 @@ export class BotInstance extends EventEmitter {
     }
 
     if (respuesta.includes("[HABLAR_CON_HUMANO]")) {
+      console.log(`[${this.botId}] 🚨 Intervención humana detectada por IA para ${nombre}. Respuesta IA: "${respuesta}"`);
       respuesta = respuesta.replace("[HABLAR_CON_HUMANO]", "").trim();
       respuesta = `${respuesta}\n\n${sys("agenteAviso")}`;
       session.status = "human";

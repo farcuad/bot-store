@@ -81,6 +81,7 @@ export const llamarDeepseek = async (messages: any[]) => {
         "Content-Type": "application/json",
         Authorization: `Bearer ${DEEP_SEEK_API_KEY}`,
       },
+      timeout: 60000,
     },
   );
 
