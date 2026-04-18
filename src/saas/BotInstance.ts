@@ -9,6 +9,8 @@ import { generarRespuestaBot } from "../controllers/AiController.js";
 import { createSessionManager } from "../services/sessionManager.js";
 import { createConfigService } from "../services/configService.js";
 import { createStatsManager } from "../services/statsManager.js";
+import { createBotLogger } from "../services/botLogger.js";
+import type { BotLogger } from "../services/botLogger.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BOTS_ROOT = path.resolve(__dirname, "../../bots");
@@ -45,6 +47,7 @@ export class BotInstance extends EventEmitter {
   private sessionMgr: ReturnType<typeof createSessionManager>;
   private configSvc: ReturnType<typeof createConfigService>;
   private statsMgr: ReturnType<typeof createStatsManager>;
+  private logger: BotLogger;
   private recentlySentMessages = new Set<string>();
 
   // ── Aggregation state ──────────────────────────────────────────────────────
@@ -69,6 +72,7 @@ export class BotInstance extends EventEmitter {
     this.sessionMgr = createSessionManager(botId);
     this.configSvc = createConfigService(botId);
     this.statsMgr = createStatsManager(botId);
+    this.logger = createBotLogger(botId);
   }
 
   getState(): BotInstanceState {
@@ -110,14 +114,12 @@ export class BotInstance extends EventEmitter {
       this.state.status === "qr" ||
       this.state.status === "ready"
     ) {
-      console.log(
-        `[${this.botId}] Ya en ejecución (${this.state.status}) — omitiendo inicio duplicado.`,
-      );
+      this.logger.log(`Ya en ejecución (${this.state.status}) — omitiendo inicio duplicado.`);
       return;
     }
 
     this.setState({ status: "initializing", qr: null, lastError: null });
-    console.log(`[${this.botId}] 🚀 Iniciando instancia del bot…`);
+    this.logger.log(`🚀 Iniciando instancia del bot…`);
 
     const dataPath = path.join(BOTS_ROOT, this.botId);
 
@@ -157,7 +159,7 @@ export class BotInstance extends EventEmitter {
     });
 
     this.client.on("ready", () => {
-      console.log(`[${this.botId}] ✅ Bot listo y operativo.`);
+      this.logger.log(`✅ Bot listo y operativo.`);
       this.setState({ status: "ready", qr: null, readySince: Date.now() });
       this.emit("ready");
     });
@@ -282,10 +284,10 @@ export class BotInstance extends EventEmitter {
     if (pending) {
       if (pending.timer) clearTimeout(pending.timer);
       this.aggregationMap.delete(remoteId);
-      console.log(`[${this.botId}] 🛑 Agregación cancelada en ${remoteId} por intervención humana.`);
+      this.logger.log(`🛑 Agregación cancelada en ${remoteId} por intervención humana.`);
     }
 
-    console.log(`[${this.botId}] 👤 Intervención humana detectada en ${remoteId}.`);
+    this.logger.log(`👤 Intervención humana detectada en ${remoteId}.`);
   }
 
   // ─── Incoming Message Handler (Aggregator) ──────────────────────────────
@@ -318,7 +320,7 @@ export class BotInstance extends EventEmitter {
           rawMessages: [msg],
         };
         this.aggregationMap.set(from, pending);
-        console.log(`[${this.botId}] 📥 Iniciando agregación para ${from}...`);
+        this.logger.log(`📥 Iniciando agregación para ${from}...`);
       } else {
         // Si ya se está procesando en la IA, no reiniciamos el timer de esa instancia,
         // pero acumulamos los mensajes para que se procesen después o se ignoren si ya terminó.
@@ -331,7 +333,7 @@ export class BotInstance extends EventEmitter {
         }
       }
     } catch (err) {
-      console.error(`[${this.botId}] ❌ Error crítico en _handleMessage:`, err);
+      this.logger.error(`Error crítico en _handleMessage:`, err);
     }
   }
 
@@ -357,6 +359,12 @@ export class BotInstance extends EventEmitter {
       // Normalización del ID: usamos el ID serializado del contacto (canonical JID)
       // para asegurar que la sesión se guarde por número y no por IDs temporales/lids.
       const realFrom = contact.id._serialized;
+
+      // Log del mensaje entrante
+      const incomingText = snapshotMessages
+        .map((m: any) => m.body || `[${m.type}]`)
+        .join(" | ");
+      this.logger.logMessage(realFrom, incomingText);
 
       let session = await this.sessionMgr.getSession(realFrom);
       const nombre = contact.pushname || "amigo";
@@ -396,7 +404,7 @@ export class BotInstance extends EventEmitter {
             await firstMsg.reply(reactivacionMsg);
           }
         } else {
-          console.log(`[${this.botId}] 👤 Ignorando ráfaga en ${realFrom} (Estado Humano).`);
+          this.logger.log(`👤 Ignorando ráfaga en ${realFrom} (Estado Humano).`);
           return;
         }
       }
@@ -425,7 +433,7 @@ export class BotInstance extends EventEmitter {
       // 6. Finalizar respuesta (Validando estado humano nuevamente)
       const currentStatus = await this.sessionMgr.getStatusFromFirestore(realFrom);
       if (currentStatus === "human") {
-        console.log(`[${this.botId}] 👤 Abortando respuesta IA en ${realFrom} (Intervención humana detectada durante generación).`);
+        this.logger.log(`👤 Abortando respuesta IA en ${realFrom} (Intervención humana detectada durante generación).`);
         return;
       }
 
@@ -433,13 +441,13 @@ export class BotInstance extends EventEmitter {
       await this.statsMgr.saveStats();
 
     } catch (err) {
-      console.error(`[${this.botId}] ❌ Error en agregación (${from}):`, err);
+      this.logger.error(`Error en agregación (${from}):`, err);
     } finally {
       pending.isProcessing = false;
       
       // Si llegaron nuevos mensajes mientras procesábamos, re-enviamos la agregación
       if (pending.rawMessages.length > 0) {
-        console.log(`[${this.botId}] 🔄 Re-programando agregación para ${from} (nuevos mensajes durante proceso).`);
+        this.logger.log(`🔄 Re-programando agregación para ${from} (nuevos mensajes durante proceso).`);
         pending.timer = setTimeout(() => this._triggerAggregation(from), this.DEBOUNCE_MS);
       } else {
         this.aggregationMap.delete(from);
@@ -485,7 +493,7 @@ export class BotInstance extends EventEmitter {
     }
 
     if (respuesta.includes("[HABLAR_CON_HUMANO]")) {
-      console.log(`[${this.botId}] 🚨 Intervención humana detectada por IA para ${nombre}. Respuesta IA: "${respuesta}"`);
+      this.logger.log(`🚨 Intervención humana detectada por IA para ${nombre}. Respuesta IA: "${respuesta}"`);
       respuesta = respuesta.replace("[HABLAR_CON_HUMANO]", "").trim();
       respuesta = `${respuesta}\n\n${sys("agenteAviso")}`;
       session.status = "human";
@@ -503,9 +511,7 @@ export class BotInstance extends EventEmitter {
     if (currentStatus === "bot") {
       await this.sessionMgr.saveSession(from, session);
     } else {
-      console.log(`[${this.botId}] 👤 No se sobreescribe estado humano en ${from}.`);
-      // Aún así guardamos la historia en memoria si es necesario, pero saveSession ya lo hace.
-      // Sin embargo, queremos evitar que el "status: bot" de 'session' machaque el "human" de Firestore.
+      this.logger.log(`👤 No se sobreescribe estado humano en ${from}.`);
     }
 
     if (respuesta.trim()) {
@@ -528,7 +534,7 @@ export class BotInstance extends EventEmitter {
       });
       return transcription.text || null;
     } catch (error: any) {
-      console.error(`[${this.botId}] ❌ Error Whisper:`, error.message);
+      this.logger.error(`Error Whisper:`, error.message);
       return null;
     } finally {
       if (fs.existsSync(tempFilePath)) {

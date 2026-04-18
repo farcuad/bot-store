@@ -7,6 +7,7 @@ import { db } from "../config/firebase.js";
 import { createConfigService } from "../services/configService.js";
 import { createSessionManager } from "../services/sessionManager.js";
 import { createStatsManager } from "../services/statsManager.js";
+import { createBotLogger } from "../services/botLogger.js";
 import type { UserProfile } from "../admin/routes.js";
 
 const router = Router();
@@ -457,6 +458,31 @@ router.patch("/bots/:id/sessions/:sessionId", async (req: Request, res: Response
   }
 });
 
+/** DELETE /api/saas/bots/:id/sessions/:sessionId
+ *  Removes a contact's session from Firestore.
+ *  When they write again the bot will create a fresh session.
+ */
+router.delete("/bots/:id/sessions/:sessionId", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const sessionId = req.params.sessionId as string;
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, "Bot not found");
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) {
+      return fail(res, 403, "No autorizado");
+    }
+    await db
+      .collection("bots")
+      .doc(id)
+      .collection("sessions")
+      .doc(decodeURIComponent(sessionId))
+      .delete();
+    return ok(res, { deleted: sessionId });
+  } catch (e: any) {
+    return fail(res, 500, e.message);
+  }
+});
+
 // ── Config ────────────────────────────────────────────────────────────────────
 
 /** GET /api/saas/bots/:id/config */
@@ -602,4 +628,48 @@ router.delete("/bots/:id/respuestas-info/:rid", async (req, res) => {
   }
 });
 
+// ── Logs ──────────────────────────────────────────────────────────────────────
+
+/** GET /api/saas/bots/:id/logs
+ *  Returns the last 500 lines of the bot's activity log file.
+ */
+router.get("/bots/:id/logs", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, "Bot not found");
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) {
+      return fail(res, 403, "No autorizado");
+    }
+
+    const logger = createBotLogger(id);
+    const lines = logger.readLogs(500);
+    const size = logger.size();
+    return ok(res, { lines, size });
+  } catch (e: any) {
+    return fail(res, 500, e.message);
+  }
+});
+
+/** DELETE /api/saas/bots/:id/logs
+ *  Clears the bot's log file. Admin only.
+ */
+router.delete("/bots/:id/logs", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  if (!req.isAdmin) {
+    return fail(res, 403, "Solo los administradores pueden limpiar los logs");
+  }
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, "Bot not found");
+
+    const logger = createBotLogger(id);
+    logger.clearLogs();
+    return ok(res, { cleared: id });
+  } catch (e: any) {
+    return fail(res, 500, e.message);
+  }
+});
+
 export default router;
+

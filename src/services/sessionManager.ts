@@ -92,9 +92,13 @@ export function createSessionManager(botId: string) {
     const snap = await db.collection('bots').doc(botId).collection('sessions').get();
     return snap.docs.map(doc => {
       const d = doc.data();
+      // Prefer the stored 'phone' field; fall back to doc.id
+      // Strip any @c.us / @lid suffix and leading non-digits to always get a plain number
+      const rawPhone: string = (d.phone as string) || doc.id;
+      const phone = rawPhone.replace(/@.*$/, '').replace(/^\D+/, '');
       return {
         id: doc.id,
-        phone: doc.id.split('@')[0],
+        phone,
         contactName: d.contactName,
         last_interaction: d.last_interaction ? d.last_interaction * 1000 : 0,
         estado: d.status ?? 'bot',
