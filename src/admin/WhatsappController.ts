@@ -19,6 +19,7 @@ interface GroupMessageBody {
   to?: string;
   message?: string;
   mediaUrl?: string;
+  fromMe?: string;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -201,16 +202,16 @@ export const getGroupsController = async (req: Request, res: Response) => {
 export const sendGroupMessageController = async (req: Request, res: Response) => {
   try {
     const botId = req.params["botId"] as string;
-    const { to, message, mediaUrl } = req.body as GroupMessageBody;
+    const { to, message, mediaUrl, fromMe } = req.body as GroupMessageBody;
 
     if (!botId) {
       return res.status(400).json({ error: "botId es requerido" });
     }
 
-    if (!to || !message) {
+    if (!to || !message || !fromMe) {
       return res
         .status(400)
-        .json({ error: "Faltan datos requeridos: to, message" });
+        .json({ error: "Faltan datos requeridos: to, message o fromMe" });
     }
 
     // Validate that the recipient is a group

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { useGlassAlert } from 'glass-alert-animation';
 import { ArrowLeft, RefreshCw, Trash2, Play, Square, RotateCcw } from 'lucide-react';
 
 interface Bot {
@@ -17,6 +18,7 @@ const API_URL = import.meta.env.VITE_API_URL || '';
 export default function AdminBots() {
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const { fire } = useGlassAlert();
   const [bots, setBots] = useState<Bot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -63,18 +65,35 @@ export default function AdminBots() {
       });
       loadBots();
     } catch (e: any) {
-      alert(e.message);
+      fire({
+        title: 'Error',
+        text: e.message,
+        icon: 'error'
+      });
     }
   };
 
   const deleteBot = async (botId: string) => {
-    if (!confirm(`¿Eliminar el bot "${botId}"? Esta acción no se puede deshacer.`)) return;
+    const result = await fire({
+      title: `¿Eliminar el bot "${botId}"?`,
+      text: 'Esta acción no se puede deshacer.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
+    });
+    if (!result.isConfirmed) return;
+
     try {
       const headers = await getHeaders();
       await fetch(`${API_URL}/api/saas/bots/${botId}`, { method: 'DELETE', headers });
       loadBots();
     } catch (e: any) {
-      alert(e.message);
+      fire({
+        title: 'Error',
+        text: e.message,
+        icon: 'error'
+      });
     }
   };
 
@@ -139,7 +158,7 @@ export default function AdminBots() {
             </thead>
             <tbody className="divide-y divide-white/5">
               {bots.map((bot) => (
-                <tr key={bot.botId} className="hover:bg-white/[0.02] transition-colors">
+                <tr key={bot.botId} className="hover:bg-white/2 transition-colors">
                   <td className="p-4">
                     <div className="font-medium text-white">{bot.nombre}</div>
                     <code className="text-xs text-gray-500 bg-black/40 px-2 py-0.5 rounded">{bot.botId}</code>

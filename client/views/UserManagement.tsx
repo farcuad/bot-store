@@ -4,6 +4,7 @@ import { Check, X, Users as UsersIcon, ArrowLeft } from 'lucide-react';
 
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { useGlassAlert } from 'glass-alert-animation';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
@@ -24,6 +25,7 @@ export default function UserManagement() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { fire } = useGlassAlert();
 
   useEffect(() => {
     if (role !== 'admin') {
@@ -50,7 +52,11 @@ export default function UserManagement() {
       }
     } catch (e: any) {
       console.error(e);
-      alert('Error cargando usuarios: ' + (e.response?.data?.error || e.message));
+      fire({
+        title: 'Error',
+        text: 'Error cargando usuarios: ' + (e.response?.data?.error || e.message),
+        icon: 'error'
+      });
     } finally {
       setLoading(false);
     }
@@ -62,7 +68,11 @@ export default function UserManagement() {
       await axios.post(`${API_URL}/api/admin/users/${uid}/approve`, {}, { headers });
       setUsers(users.map(u => u.uid === uid ? { ...u, status: 'approved' } : u));
     } catch (e: any) {
-      alert('Error: ' + (e.response?.data?.error || e.message));
+      fire({
+        title: 'Error',
+        text: (e.response?.data?.error || e.message),
+        icon: 'error'
+      });
     }
   };
 
@@ -72,7 +82,11 @@ export default function UserManagement() {
       await axios.post(`${API_URL}/api/admin/users/${uid}/reject`, {}, { headers });
       setUsers(users.map(u => u.uid === uid ? { ...u, status: 'rejected' } : u));
     } catch (e: any) {
-      alert('Error: ' + (e.response?.data?.error || e.message));
+      fire({
+        title: 'Error',
+        text: (e.response?.data?.error || e.message),
+        icon: 'error'
+      });
     }
   };
 
@@ -83,7 +97,11 @@ export default function UserManagement() {
       await axios.patch(`${API_URL}/api/admin/users/${uid}/maxBots`, { maxBots }, { headers });
       setUsers(users.map(u => u.uid === uid ? { ...u, maxBots } : u));
     } catch (e: any) {
-      alert('Error: ' + (e.response?.data?.error || e.message));
+      fire({
+        title: 'Error',
+        text: (e.response?.data?.error || e.message),
+        icon: 'error'
+      });
     }
   };
 
@@ -102,7 +120,7 @@ export default function UserManagement() {
           <ArrowLeft className="h-5 w-5 text-gray-400" />
         </button>
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl sm:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400">
+          <h1 className="text-2xl sm:text-3xl font-bold bg-clip-text text-transparent bg-linear-to-r from-indigo-400 to-purple-400">
             Gestión de Usuarios
           </h1>
           <p className="text-gray-400 text-sm mt-1">Roles y aprobación de cuentas</p>
@@ -130,7 +148,7 @@ export default function UserManagement() {
             </thead>
             <tbody className="divide-y divide-white/5">
               {users.map(u => (
-                <tr key={u.uid} className="hover:bg-white/[0.02] transition-colors">
+                <tr key={u.uid} className="hover:bg-white/2 transition-colors">
                   <td className="p-4">
                     <div className="font-medium text-white">{u.displayName || 'Sin Nombre'}</div>
                     <div className="text-xs text-gray-500 font-mono mt-0.5 truncate max-w-[150px]">{u.uid}</div>
