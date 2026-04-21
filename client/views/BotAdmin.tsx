@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Activity, MessageSquare, Database, AlertCircle, RefreshCw, Edit2, Trash2, Download, Upload, RotateCcw } from 'lucide-react';
+import { Activity, MessageSquare, Database, AlertCircle, RefreshCw, Edit2, Trash2, Download, Upload, RotateCcw, ScrollText } from 'lucide-react';
 import axios from 'axios';
 
 interface BotStats {
@@ -42,13 +42,19 @@ interface ApiResponse<T = any> {
   error?: string;
 }
 
-type Tab = 'stats' | 'respuestas' | 'conversaciones' | 'no_ent';
+interface LogData {
+  lines: string[];
+  size: number;
+}
+
+type Tab = 'stats' | 'respuestas' | 'conversaciones' | 'no_ent' | 'logs';
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'stats',          label: 'Métricas',        icon: Activity },
   { id: 'respuestas',     label: 'Base de Datos',   icon: Database },
   { id: 'conversaciones', label: 'Conversaciones',  icon: MessageSquare },
   { id: 'no_ent',         label: 'No Entendidos',   icon: AlertCircle },
+  { id: 'logs',           label: 'Logs',            icon: ScrollText },
 ];
 
 const API_URL = import.meta.env.VITE_API_URL || '';
@@ -57,7 +63,7 @@ export default function BotAdmin() {
   const { botId } = useParams<{ botId: string }>();
   const botNumber = botId || '';
   const [activeTab, setActiveTab] = useState<Tab>('stats');
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
 
   const [loading, setLoading]           = useState(true);
   const [stats, setStats]               = useState<BotStats | null>(null);
@@ -73,6 +79,12 @@ export default function BotAdmin() {
 
   const importInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
+
+  // Logs state
+  const [logData, setLogData] = useState<LogData | null>(null);
+  const [clearingLogs, setClearingLogs] = useState(false);
+  const [logPhoneFilter, setLogPhoneFilter] = useState<string | null>(null);
+  const logContainerRef = useRef<HTMLDivElement>(null);
 
   // Bot metadata state
   const [botName, setBotName]           = useState<string>('');
@@ -154,6 +166,65 @@ export default function BotAdmin() {
     }
   };
 
+  // ── Logs ──────────────────────────────────────────────────────────────────
+
+  const loadLogs = useCallback(async () => {
+    if (!botId || !user) return;
+    try {
+      const headers = await getHeaders();
+      const res = await axios.get<ApiResponse<LogData>>(`${API_URL}/api/saas/bots/${botNumber}/logs`, { headers });
+      if (res.data.ok) {
+        setLogData(res.data.data);
+        setTimeout(() => {
+          if (logContainerRef.current) {
+            logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+          }
+        }, 50);
+      }
+    } catch (e) {
+      console.error('Error loading logs:', e);
+    }
+  }, [botId, user, botNumber]);
+
+  useEffect(() => {
+    if (activeTab !== 'logs') return;
+    loadLogs();
+    const interval = setInterval(loadLogs, 10000);
+    return () => clearInterval(interval);
+  }, [activeTab, loadLogs]);
+
+  const handleClearLogs = async () => {
+    if (!confirm('¿Limpiar el log del bot?\n\nSe eliminarán todas las entradas del archivo de log.')) return;
+    setClearingLogs(true);
+    try {
+      const token = await user?.getIdToken();
+      await axios.delete(`${API_URL}/api/saas/bots/${botNumber}/logs`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      setLogData({ lines: [], size: 0 });
+    } catch (e: any) {
+      alert('Error limpiando logs: ' + (e.response?.data?.error || e.message));
+    } finally {
+      setClearingLogs(false);
+    }
+  };
+
+  function formatLogLine(line: string): React.ReactNode {
+    if (line.includes('📩 MENSAJE de')) {
+      return <span className="text-emerald-400">{line}</span>;
+    }
+    if (line.includes('❌') || line.includes('ERROR')) {
+      return <span className="text-red-400">{line}</span>;
+    }
+    if (line.includes('👤') || line.includes('humana') || line.includes('Humano')) {
+      return <span className="text-yellow-400">{line}</span>;
+    }
+    if (line.includes('✅') || line.includes('listo') || line.includes('🚀')) {
+      return <span className="text-blue-400">{line}</span>;
+    }
+    return <span className="text-gray-400">{line}</span>;
+  }
+
   const saveRespuesta = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resText.trim()) return;
@@ -222,6 +293,20 @@ export default function BotAdmin() {
       setSessions(sessions.map(s => s.id === sessionId ? { ...s, contactName: trimmed || undefined } : s));
       setEditingSessionId(null);
     } catch (e: any) { alert('Error: ' + e.message); }
+  };
+
+  const deleteSession = async (sessionId: string, phone: string) => {
+    if (!confirm(`¿Eliminar el registro de +${phone}?\n\nSe eliminará su sesión. Cuando vuelva a escribir, el bot lo registrará como nuevo contacto.`)) return;
+    try {
+      const headers = await getHeaders();
+      await axios.delete<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/sessions/${encodeURIComponent(sessionId)}`, { headers });
+      setSessions(sessions.filter(s => s.id !== sessionId));
+    } catch (e: any) { alert('Error eliminando sesión: ' + (e.response?.data?.error || e.message)); }
+  };
+
+  const handleViewMessages = (phone: string) => {
+    setLogPhoneFilter(phone);
+    setActiveTab('logs');
   };
 
   const handleClearSession = async () => {
@@ -459,6 +544,7 @@ export default function BotAdmin() {
                         <th className="p-4 font-medium">Teléfono</th>
                         <th className="p-4 font-medium">Estado</th>
                         <th className="p-4 font-medium">Última interacción</th>
+                        <th className="p-4 font-medium text-right">Acciones</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
@@ -507,6 +593,25 @@ export default function BotAdmin() {
                           <td className="p-4 text-sm text-gray-400">
                             {s.last_interaction ? new Date(s.last_interaction).toLocaleString() : 'N/A'}
                           </td>
+                          <td className="p-4">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => handleViewMessages(s.phone)}
+                                className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-white bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 px-2.5 py-1.5 rounded-lg transition-all whitespace-nowrap"
+                                title="Ver mensajes de este número en el log"
+                              >
+                                <ScrollText className="h-3 w-3" />
+                                Ver mensajes
+                              </button>
+                              <button
+                                onClick={() => deleteSession(s.id, s.phone)}
+                                className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                                title="Eliminar registro de este contacto"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -551,6 +656,82 @@ export default function BotAdmin() {
                 </div>
               )
           )}
+
+          {/* LOGS */}
+          {activeTab === 'logs' && (() => {
+            const filteredLines = logPhoneFilter && logData
+              ? logData.lines.filter(line => line.includes(logPhoneFilter))
+              : (logData?.lines ?? []);
+            return (
+              <div className="space-y-4">
+                {/* Toolbar */}
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-2 text-sm text-gray-400 flex-wrap">
+                    <ScrollText className="h-4 w-4 shrink-0" />
+                    <span>
+                      {logData
+                        ? `${filteredLines.length}${logPhoneFilter ? ` de ${logData.lines.length}` : ''} líneas • ${(logData.size / 1024).toFixed(1)} KB`
+                        : 'Cargando...'}
+                    </span>
+                    {logPhoneFilter ? (
+                      <span className="flex items-center gap-1.5 bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 text-xs px-2.5 py-1 rounded-full">
+                        Filtrado: +{logPhoneFilter}
+                        <button
+                          onClick={() => setLogPhoneFilter(null)}
+                          className="hover:text-white ml-0.5 leading-none"
+                          title="Quitar filtro"
+                        >✕</button>
+                      </span>
+                    ) : (
+                      <span className="text-gray-600 text-xs">(auto-refresh cada 10s)</span>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={loadLogs}
+                      className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 px-3 py-1.5 rounded-xl transition-all"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      Actualizar
+                    </button>
+                    {isAdmin && (
+                      <button
+                        onClick={handleClearLogs}
+                        disabled={clearingLogs}
+                        className="flex items-center gap-1.5 text-sm text-red-400 hover:text-white bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 px-3 py-1.5 rounded-xl transition-all disabled:opacity-50"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        {clearingLogs ? 'Limpiando...' : 'Limpiar Log'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Terminal viewer */}
+                <div
+                  ref={logContainerRef}
+                  className="bg-black rounded-2xl border border-white/10 h-[60vh] overflow-y-auto p-4 font-mono text-xs leading-5 space-y-px"
+                  style={{ scrollBehavior: 'smooth' }}
+                >
+                  {filteredLines.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full gap-3 text-gray-600">
+                      <ScrollText className="h-10 w-10" />
+                      {logPhoneFilter
+                        ? <p>No hay mensajes de +{logPhoneFilter} en el log.</p>
+                        : <p>No hay entradas en el log todavía.</p>
+                      }
+                    </div>
+                  ) : (
+                    filteredLines.map((line, i) => (
+                      <div key={i} className="whitespace-pre-wrap break-all">
+                        {formatLogLine(line)}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
