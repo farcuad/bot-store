@@ -4,6 +4,7 @@ dotenv.config();
 import { startAdminServer } from "./admin/server.js";
 import { botManager } from "./saas/BotManager.js";
 import { imprimirResumenStats } from "./services/statsManager.js";
+import { broadcastScheduler } from "./services/broadcastScheduler.js";
 
 // Catch unhandled promise rejections so errors show clearly instead of crashing silently
 process.on("unhandledRejection", (reason) => {
@@ -24,5 +25,10 @@ try {
 } catch (err) {
   console.error("❌ Error inicalizando bots desde Firestore:", err);
 }
+
+// 3. Start broadcast scheduler (sends scheduled WA messages)
+broadcastScheduler.init().catch(err => {
+  console.error("❌ Error inicializando broadcastScheduler:", err);
+});
 
 imprimirResumenStats();

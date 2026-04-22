@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Activity, MessageSquare, Database, AlertCircle, RefreshCw, Edit2, Trash2, Download, Upload, RotateCcw, ScrollText } from 'lucide-react';
+import { Activity, MessageSquare, Database, AlertCircle, RefreshCw, Edit2, Trash2, Download, Upload, RotateCcw, ScrollText, FileText } from 'lucide-react';
 import axios from 'axios';
 import { useGlassAlert } from 'glass-alert-animation';
+import TemplatesTab from './TemplatesTab';
 
 interface BotStats {
   mensajes_recibidos?: number;
@@ -48,7 +49,7 @@ interface LogData {
   size: number;
 }
 
-type Tab = 'stats' | 'respuestas' | 'conversaciones' | 'no_ent' | 'logs';
+type Tab = 'stats' | 'respuestas' | 'conversaciones' | 'no_ent' | 'logs' | 'plantillas';
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'stats',          label: 'Métricas',        icon: Activity },
@@ -56,6 +57,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'conversaciones', label: 'Conversaciones',  icon: MessageSquare },
   { id: 'no_ent',         label: 'No Entendidos',   icon: AlertCircle },
   { id: 'logs',           label: 'Logs',            icon: ScrollText },
+  { id: 'plantillas',     label: 'Plantillas',      icon: FileText },
 ];
 
 const API_URL = import.meta.env.VITE_API_URL || '';
@@ -63,7 +65,9 @@ const API_URL = import.meta.env.VITE_API_URL || '';
 export default function BotAdmin() {
   const { botId } = useParams<{ botId: string }>();
   const botNumber = botId || '';
-  const [activeTab, setActiveTab] = useState<Tab>('stats');
+  const location = useLocation();
+  const initialTab = (location.state as any)?.initialTab as Tab | undefined;
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab || 'stats');
   const { user, isAdmin } = useAuth();
   const { fire } = useGlassAlert();
 
@@ -859,6 +863,11 @@ export default function BotAdmin() {
               </div>
             );
           })()}
+
+          {/* PLANTILLAS */}
+          {activeTab === 'plantillas' && (
+            <TemplatesTab botNumber={botNumber} getHeaders={getHeaders} />
+          )}
         </div>
       )}
     </div>
