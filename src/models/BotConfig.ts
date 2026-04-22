@@ -16,15 +16,6 @@ export interface InfoRespuesta {
 }
 
 /**
- * Documento en: bots/{botNumber}/respuestas_sistema/{messageKey}
- * Mensajes internos del bot (saludos, errores, notificaciones).
- */
-export interface SystemRespuesta {
-  /** Texto del mensaje. Puede contener el placeholder {name} */
-  texto: string;
-}
-
-/**
  * Documento en: bots/{botNumber}/horarios/atencion
  * Configura cuándo el bot puede aceptar pedidos/agendas.
  */
@@ -45,11 +36,12 @@ export interface HorarioConfig {
 export interface BotConfig {
   nombre: string;
   respuestas_info: Record<string, InfoRespuesta>;
-  respuestas_sistema: Record<string, SystemRespuesta>;
   //horario: HorarioConfig;
   activo: boolean;
   /** Si false, el bot no responde automáticamente a mensajes entrantes. */
   isAutoResponseEnabled: boolean;
   /** Prompt base para la IA. Si no existe, se usa uno por defecto. */
   prompt_ia?: string | undefined;
+  /** Zona horaria configurada para el bot */
+  timezone?: string;
 }

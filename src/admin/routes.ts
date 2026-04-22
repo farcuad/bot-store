@@ -28,8 +28,8 @@ const usersCol = () => db.collection("users");
 router.post("/send-message", validateApiKey, seendMessageController);
 
 // ── Group endpoints (Firebase auth required) ──────────────────────────────────
-router.get("/groupsBots/:botId", validateApiKey, getGroupsController);
-router.post("/groupsBots/:botId", validateApiKey, sendGroupMessageController);
+router.get("/groupsBots", validateApiKey, getGroupsController);
+router.post("/groupsBots", validateApiKey, sendGroupMessageController);
 
 const botRef = (req: Request) => {
   const botId = req.headers["x-bot-id"] as string;

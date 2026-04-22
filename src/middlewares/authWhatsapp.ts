@@ -20,27 +20,23 @@ export const validateApiKey = async (
     return;
   }
 
-  // Compatibilidad con la llave maestra global
-  if (clientKey === process.env.API_KEY) {
-    next();
-    return;
-  }
-
   // Verificación de llave específica por bot
-  const targetBotId = req.body?.botId;
-  
+  const targetBotId = req.headers["x-client-botid"] as string;
+
   if (!targetBotId) {
     res.status(400).json({
       error: "Bad Request",
-      message: "botId es requerido en el cuerpo de la petición",
+      message: "botId es requerido en el header x-client-botid de la petición",
     });
     return;
   }
-  
+
   try {
     const botKey = await botManager.getBotKey(targetBotId);
     if (!botKey || botKey !== clientKey) {
-      console.warn(`🚫 Intento de acceso no autorizado al bot ${targetBotId} desde: ${req.ip}`);
+      console.warn(
+        `🚫 Intento de acceso no autorizado al bot ${targetBotId} desde: ${req.ip}`,
+      );
       res.status(401).json({
         error: "No autorizado",
         message: "API Key inválida para este bot",

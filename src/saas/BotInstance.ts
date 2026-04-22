@@ -108,6 +108,10 @@ export class BotInstance extends EventEmitter {
     }
   }
 
+  async reloadConfig(): Promise<void> {
+    await this.configSvc.loadConfig();
+  }
+
   async start(): Promise<void> {
     if (
       this.state.status === "initializing" ||
@@ -296,8 +300,7 @@ export class BotInstance extends EventEmitter {
 
     const botTexts = [
       ...Object.values(config.respuestas_info).map((r) => r.texto),
-      ...Object.values(config.respuestas_sistema).map((r) => r.texto),
-      "📢 Contestale al usuario",
+      "📢 Contéstale al usuario",
     ];
 
     const isRecentMatch = this.recentlySentMessages.has(msg.body.trim());
@@ -386,7 +389,9 @@ export class BotInstance extends EventEmitter {
     try {
       const nowInSeconds = Math.floor(Date.now() / 1000);
       const config = this.configSvc.getConfig();
-      const sys = (key: string): string => config.respuestas_sistema[key]?.texto ?? "";
+      // sys: reads named system messages stored in respuestas_info with key prefix "sys_"
+      // (kept as a helper for backward compatibility; returns empty string if not found)
+      const sys = (key: string): string => (config.respuestas_info as any)[`sys_${key}`]?.texto ?? "";
 
       // 1. Obtener datos de sesión y contacto de forma segura
       const snapshotMessages = [...pending.rawMessages];
@@ -524,7 +529,7 @@ export class BotInstance extends EventEmitter {
 
   private async _finalizeResponse(from: string, nombre: string, session: any, respuesta: string, fullText: string, config: any) {
     const nowInSeconds = Math.floor(Date.now() / 1000);
-    const sys = (key: string): string => config.respuestas_sistema[key]?.texto ?? "";
+    const sys = (key: string): string => (config.respuestas_info as any)[`sys_${key}`]?.texto ?? "";
 
     if (respuesta.includes("[NO_ENTENDI]")) {
       respuesta = respuesta.replace("[NO_ENTENDI]", "").trim();

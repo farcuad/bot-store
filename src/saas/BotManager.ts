@@ -16,7 +16,8 @@ export interface BotRecord {
   ownerUid: string; // Firebase UID del usuario propietario
   createdAt: number;
   active: boolean;
-  clientKey?: string;
+  clientKey?: string | undefined;
+  timezone?: string | undefined;
 }
 
 export interface BotPublicState {
@@ -27,8 +28,9 @@ export interface BotPublicState {
   createdAt: number;
   readySince: number | null;
   lastError: string | null;
-  clientKey?: string;
-  hasSession?: boolean;
+  clientKey?: string | undefined;
+  hasSession?: boolean | undefined;
+  timezone?: string | undefined;
 }
 
 class BotManager {
@@ -100,8 +102,9 @@ class BotManager {
 
   async createBot(payload: {
     nombre: string;
-    password?: string;
+    password?: string | undefined;
     ownerUid: string;
+    timezone?: string | undefined;
   }): Promise<BotRecord> {
     const botId = `bot_${Date.now()}`;
     const clientKey = crypto.randomUUID();
@@ -112,10 +115,23 @@ class BotManager {
       createdAt: Date.now(),
       active: true,
       clientKey,
+      timezone: payload.timezone || "America/Caracas",
     };
 
-    // Persist to Firestore
+    // Persist to Firestore — registry (platform/bots/registry/{botId})
     await this.platformBotsRef().doc(botId).set(record);
+
+    // Also initialize the bot's config document in bots/{botId}
+    const timezone = payload.timezone || "America/Caracas";
+    await db.collection("bots").doc(botId).set(
+      { nombre: payload.nombre, activo: true, isAutoResponseEnabled: true, timezone },
+      { merge: true }
+    );
+
+    // Initialize the attendance schedule with the selected timezone
+    await db.collection("bots").doc(botId)
+      .collection("horarios").doc("atencion")
+      .set({ dias_habiles: [1,2,3,4,5], hora_apertura: 8, hora_cierre: 18, timezone }, { merge: true });
 
     // Create isolated directory
     const botDir = path.join(BOTS_ROOT, botId);
@@ -141,11 +157,28 @@ class BotManager {
     }
   }
 
+  async setTimezone(botId: string, timezone: string): Promise<void> {
+    await this.platformBotsRef().doc(botId).update({ timezone });
+    await db.collection("bots").doc(botId).update({ timezone });
+    await db.collection("bots").doc(botId).collection("horarios").doc("atencion").set({ timezone }, { merge: true });
+    
+    // Refresh bot config in memory if it's running
+    const instance = this.instances.get(botId);
+    if (instance) {
+      await instance.reloadConfig();
+    }
+  }
+
   async renameBot(botId: string, nuevoNombre: string): Promise<void> {
     if (!nuevoNombre || nuevoNombre.trim() === '') {
       throw new Error("El nombre no puede estar vacío");
     }
-    await this.platformBotsRef().doc(botId).update({ nombre: nuevoNombre.trim() });
+    const trimmed = nuevoNombre.trim();
+    // Update both locations atomically using a batch write
+    const batch = db.batch();
+    batch.update(this.platformBotsRef().doc(botId), { nombre: trimmed });
+    batch.set(db.collection("bots").doc(botId), { nombre: trimmed }, { merge: true });
+    await batch.commit();
   }
 
   async getBotKey(botId: string): Promise<string | null> {
@@ -229,6 +262,7 @@ class BotManager {
         readySince: liveState?.readySince ?? null,
         lastError: liveState?.lastError ?? null,
         hasSession: sessionExists,
+        timezone: record.timezone,
       };
       if (record.clientKey !== undefined) {
         state.clientKey = record.clientKey;
@@ -254,6 +288,7 @@ class BotManager {
       readySince: liveState?.readySince ?? null,
       lastError: liveState?.lastError ?? null,
       hasSession: sessionExists,
+      timezone: record.timezone,
     };
     if (record.clientKey !== undefined) {
       state.clientKey = record.clientKey;

@@ -24,6 +24,7 @@ const SaasDashboard: React.FC = () => {
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newBotName, setNewBotName] = useState('');
+  const [newBotTimezone, setNewBotTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Caracas');
   
   const [billingData, setBillingData] = useState<any>(null);
   
@@ -186,12 +187,13 @@ const SaasDashboard: React.FC = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ nombre: newBotName })
+        body: JSON.stringify({ nombre: newBotName, timezone: newBotTimezone })
       });
       const data = await res.json();
       if (data.ok) {
         setIsCreateModalOpen(false);
         setNewBotName('');
+        setNewBotTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Caracas');
         fetchBots();
       } else {
         fire({
@@ -498,6 +500,38 @@ const SaasDashboard: React.FC = () => {
                 onChange={(e) => setNewBotName(e.target.value)}
                 autoFocus
               />
+            </div>
+            <div className="mb-6">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Zona Horaria / País</label>
+              <select 
+                className="w-full bg-[#1a1a26] border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#25d366] focus:ring-1 focus:ring-[#25d366] transition-all"
+                value={newBotTimezone}
+                onChange={(e) => setNewBotTimezone(e.target.value)}
+              >
+                <option value="America/Argentina/Buenos_Aires">Argentina (Buenos Aires)</option>
+                <option value="America/La_Paz">Bolivia (La Paz)</option>
+                <option value="America/Sao_Paulo">Brasil (São Paulo)</option>
+                <option value="America/Santiago">Chile (Santiago)</option>
+                <option value="America/Bogota">Colombia (Bogotá)</option>
+                <option value="America/Costa_Rica">Costa Rica</option>
+                <option value="America/Havana">Cuba (La Habana)</option>
+                <option value="America/Guayaquil">Ecuador (Guayaquil)</option>
+                <option value="America/El_Salvador">El Salvador</option>
+                <option value="Europe/Madrid">España (Madrid)</option>
+                <option value="America/Guatemala">Guatemala</option>
+                <option value="America/Tegucigalpa">Honduras</option>
+                <option value="America/Mexico_City">México (CDMX)</option>
+                <option value="America/Managua">Nicaragua (Managua)</option>
+                <option value="America/Panama">Panamá</option>
+                <option value="America/Asuncion">Paraguay (Asunción)</option>
+                <option value="America/Lima">Perú (Lima)</option>
+                <option value="America/Puerto_Rico">Puerto Rico</option>
+                <option value="America/Santo_Domingo">República Dominicana</option>
+                <option value="America/Montevideo">Uruguay (Montevideo)</option>
+                <option value="America/Caracas">Venezuela (Caracas)</option>
+                <option value="America/New_York">Estados Unidos (New York)</option>
+                <option value="America/Los_Angeles">Estados Unidos (Los Angeles)</option>
+              </select>
             </div>
             <div className="flex gap-3 justify-end">
               <button 
