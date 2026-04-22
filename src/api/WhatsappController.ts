@@ -59,7 +59,9 @@ async function getReadyInstance(
   if (state.status !== "ready") {
     res
       .status(409)
-      .json({ error: `Bot '${botId}' no está listo (estado: ${state.status})` });
+      .json({
+        error: `Bot '${botId}' no está listo (estado: ${state.status})`,
+      });
     return null;
   }
 
@@ -78,8 +80,7 @@ async function recordAuditLog(
   hasMedia: boolean,
 ): Promise<void> {
   try {
-    await db.collection("message_logs").add({
-      botId,
+    await db.collection("bots").doc(botId).collection("message_logs").add({
       type: "api_outbound",
       from: botNumber,
       to,
@@ -102,13 +103,18 @@ async function recordAuditLog(
  * POST /send-message
  * Sends a text (or text + image) message to an individual contact (@c.us).
  */
-export const sendContactMessageController = async (req: Request, res: Response) => {
+export const sendContactMessageController = async (
+  req: Request,
+  res: Response,
+) => {
   try {
-    const botId = req.headers["x-client-botid"] as string;
+    const botId = (req.headers["x-client-botid"] || req.params.botId || req.body.botId) as string;
     const { to, message, fromMe, mediaUrl } = req.body as ContactMessageBody;
 
     if (!botId) {
-      return res.status(400).json({ error: "botId es requerido en el header x-client-botid" });
+      return res
+        .status(400)
+        .json({ error: "botId es requerido (x-client-botid header o parámetro)" });
     }
 
     if (!to || !message || !fromMe) {
@@ -122,7 +128,9 @@ export const sendContactMessageController = async (req: Request, res: Response) 
     if (!chatId.endsWith("@c.us")) {
       return res
         .status(400)
-        .json({ error: "El destinatario debe ser un contacto individual (@c.us)" });
+        .json({
+          error: "El destinatario debe ser un contacto individual (@c.us)",
+        });
     }
 
     const instance = await getReadyInstance(botId, req, res);
@@ -140,7 +148,9 @@ export const sendContactMessageController = async (req: Request, res: Response) 
     const botNumber = client?.info?.wid?.user || "unknown";
     await recordAuditLog(botId, botNumber, chatId, message, fromMe, !!mediaUrl);
 
-    res.status(200).json({ success: true, message: `Mensaje enviado a ${chatId}` });
+    res
+      .status(200)
+      .json({ success: true, message: `Mensaje enviado a ${chatId}` });
   } catch (error) {
     console.error("Error al enviar mensaje a contacto:", error);
     res.status(500).json({ error: "Error al enviar mensaje" });
@@ -160,10 +170,12 @@ export const seendMessageController = sendContactMessageController;
  */
 export const getGroupsController = async (req: Request, res: Response) => {
   try {
-    const botId = req.headers["x-client-botid"] as string;
+    const botId = (req.headers["x-client-botid"] || req.params.botId) as string;
 
     if (!botId) {
-      return res.status(400).json({ error: "botId es requerido en el header x-client-botid" });
+      return res
+        .status(400)
+        .json({ error: "botId es requerido (x-client-botid header o parámetro)" });
     }
 
     const instance = await getReadyInstance(botId, req, res);
@@ -184,11 +196,15 @@ export const getGroupsController = async (req: Request, res: Response) => {
     const batch = db.batch();
     for (const group of groups) {
       const docRef = groupsRef.doc(group.id);
-      batch.set(docRef, {
-        id: group.id,
-        name: group.name,
-        syncedAt: admin.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true });
+      batch.set(
+        docRef,
+        {
+          id: group.id,
+          name: group.name,
+          syncedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
     }
     await batch.commit();
 
@@ -203,13 +219,18 @@ export const getGroupsController = async (req: Request, res: Response) => {
  * POST /groupsBots/:botId
  * Sends a text (or text + image) message to a WhatsApp group (@g.us).
  */
-export const sendGroupMessageController = async (req: Request, res: Response) => {
+export const sendGroupMessageController = async (
+  req: Request,
+  res: Response,
+) => {
   try {
-    const botId = req.headers["x-client-botid"] as string;
+    const botId = (req.headers["x-client-botid"] || req.params.botId || req.body.botId) as string;
     const { to, message, mediaUrl, fromMe } = req.body as GroupMessageBody;
 
     if (!botId) {
-      return res.status(400).json({ error: "botId es requerido en el header x-client-botid" });
+      return res
+        .status(400)
+        .json({ error: "botId es requerido (x-client-botid header o parámetro)" });
     }
 
     if (!to || !message || !fromMe) {
@@ -240,7 +261,9 @@ export const sendGroupMessageController = async (req: Request, res: Response) =>
     const botNumber = client?.info?.wid?.user || "unknown";
     await recordAuditLog(botId, botNumber, to, message, "true", !!mediaUrl);
 
-    res.status(200).json({ success: true, message: `Mensaje enviado al grupo ${to}` });
+    res
+      .status(200)
+      .json({ success: true, message: `Mensaje enviado al grupo ${to}` });
   } catch (error) {
     console.error("Error al enviar mensaje a grupo:", error);
     res.status(500).json({ error: "Error al enviar mensaje al grupo" });

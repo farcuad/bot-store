@@ -49,14 +49,27 @@ interface LogData {
   size: number;
 }
 
-type Tab = 'stats' | 'respuestas' | 'conversaciones' | 'no_ent' | 'logs' | 'plantillas';
+interface ApiLog {
+  id: string;
+  type: string;
+  from: string;
+  to: string;
+  body: string;
+  fromMe: string;
+  hasMedia: boolean;
+  status: string;
+  timestamp: any;
+}
+
+type Tab = 'stats' | 'respuestas' | 'conversaciones' | 'no_ent' | 'logs' | 'api_logs' | 'plantillas';
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'stats',          label: 'Métricas',        icon: Activity },
   { id: 'respuestas',     label: 'Base de Datos',   icon: Database },
   { id: 'conversaciones', label: 'Conversaciones',  icon: MessageSquare },
   { id: 'no_ent',         label: 'No Entendidos',   icon: AlertCircle },
-  { id: 'logs',           label: 'Logs',            icon: ScrollText },
+  { id: 'logs',           label: 'Logs Sistema',    icon: ScrollText },
+  { id: 'api_logs',       label: 'Envíos API',      icon: Activity },
   { id: 'plantillas',     label: 'Plantillas',      icon: FileText },
 ];
 
@@ -91,6 +104,9 @@ export default function BotAdmin() {
   const [clearingLogs, setClearingLogs] = useState(false);
   const [logPhoneFilter, setLogPhoneFilter] = useState<string | null>(null);
   const logContainerRef = useRef<HTMLDivElement>(null);
+
+  // API Logs state
+  const [apiLogs, setApiLogs] = useState<ApiLog[]>([]);
 
   // Bot metadata state
   const [botName, setBotName]           = useState<string>('');
@@ -189,6 +205,9 @@ export default function BotAdmin() {
       } else if (activeTab === 'no_ent') {
         const res = await axios.get<ApiResponse<MensajeNoEntendido[]>>(`${API_URL}/api/saas/bots/${botNumber}/no-entendidos`, { headers });
         if (res.data.ok) setNoEntendidos(res.data.data);
+      } else if (activeTab === 'api_logs') {
+        const res = await axios.get<ApiResponse<ApiLog[]>>(`${API_URL}/api/saas/bots/${botNumber}/api-logs`, { headers });
+        if (res.data.ok) setApiLogs(res.data.data);
       }
     } catch (e) {
       console.error(e);
@@ -916,6 +935,76 @@ export default function BotAdmin() {
               </div>
             );
           })()}
+
+          {/* API LOGS */}
+          {activeTab === 'api_logs' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium text-white flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-blue-400" />
+                  Registro de Envíos API
+                </h3>
+                <button
+                  onClick={loadData}
+                  className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 px-3 py-1.5 rounded-xl transition-all"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Actualizar
+                </button>
+              </div>
+
+              {apiLogs.length === 0 ? (
+                <Empty icon={Activity} text="No hay envíos API registrados." />
+              ) : (
+                <div className="bg-[#12121a] border border-white/5 rounded-2xl overflow-hidden">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-[#1a1a2e] border-b border-white/5 text-xs uppercase tracking-wider text-gray-500">
+                        <th className="px-6 py-4 font-medium">Fecha</th>
+                        <th className="px-6 py-4 font-medium">Destino</th>
+                        <th className="px-6 py-4 font-medium">Tipo</th>
+                        <th className="px-6 py-4 font-medium">Mensaje</th>
+                        <th className="px-6 py-4 font-medium">Remitente</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {apiLogs.map(log => {
+                        const isGroup = log.to.includes("@g.us");
+                        return (
+                          <tr key={log.id} className="hover:bg-white/[0.02] transition-colors">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className="text-gray-300 text-sm">
+                                {log.timestamp ? new Date(log.timestamp._seconds ? log.timestamp._seconds * 1000 : log.timestamp).toLocaleString() : '-'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                <span className={`text-xs px-2 py-0.5 rounded-full border ${isGroup ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
+                                  {isGroup ? 'Grupo' : 'Número'}
+                                </span>
+                                <span className="text-gray-300 text-sm font-mono">{log.to.split('@')[0]}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`text-xs px-2 py-0.5 rounded-full border ${log.hasMedia ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' : 'bg-gray-500/10 text-gray-400 border-gray-500/20'}`}>
+                                {log.hasMedia ? 'Con Media' : 'Solo Texto'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <p className="text-gray-400 text-sm line-clamp-2 max-w-md">{log.body}</p>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className="text-gray-300 text-sm">{log.fromMe}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* PLANTILLAS */}
           {activeTab === 'plantillas' && (
