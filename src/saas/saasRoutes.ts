@@ -95,9 +95,10 @@ router.use(async (req: Request, res: Response, next) => {
 
 /** POST /api/saas/bots — create new bot */
 router.post("/bots", async (req: Request, res: Response) => {
-  const { nombre, password } = req.body as {
+  const { nombre, password, timezone } = req.body as {
     nombre?: string;
     password?: string;
+    timezone?: string;
   };
   if (!nombre) return fail(res, 400, "nombre is required");
   const ownerUid = req.isAdmin
@@ -122,7 +123,7 @@ router.post("/bots", async (req: Request, res: Response) => {
   // ────────────────────────────────────────────────────────────────────────────
 
   try {
-    const record = await botManager.createBot({ nombre, ownerUid });
+    const record = await botManager.createBot({ nombre, ownerUid, timezone });
     return ok(res, record);
   } catch (e: any) {
     return fail(res, 500, e.message);
@@ -166,6 +167,25 @@ router.put("/bots/:id/name", async (req: Request, res: Response) => {
     }
     await botManager.renameBot(id, nombre);
     return ok(res, { updated: id, nombre });
+  } catch (e: any) {
+    return fail(res, 500, e.message);
+  }
+});
+
+/** PUT /api/saas/bots/:id/timezone — set bot timezone */
+router.put("/bots/:id/timezone", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const { timezone } = req.body;
+  if (!timezone) return fail(res, 400, "timezone is required");
+  
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, "Bot not found");
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) {
+      return fail(res, 403, "No autorizado");
+    }
+    await botManager.setTimezone(id, timezone);
+    return ok(res, { updated: id, timezone });
   } catch (e: any) {
     return fail(res, 500, e.message);
   }
@@ -356,7 +376,6 @@ router.get("/bots/:id/export", async (req: Request, res: Response) => {
       exportedAt: new Date().toISOString(),
       botName: orig.nombre,
       respuestasInfo,
-      respuestasSistema: config.respuestas_sistema,
       promptIa: config.prompt_ia,
     };
 

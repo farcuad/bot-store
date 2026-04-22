@@ -2,7 +2,6 @@ import { db, BOT_PHONE_NUMBER } from "../config/firebase.js";
 import type {
   BotConfig,
   InfoRespuesta,
-  SystemRespuesta,
   HorarioConfig,
 } from "../models/BotConfig.js";
 
@@ -23,9 +22,9 @@ export function createConfigService(botId: string) {
   let cache: BotConfig = {
     nombre: "Bot",
     respuestas_info: {},
-    respuestas_sistema: {},
     activo: false,
     isAutoResponseEnabled: true,
+    timezone: "America/Caracas",
   };
 
   let refreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -35,6 +34,7 @@ export function createConfigService(botId: string) {
     activo: boolean;
     isAutoResponseEnabled: boolean;
     prompt_ia?: string | undefined;
+    timezone?: string | undefined;
   }> {
     const doc = await botRef().get();
     const data = doc.data();
@@ -43,6 +43,7 @@ export function createConfigService(botId: string) {
       activo: (data?.activo as boolean) ?? false,
       isAutoResponseEnabled: (data?.isAutoResponseEnabled as boolean) ?? true,
       prompt_ia: data?.prompt_ia as string | undefined,
+      timezone: data?.timezone as string | undefined,
     };
   }
 
@@ -56,17 +57,6 @@ export function createConfigService(botId: string) {
     return result;
   }
 
-  async function fetchRespuestasSistema(): Promise<
-    Record<string, SystemRespuesta>
-  > {
-    const snap = await botRef().collection("respuestas_sistema").get();
-    const result: Record<string, SystemRespuesta> = {};
-    snap.forEach((doc) => {
-      result[doc.id] = doc.data() as SystemRespuesta;
-    });
-    return result;
-  }
-
   async function fetchHorario(): Promise<HorarioConfig> {
     const doc = await botRef().collection("horarios").doc("atencion").get();
     if (!doc.exists) return defaultHorario;
@@ -76,28 +66,25 @@ export function createConfigService(botId: string) {
   async function loadConfig(): Promise<void> {
     try {
       const [
-        { nombre, activo, isAutoResponseEnabled, prompt_ia },
+        { nombre, activo, isAutoResponseEnabled, prompt_ia, timezone },
         respuestas_info,
-        respuestas_sistema,
       ] = await Promise.all([
         fetchNombreYActivo(),
         fetchInfoRespuestas(),
-        fetchRespuestasSistema(),
         fetchHorario(),
       ]);
       cache = {
         nombre,
         respuestas_info,
-        respuestas_sistema,
         activo,
         isAutoResponseEnabled,
         prompt_ia,
+        timezone: timezone || "America/Caracas",
       };
       console.log(
         new Date().toLocaleString(),
         `[${botId}] 🔥 Config cargada — "${nombre}" | ` +
-          `${Object.keys(respuestas_info).length} informaciones, ` +
-          `${Object.keys(respuestas_sistema).length} resp. sistema.`,
+          `${Object.keys(respuestas_info).length} informaciones.`,
       );
     } catch (error) {
       console.error(`[${botId}] ❌ Error al cargar configuración:`, error);
@@ -167,8 +154,11 @@ console.log("TESTING_MODE", TESTING_MODE);
 
 const _legacy = BOT_PHONE_NUMBER ? createConfigService(BOT_PHONE_NUMBER) : null;
 
-export const loadConfig            = _legacy?.loadConfig            ?? (async () => {});
-export const startConfigRefresh    = _legacy?.startConfigRefresh    ?? (() => {});
-export const getConfig             = _legacy?.getConfig             ?? (() => ({ nombre: "Bot", respuestas_info: {}, respuestas_sistema: {}, activo: false }));
-export const getNombre             = _legacy?.getNombre             ?? (() => "Bot");
-export const registrarNoEntendido  = _legacy?.registrarNoEntendido  ?? (async () => {});
+export const loadConfig = _legacy?.loadConfig ?? (async () => {});
+export const startConfigRefresh = _legacy?.startConfigRefresh ?? (() => {});
+export const getConfig =
+  _legacy?.getConfig ??
+  (() => ({ nombre: "Bot", respuestas_info: {}, activo: false }));
+export const getNombre = _legacy?.getNombre ?? (() => "Bot");
+export const registrarNoEntendido =
+  _legacy?.registrarNoEntendido ?? (async () => {});

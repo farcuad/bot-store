@@ -183,8 +183,8 @@ function Navbar() {
   return (
     <header
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled
-          ? "bg-[#0a0a12]/90 backdrop-blur-xl border-b border-white/5 shadow-xl shadow-black/20"
-          : "bg-transparent"
+        ? "bg-[#0a0a12]/90 backdrop-blur-xl border-b border-white/5 shadow-xl shadow-black/20"
+        : "bg-transparent"
         }`}
     >
       <nav className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
@@ -193,7 +193,7 @@ function Navbar() {
         </div>
 
         <div className="hidden md:flex items-center space-x-8">
-          {["Inicio", "Funciones", "FAQ"].map((item) => (
+          {["Inicio", "Funciones", "Casos", "FAQ"].map((item) => (
             <a
               key={item}
               href={`#${item.toLowerCase()}`}
@@ -210,6 +210,12 @@ function Navbar() {
             className="text-sm font-semibold text-slate-300 hover:text-white px-4 py-2 rounded-lg hover:bg-white/5 transition-all duration-200 cursor-pointer"
           >
             Iniciar sesión
+          </a>
+          <a
+            href="/login"
+            className="text-sm font-semibold text-white px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-all duration-200 cursor-pointer border border-white/10"
+          >
+            Registrarse
           </a>
           <a
             href="https://wa.me/584127575904"
@@ -336,8 +342,8 @@ function Hero() {
                     >
                       <div
                         className={`max-w-[80%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${msg.isBot
-                            ? "bg-[#25d366] text-black font-medium rounded-br-sm"
-                            : "bg-[#2a2a3d] text-slate-200 rounded-bl-sm"
+                          ? "bg-[#25d366] text-black font-medium rounded-br-sm"
+                          : "bg-[#2a2a3d] text-slate-200 rounded-bl-sm"
                           }`}
                       >
                         <p>{msg.text}</p>
@@ -486,12 +492,79 @@ function HowItWorks() {
   );
 }
 
+function UseCases() {
+  const industries = [
+    { icon: "🍔", name: "Restaurantes" },
+    { icon: "🏨", name: "Hoteles" },
+    { icon: "🛍️", name: "Tiendas" },
+    { icon: "🛠️", name: "Servicios" },
+    { icon: "🏠", name: "Inmobiliarias" },
+    { icon: "✈️", name: "Viajes" },
+    { icon: "💅", name: "Belleza" },
+    { icon: "📚", name: "Educación" },
+    { icon: "🚗", name: "Automotriz" },
+    { icon: "🏋️", name: "Fitness" },
+    { icon: "🏥", name: "Salud" },
+    { icon: "🏢", name: "Empresas" },
+  ];
+
+  return (
+    <section id="casos" className="py-24 px-6 relative bg-[#05050A]">
+      <div className="max-w-7xl mx-auto">
+        <div className="text-center mb-16">
+          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 text-slate-400 text-xs font-semibold px-4 py-1.5 rounded-full mb-6">
+            Casos de Uso
+          </div>
+          <h2 className="text-5xl lg:text-7xl font-black text-white tracking-tighter mb-6 leading-none">
+            UN CHATBOT PARA <br className="hidden md:block" />
+            <span className="text-transparent bg-clip-text bg-linear-to-r from-[#3B82F6] to-[#60A5FA]">
+              CADA INDUSTRIA
+            </span>
+          </h2>
+          <p className="text-slate-400 text-xl md:text-2xl max-w-3xl mx-auto leading-relaxed font-light">
+            whaibot se adapta a las necesidades específicas de tu negocio, sin importar el sector.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-20">
+          {industries.map((ind) => (
+            <div
+              key={ind.name}
+              className="group bg-[#0D0D1A] border border-white/5 p-6 rounded-3xl hover:bg-[#3B82F6]/5 hover:border-[#3B82F6]/30 transition-all duration-300 flex flex-col items-center justify-center gap-4 cursor-pointer"
+            >
+              <div className="text-4xl group-hover:scale-110 transition-transform duration-300">{ind.icon}</div>
+              <span className="text-white font-semibold tracking-tight">{ind.name}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="bg-linear-to-br from-[#0D0D1A] to-[#0A0A12] border border-[#3B82F6]/20 p-10 md:p-14 rounded-[40px] flex flex-col md:flex-row items-center gap-10 overflow-hidden relative">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-[#3B82F6]/10 blur-[100px] rounded-full pointer-events-none" />
+
+          <div className="w-16 h-16 bg-[#3B82F6]/20 rounded-2xl flex items-center justify-center shrink-0 border border-[#3B82F6]/30">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#60A5FA" strokeWidth="2" className="w-8 h-8">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+            </svg>
+          </div>
+
+          <div>
+            <h3 className="text-2xl md:text-3xl font-bold text-white mb-3">Entrenamiento Específico</h3>
+            <p className="text-slate-400 text-lg leading-relaxed">
+              Cada bot conoce la terminología y mejores prácticas de tu industria. No es solo un bot genérico, es un experto virtual en tu área de negocio capaz de entender y resolver las dudas de tus clientes.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Pricing() {
   return (
     <section id="precios" className="py-24 px-6 relative overflow-hidden">
       {/* Background decoration */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-[#25d366]/5 rounded-full blur-[120px] -z-10" />
-      
+
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-16">
           <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 text-slate-400 text-xs font-semibold px-4 py-1.5 rounded-full mb-6">
@@ -509,9 +582,8 @@ function Pricing() {
           {pricingPlans.map((plan) => (
             <div
               key={plan.name}
-              className={`relative flex flex-col p-8 rounded-3xl bg-[#0d0d1a] border transition-all duration-500 hover:translate-y-[-8px] ${
-                plan.popular ? "border-[#25d366]/50 shadow-2xl shadow-[#25d366]/10 scale-105 z-10" : "border-white/5"
-              }`}
+              className={`relative flex flex-col p-8 rounded-3xl bg-[#0d0d1a] border transition-all duration-500 hover:translate-y-[-8px] ${plan.popular ? "border-[#25d366]/50 shadow-2xl shadow-[#25d366]/10 scale-105 z-10" : "border-white/5"
+                }`}
             >
               {plan.popular && (
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-[#25d366] text-black text-[10px] font-black uppercase tracking-widest px-4 py-1 rounded-full shadow-lg shadow-[#25d366]/20">
@@ -551,7 +623,7 @@ function Pricing() {
             </div>
           ))}
         </div>
-        
+
         <p className="text-center text-slate-600 text-sm mt-12">
           ¿Necesitas un plan personalizado? <a href="https://wa.me/584127575904" className="text-[#25d366] hover:underline">Habla con nosotros</a>
         </p>
@@ -584,8 +656,8 @@ function FaqAccordion() {
             <div
               key={i}
               className={`border rounded-2xl overflow-hidden transition-all duration-300 ${openIndex === i
-                  ? "border-[#25d366]/30 bg-[#25d366]/5"
-                  : "border-white/8 bg-[#0d0d1a] hover:border-white/15"
+                ? "border-[#25d366]/30 bg-[#25d366]/5"
+                : "border-white/8 bg-[#0d0d1a] hover:border-white/15"
                 }`}
             >
               <button
@@ -713,6 +785,7 @@ export default function WhaibotLanding() {
       <main>
         <Hero />
         <Features />
+        <UseCases />
         <HowItWorks />
         <Pricing />
         <FaqAccordion />

@@ -96,16 +96,20 @@ export default function BotAdmin() {
   const [botName, setBotName]           = useState<string>('');
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
+  const [botTimezone, setBotTimezone]   = useState<string>('America/Caracas');
 
   const loadBotInfo = async () => {
     try {
       const token = await user?.getIdToken();
-      const res = await axios.get<ApiResponse<{ nombre: string }>>(`${API_URL}/api/saas/bots/${botNumber}`, {
+      const res = await axios.get<ApiResponse<{ nombre: string; timezone?: string }>>(`${API_URL}/api/saas/bots/${botNumber}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.data.ok) {
         setBotName(res.data.data.nombre);
         setEditNameValue(res.data.data.nombre);
+        if (res.data.data.timezone) {
+          setBotTimezone(res.data.data.timezone);
+        }
       }
     } catch (e) {
       console.error("Error loading bot meta:", e);
@@ -147,6 +151,23 @@ export default function BotAdmin() {
       fire({
         title: 'Error',
         text: "Error actualizando nombre: " + (e.response?.data?.error || e.message),
+        icon: 'error'
+      });
+    }
+  };
+
+  const saveTimezone = async (newTz: string) => {
+    setBotTimezone(newTz);
+    try {
+      const token = await user?.getIdToken();
+      await axios.put<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/timezone`, 
+        { timezone: newTz }, 
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+    } catch (e: any) {
+      fire({
+        title: 'Error',
+        text: "Error actualizando país: " + (e.response?.data?.error || e.message),
         icon: 'error'
       });
     }
@@ -526,7 +547,39 @@ export default function BotAdmin() {
                 </>
               )}
             </div>
-            <p className="text-gray-500 text-xs sm:text-sm mt-0.5 font-mono">{botNumber} • Panel de administración</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <p className="text-gray-500 text-xs sm:text-sm font-mono">{botNumber} • Panel de administración</p>
+              <span className="text-gray-500 text-xs sm:text-sm">•</span>
+              <select
+                value={botTimezone}
+                onChange={(e) => saveTimezone(e.target.value)}
+                className="bg-transparent border border-white/10 rounded-md text-xs sm:text-sm text-gray-400 focus:outline-none focus:border-[#25d366] px-1 py-0.5 max-w-[150px]"
+                title="País / Zona horaria del bot"
+              >
+                <option value="America/Argentina/Buenos_Aires">🇦🇷 Argentina</option>
+                <option value="America/La_Paz">🇧🇴 Bolivia</option>
+                <option value="America/Sao_Paulo">🇧🇷 Brasil</option>
+                <option value="America/Santiago">🇨🇱 Chile</option>
+                <option value="America/Bogota">🇨🇴 Colombia</option>
+                <option value="America/Costa_Rica">🇨🇷 Costa Rica</option>
+                <option value="America/Havana">🇨🇺 Cuba</option>
+                <option value="America/Guayaquil">🇪🇨 Ecuador</option>
+                <option value="America/El_Salvador">🇸🇻 El Salvador</option>
+                <option value="Europe/Madrid">🇪🇸 España</option>
+                <option value="America/New_York">🇺🇸 EE.UU. (NY)</option>
+                <option value="America/Guatemala">🇬🇹 Guatemala</option>
+                <option value="America/Tegucigalpa">🇭🇳 Honduras</option>
+                <option value="America/Mexico_City">🇲🇽 México</option>
+                <option value="America/Managua">🇳🇮 Nicaragua</option>
+                <option value="America/Panama">🇵🇦 Panamá</option>
+                <option value="America/Asuncion">🇵🇾 Paraguay</option>
+                <option value="America/Lima">🇵🇪 Perú</option>
+                <option value="America/Puerto_Rico">🇵🇷 Puerto Rico</option>
+                <option value="America/Santo_Domingo">🇩🇴 Rep. Dom.</option>
+                <option value="America/Montevideo">🇺🇾 Uruguay</option>
+                <option value="America/Caracas">🇻🇪 Venezuela</option>
+              </select>
+            </div>
           </div>
         </div>
         {/* Action buttons: scrollable row on mobile */}

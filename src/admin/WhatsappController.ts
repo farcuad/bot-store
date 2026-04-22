@@ -10,7 +10,6 @@ import admin from "firebase-admin";
 interface ContactMessageBody {
   to?: string;
   message?: string;
-  botId?: string;
   fromMe?: string;
   mediaUrl?: string;
 }
@@ -105,12 +104,17 @@ async function recordAuditLog(
  */
 export const sendContactMessageController = async (req: Request, res: Response) => {
   try {
-    const { to, message, botId, fromMe, mediaUrl } = req.body as ContactMessageBody;
+    const botId = req.headers["x-client-botid"] as string;
+    const { to, message, fromMe, mediaUrl } = req.body as ContactMessageBody;
 
-    if (!to || !message || !botId || !fromMe) {
+    if (!botId) {
+      return res.status(400).json({ error: "botId es requerido en el header x-client-botid" });
+    }
+
+    if (!to || !message || !fromMe) {
       return res
         .status(400)
-        .json({ error: "Faltan datos requeridos: to, message, botId o fromMe" });
+        .json({ error: "Faltan datos requeridos: to, message o fromMe" });
     }
 
     // Validate that the recipient is an individual contact
@@ -156,10 +160,10 @@ export const seendMessageController = sendContactMessageController;
  */
 export const getGroupsController = async (req: Request, res: Response) => {
   try {
-    const botId = req.params["botId"] as string;
+    const botId = req.headers["x-client-botid"] as string;
 
     if (!botId) {
-      return res.status(400).json({ error: "botId es requerido" });
+      return res.status(400).json({ error: "botId es requerido en el header x-client-botid" });
     }
 
     const instance = await getReadyInstance(botId, req, res);
@@ -201,11 +205,11 @@ export const getGroupsController = async (req: Request, res: Response) => {
  */
 export const sendGroupMessageController = async (req: Request, res: Response) => {
   try {
-    const botId = req.params["botId"] as string;
+    const botId = req.headers["x-client-botid"] as string;
     const { to, message, mediaUrl, fromMe } = req.body as GroupMessageBody;
 
     if (!botId) {
-      return res.status(400).json({ error: "botId es requerido" });
+      return res.status(400).json({ error: "botId es requerido en el header x-client-botid" });
     }
 
     if (!to || !message || !fromMe) {

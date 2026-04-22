@@ -9,6 +9,7 @@ const LoginView: React.FC = () => {
   const navigate = useNavigate();
   const { fire } = useGlassAlert();
 
+  const [dialCode, setDialCode] = useState('+54');
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -38,13 +39,14 @@ const LoginView: React.FC = () => {
 
   const submitPhone = async () => {
     if (!phone) return setError('Ingresa tu teléfono');
+    const fullPhone = `${dialCode}${phone.replace(/\D/g, '')}`;
     setLoading(true);
     try {
       const idToken = await user?.getIdToken();
       const res = await fetch('/api/auth/firebase-verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken, phone }),
+        body: JSON.stringify({ idToken, phone: fullPhone }),
       });
       const data = await res.json();
       if (data.ok) {
@@ -93,13 +95,43 @@ const LoginView: React.FC = () => {
 
                   <div className="mb-4 text-left">
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Teléfono (WhatsApp)</label>
-                    <input
-                      type="tel"
-                      className="w-full bg-[#1a1a26] border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#25d366] focus:ring-1 focus:ring-[#25d366] transition-all"
-                      placeholder="+54911..."
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                    />
+                    <div className="flex gap-2">
+                      <select 
+                        className="w-1/3 bg-[#1a1a26] border border-white/5 rounded-xl px-2 py-3 text-white focus:outline-none focus:border-[#25d366] focus:ring-1 focus:ring-[#25d366] transition-all"
+                        value={dialCode}
+                        onChange={(e) => setDialCode(e.target.value)}
+                      >
+                        <option value="+54">🇦🇷 +54</option>
+                        <option value="+591">🇧🇴 +591</option>
+                        <option value="+55">🇧🇷 +55</option>
+                        <option value="+56">🇨🇱 +56</option>
+                        <option value="+57">🇨🇴 +57</option>
+                        <option value="+506">🇨🇷 +506</option>
+                        <option value="+53">🇨🇺 +53</option>
+                        <option value="+593">🇪🇨 +593</option>
+                        <option value="+503">🇸🇻 +503</option>
+                        <option value="+34">🇪🇸 +34</option>
+                        <option value="+1">🇺🇸/🇨🇦 +1</option>
+                        <option value="+502">🇬🇹 +502</option>
+                        <option value="+504">🇭🇳 +504</option>
+                        <option value="+52">🇲🇽 +52</option>
+                        <option value="+505">🇳🇮 +505</option>
+                        <option value="+507">🇵🇦 +507</option>
+                        <option value="+595">🇵🇾 +595</option>
+                        <option value="+51">🇵🇪 +51</option>
+                        <option value="+1787">🇵🇷 +1787</option>
+                        <option value="+1809">🇩🇴 +1809</option>
+                        <option value="+598">🇺🇾 +598</option>
+                        <option value="+58">🇻🇪 +58</option>
+                      </select>
+                      <input
+                        type="tel"
+                        className="w-2/3 bg-[#1a1a26] border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#25d366] focus:ring-1 focus:ring-[#25d366] transition-all"
+                        placeholder="11 1234-5678"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                      />
+                    </div>
                   </div>
 
                   <button
