@@ -7,6 +7,7 @@ import UserManagement from './views/UserManagement';
 import AdminBots from './views/AdminBots';
 import SubscriptionView from './views/SubscriptionView';
 import AdminSubscriptions from './views/AdminSubscriptions';
+import RequestReceived from './views/RequestReceived';
 import Layout from './components/Layout';
 import './App.css';
 
@@ -15,6 +16,7 @@ function App() {
     <Routes>
       <Route path="/" element={<WhaibotLanding />} />
       <Route path="/login" element={<LoginView />} />
+      <Route path="/request-received" element={<RequestReceived />} />
       
       {/* Rutas con Layout (Navbar superior, etc) para usuarios logueados */}
       <Route element={<Layout />}>

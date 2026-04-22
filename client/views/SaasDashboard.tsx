@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useGlassAlert } from 'glass-alert-animation';
 import { useAuth } from '../context/AuthContext';
 
 interface Bot {
@@ -14,6 +15,7 @@ interface Bot {
 const SaasDashboard: React.FC = () => {
   const { user, dbUser, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const { fire } = useGlassAlert();
   const maxBots: number = isAdmin ? Infinity : (dbUser?.maxBots ?? 1);
   const [bots, setBots] = useState<Bot[]>([]);
   const [loading, setLoading] = useState(true);
@@ -192,10 +194,18 @@ const SaasDashboard: React.FC = () => {
         setNewBotName('');
         fetchBots();
       } else {
-        alert(data.error);
+        fire({
+          title: 'Error',
+          text: data.error,
+          icon: 'error'
+        });
       }
     } catch (e: any) {
-      alert(e.message);
+      fire({
+        title: 'Error',
+        text: e.message,
+        icon: 'error'
+      });
     }
   };
 
@@ -207,15 +217,34 @@ const SaasDashboard: React.FC = () => {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
-      if (!data.ok) alert(data.error);
+      if (!data.ok) {
+        fire({
+          title: 'Error',
+          text: data.error,
+          icon: 'error'
+        });
+      }
       fetchBots();
     } catch (e: any) {
-      alert(e.message);
+      fire({
+        title: 'Error',
+        text: e.message,
+        icon: 'error'
+      });
     }
   };
 
   const deleteBot = async (botId: string) => {
-    if (!confirm('¿Seguro que quieres eliminar este bot? Esta acción es irreversible y borrará la carpeta del bot.')) return;
+    const result = await fire({
+      title: '¿Seguro que quieres eliminar este bot?',
+      text: 'Esta acción es irreversible y borrará la carpeta del bot.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
+    });
+    if (!result.isConfirmed) return;
+
     try {
       const token = await user?.getIdToken();
       const res = await fetch(`/api/saas/bots/${botId}`, {
@@ -223,15 +252,34 @@ const SaasDashboard: React.FC = () => {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
-      if (!data.ok) alert(data.error);
+      if (!data.ok) {
+        fire({
+          title: 'Error',
+          text: data.error,
+          icon: 'error'
+        });
+      }
       fetchBots();
     } catch (e: any) {
-      alert(e.message);
+      fire({
+        title: 'Error',
+        text: e.message,
+        icon: 'error'
+      });
     }
   };
 
   const clearSession = async (botId: string) => {
-    if (!confirm('¿Limpiar la sesión WhatsApp?\n\nSe detendrá el bot y se borrará la sesión de Chrome. Tendrás que escanear el QR para volver a vincularlo.\n\nLa configuración y base de conocimiento se conservan.')) return;
+    const result = await fire({
+      title: '¿Limpiar la sesión WhatsApp?',
+      text: 'Se detendrá el bot y se borrará la sesión de Chrome. Tendrás que escanear el QR para volver a vincularlo.\n\nLa configuración y base de conocimiento se conservan.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, limpiar sesión',
+      cancelButtonText: 'Cancelar'
+    });
+    if (!result.isConfirmed) return;
+
     try {
       const token = await user?.getIdToken();
       const res = await fetch(`/api/saas/bots/${botId}/clear-session`, {
@@ -240,13 +288,25 @@ const SaasDashboard: React.FC = () => {
       });
       const data = await res.json();
       if (data.ok) {
-        alert('✅ Sesión limpiada. Inicia el bot para ver el nuevo QR.');
+        fire({
+          title: 'Éxito',
+          text: '✅ Sesión limpiada. Inicia el bot para ver el nuevo QR.',
+          icon: 'success'
+        });
         fetchBots();
       } else {
-        alert(data.error);
+        fire({
+          title: 'Error',
+          text: data.error,
+          icon: 'error'
+        });
       }
     } catch (e: any) {
-      alert(e.message);
+      fire({
+        title: 'Error',
+        text: e.message,
+        icon: 'error'
+      });
     }
   };
 
@@ -309,7 +369,7 @@ const SaasDashboard: React.FC = () => {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
           {bots.map(bot => {
             // Find subscription for this bot
             const sub = billingData?.subscriptions?.find((s: any) => s.botId === bot.botId);
@@ -344,58 +404,78 @@ const SaasDashboard: React.FC = () => {
                 }
               </div>
 
-              <div className="flex flex-wrap gap-2 mt-auto pt-4 border-t border-white/5">
-                {/* ── Gestionar (siempre visible) ────────────────────── */}
-                <button
-                  onClick={() => navigate(`/bot/${bot.botId}`)}
-                  className="flex-1 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 py-2 rounded-lg text-sm font-medium transition-colors"
-                >
-                  ⚙️ Gestionar
-                </button>
-
-                {/* Vincular: solo cuando hay proceso QR activo Y aun sin sesión guardada */}
-                {(bot.status === 'qr' || bot.status === 'initializing') && !bot.hasSession && (
-                  <button onClick={() => setQrModalBot(bot.botId)} className="flex-1 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 py-2 rounded-lg text-sm font-medium transition-colors">
-                    📱 Vincular
-                  </button>
-                )}
-
-                {/* Parar: solo cuando está activo */}
-                {bot.status === 'ready' && (
-                  <button onClick={() => botAction(bot.botId, 'stop')} className="flex-1 bg-white/5 text-white hover:bg-white/10 py-2 rounded-lg text-sm font-medium transition-colors">
-                    ⏹ Parar
-                  </button>
-                )}
-
-                {/* Iniciar: cuando está detenido (con sesión) o desconectado */}
-                {(bot.status === 'idle' || bot.status === 'disconnected' || bot.status === 'error') && (
+              <div className="flex flex-col gap-2 mt-auto pt-4 border-t border-white/5">
+                {/* Row 1: Gestionar, Status Action, Restart */}
+                <div className="grid grid-cols-3 gap-2">
                   <button
-                    onClick={() => {
-                      if (!bot.hasSession) {
-                        // Sin sesión: iniciar y abrir modal de QR
-                        botAction(bot.botId, 'start').then(() => setQrModalBot(bot.botId));
-                      } else {
-                        botAction(bot.botId, 'start');
-                      }
-                    }}
-                    className="flex-1 bg-[#25d366]/10 text-[#25d366] hover:bg-[#25d366]/20 py-2 rounded-lg text-sm font-medium transition-colors"
+                    onClick={() => navigate(`/bot/${bot.botId}`)}
+                    className="bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1"
+                    title="Gestionar base de datos y configuración"
                   >
-                    {bot.hasSession ? '▶ Iniciar' : '📱 Iniciar y Vincular'}
+                    <span>⚙️</span> <span className="hidden min-[450px]:inline">Gestionar</span>
                   </button>
-                )}
 
-                <button onClick={() => botAction(bot.botId, 'restart')} title="Reiniciar" className="w-10 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg flex items-center justify-center transition-colors">
-                  ↺
-                </button>
-                <button onClick={() => setAudioModalBot(bot.botId)} title="Configurar análisis de audio" className="w-10 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 rounded-lg flex items-center justify-center transition-colors text-base">
-                  🎙️
-                </button>
-                <button onClick={() => clearSession(bot.botId)} title="Limpiar sesión (re-escanear QR)" className="w-10 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 rounded-lg flex items-center justify-center transition-colors text-base">
-                  🧹
-                </button>
-                <button onClick={() => deleteBot(bot.botId)} title="Eliminar" className="w-10 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg flex items-center justify-center transition-colors">
-                  🗑
-                </button>
+                  {/* Middle Action Button */}
+                  {(bot.status === 'qr' || bot.status === 'initializing') && !bot.hasSession ? (
+                    <button onClick={() => setQrModalBot(bot.botId)} className="bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1">
+                      <span>📱</span> <span className="hidden min-[450px]:inline">Vincular</span>
+                    </button>
+                  ) : bot.status === 'ready' ? (
+                    <button onClick={() => botAction(bot.botId, 'stop')} className="bg-white/5 text-white hover:bg-white/10 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1">
+                      <span>⏹</span> <span className="hidden min-[450px]:inline">Parar</span>
+                    </button>
+                  ) : (bot.status === 'idle' || bot.status === 'disconnected' || bot.status === 'error') ? (
+                    <button
+                      onClick={() => {
+                        if (!bot.hasSession) {
+                          botAction(bot.botId, 'start').then(() => setQrModalBot(bot.botId));
+                        } else {
+                          botAction(bot.botId, 'start');
+                        }
+                      }}
+                      className="bg-[#25d366]/10 text-[#25d366] hover:bg-[#25d366]/20 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1"
+                    >
+                      <span>{bot.hasSession ? '▶' : '📱'}</span> <span className="hidden min-[450px]:inline">{bot.hasSession ? 'Iniciar' : 'Vincular'}</span>
+                    </button>
+                  ) : (
+                    <div className="bg-white/5 opacity-50 py-2 rounded-lg text-xs flex items-center justify-center text-gray-500">
+                      ---
+                    </div>
+                  )}
+
+                  <button 
+                    onClick={() => botAction(bot.botId, 'restart')} 
+                    title="Reiniciar bot" 
+                    className="bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg flex items-center justify-center transition-colors py-2"
+                  >
+                    ↺
+                  </button>
+                </div>
+
+                {/* Row 2: Audio, Clean, Delete */}
+                <div className="grid grid-cols-3 gap-2">
+                  <button 
+                    onClick={() => setAudioModalBot(bot.botId)} 
+                    title="Configurar análisis de audio" 
+                    className="bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 rounded-lg flex items-center justify-center transition-colors py-2 text-base"
+                  >
+                    🎙️
+                  </button>
+                  <button 
+                    onClick={() => clearSession(bot.botId)} 
+                    title="Limpiar sesión (re-escanear QR)" 
+                    className="bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 rounded-lg flex items-center justify-center transition-colors py-2 text-base"
+                  >
+                    🧹
+                  </button>
+                  <button 
+                    onClick={() => deleteBot(bot.botId)} 
+                    title="Eliminar bot" 
+                    className="bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg flex items-center justify-center transition-colors py-2"
+                  >
+                    🗑
+                  </button>
+                </div>
               </div>
             </div>
             );

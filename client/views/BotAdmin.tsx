@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Activity, MessageSquare, Database, AlertCircle, RefreshCw, Edit2, Trash2, Download, Upload, RotateCcw, ScrollText } from 'lucide-react';
 import axios from 'axios';
+import { useGlassAlert } from 'glass-alert-animation';
 
 interface BotStats {
   mensajes_recibidos?: number;
@@ -64,6 +65,7 @@ export default function BotAdmin() {
   const botNumber = botId || '';
   const [activeTab, setActiveTab] = useState<Tab>('stats');
   const { user, isAdmin } = useAuth();
+  const { fire } = useGlassAlert();
 
   const [loading, setLoading]           = useState(true);
   const [stats, setStats]               = useState<BotStats | null>(null);
@@ -138,7 +140,11 @@ export default function BotAdmin() {
       setBotName(editNameValue.trim());
       setIsEditingName(false);
     } catch (e: any) {
-      alert("Error actualizando nombre: " + (e.response?.data?.error || e.message));
+      fire({
+        title: 'Error',
+        text: "Error actualizando nombre: " + (e.response?.data?.error || e.message),
+        icon: 'error'
+      });
     }
   };
 
@@ -194,7 +200,16 @@ export default function BotAdmin() {
   }, [activeTab, loadLogs]);
 
   const handleClearLogs = async () => {
-    if (!confirm('¿Limpiar el log del bot?\n\nSe eliminarán todas las entradas del archivo de log.')) return;
+    const result = await fire({
+      title: '¿Limpiar el log del bot?',
+      text: 'Se eliminarán todas las entradas del archivo de log.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, limpiar',
+      cancelButtonText: 'Cancelar'
+    });
+    if (!result.isConfirmed) return;
+
     setClearingLogs(true);
     try {
       const token = await user?.getIdToken();
@@ -203,7 +218,11 @@ export default function BotAdmin() {
       });
       setLogData({ lines: [], size: 0 });
     } catch (e: any) {
-      alert('Error limpiando logs: ' + (e.response?.data?.error || e.message));
+      fire({
+        title: 'Error',
+        text: 'Error limpiando logs: ' + (e.response?.data?.error || e.message),
+        icon: 'error'
+      });
     } finally {
       setClearingLogs(false);
     }
@@ -240,17 +259,34 @@ export default function BotAdmin() {
       setResText('');
       loadData();
     } catch (e: any) {
-      alert('Error guardando: ' + (e.response?.data?.error || e.message));
+      fire({
+        title: 'Error',
+        text: 'Error guardando: ' + (e.response?.data?.error || e.message),
+        icon: 'error'
+      });
     }
   };
 
   const deleteRespuesta = async (id: string) => {
-    if (!confirm('¿Eliminar esta información?')) return;
+    const result = await fire({
+      title: '¿Eliminar esta información?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
+    });
+    if (!result.isConfirmed) return;
     try {
       const headers = await getHeaders();
       await axios.delete<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/respuestas-info/${id}`, { headers });
       loadData();
-    } catch (e: any) { alert('Error: ' + e.message); }
+    } catch (e: any) { 
+      fire({
+        title: 'Error',
+        text: e.message,
+        icon: 'error'
+      });
+    }
   };
 
   const toggleActiva = async (r: RespuestaInfo) => {
@@ -258,7 +294,13 @@ export default function BotAdmin() {
       const headers = await getHeaders();
       await axios.put<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/respuestas-info/${r.id}`, { activo: !r.activo }, { headers });
       setRespuestas(respuestas.map(x => x.id === r.id ? { ...x, activo: !x.activo } : x));
-    } catch (e: any) { alert('Error: ' + e.message); }
+    } catch (e: any) { 
+      fire({
+        title: 'Error',
+        text: e.message,
+        icon: 'error'
+      });
+    }
   };
 
   const markRevisado = async (id: string) => {
@@ -266,7 +308,13 @@ export default function BotAdmin() {
       const headers = await getHeaders();
       await axios.patch<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/no-entendidos/${id}/revisado`, {}, { headers });
       setNoEntendidos(noEntendidos.map(n => n.id === id ? { ...n, revisado: true } : n));
-    } catch (e: any) { alert('Error: ' + e.message); }
+    } catch (e: any) { 
+      fire({
+        title: 'Error',
+        text: e.message,
+        icon: 'error'
+      });
+    }
   };
 
   const deleteNoEntendido = async (id: string) => {
@@ -274,7 +322,13 @@ export default function BotAdmin() {
       const headers = await getHeaders();
       await axios.delete<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/no-entendidos/${id}`, { headers });
       setNoEntendidos(noEntendidos.filter(n => n.id !== id));
-    } catch (e: any) { alert('Error: ' + e.message); }
+    } catch (e: any) { 
+      fire({
+        title: 'Error',
+        text: e.message,
+        icon: 'error'
+      });
+    }
   };
 
   const updateSessionStatus = async (sessionId: string, newStatus: string) => {
@@ -282,7 +336,13 @@ export default function BotAdmin() {
       const headers = await getHeaders();
       await axios.patch<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/sessions/${encodeURIComponent(sessionId)}`, { estado: newStatus }, { headers });
       setSessions(sessions.map(s => s.id === sessionId ? { ...s, estado: newStatus } : s));
-    } catch (e: any) { alert('Error: ' + e.message); }
+    } catch (e: any) { 
+      fire({
+        title: 'Error',
+        text: e.message,
+        icon: 'error'
+      });
+    }
   };
 
   const saveSessionName = async (sessionId: string) => {
@@ -292,16 +352,37 @@ export default function BotAdmin() {
       await axios.patch<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/sessions/${encodeURIComponent(sessionId)}`, { contactName: trimmed }, { headers });
       setSessions(sessions.map(s => s.id === sessionId ? { ...s, contactName: trimmed || undefined } : s));
       setEditingSessionId(null);
-    } catch (e: any) { alert('Error: ' + e.message); }
+    } catch (e: any) { 
+      fire({
+        title: 'Error',
+        text: e.message,
+        icon: 'error'
+      });
+    }
   };
 
   const deleteSession = async (sessionId: string, phone: string) => {
-    if (!confirm(`¿Eliminar el registro de +${phone}?\n\nSe eliminará su sesión. Cuando vuelva a escribir, el bot lo registrará como nuevo contacto.`)) return;
+    const result = await fire({
+      title: `¿Eliminar el registro de +${phone}?`,
+      text: 'Se eliminará su sesión. Cuando vuelva a escribir, el bot lo registrará como nuevo contacto.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
+    });
+    if (!result.isConfirmed) return;
+
     try {
       const headers = await getHeaders();
       await axios.delete<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/sessions/${encodeURIComponent(sessionId)}`, { headers });
       setSessions(sessions.filter(s => s.id !== sessionId));
-    } catch (e: any) { alert('Error eliminando sesión: ' + (e.response?.data?.error || e.message)); }
+    } catch (e: any) { 
+      fire({
+        title: 'Error',
+        text: 'Error eliminando sesión: ' + (e.response?.data?.error || e.message),
+        icon: 'error'
+      });
+    }
   };
 
   const handleViewMessages = (phone: string) => {
@@ -310,14 +391,33 @@ export default function BotAdmin() {
   };
 
   const handleClearSession = async () => {
-    if (!confirm('¿Limpiar la sesión WhatsApp del bot?\n\nSe detendrá el bot y se borrará la sesión de Chrome. Tendrás que escanear el QR nuevamente.\n\nLa configuración, base de datos y sesiones de chat se conservan.')) return;
+    const result = await fire({
+      title: '¿Limpiar la sesión WhatsApp del bot?',
+      text: 'Se detendrá el bot y se borrará la sesión de Chrome. Tendrás que escanear el QR nuevamente.\n\nLa configuración, base de datos y sesiones de chat se conservan.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, limpiar sesión',
+      cancelButtonText: 'Cancelar'
+    });
+    if (!result.isConfirmed) return;
+
     try {
       const token = await user?.getIdToken();
       await axios.post<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/clear-session`, {}, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      alert('✅ Sesión limpiada. Reinicia el bot para ver el QR nuevo.');
-    } catch (e: any) { alert('Error: ' + (e.response?.data?.error || e.message)); }
+      fire({
+        title: 'Éxito',
+        text: '✅ Sesión limpiada. Reinicia el bot para ver el QR nuevo.',
+        icon: 'success'
+      });
+    } catch (e: any) { 
+      fire({
+        title: 'Error',
+        text: 'Error: ' + (e.response?.data?.error || e.message),
+        icon: 'error'
+      });
+    }
   };
 
   const handleExport = async () => {
@@ -333,16 +433,33 @@ export default function BotAdmin() {
       a.download = `${botNumber}-export.json`;
       a.click();
       window.URL.revokeObjectURL(url);
-    } catch (e: any) { alert('Error exportando: ' + e.message); }
+    } catch (e: any) { 
+      fire({
+        title: 'Error',
+        text: 'Error exportando: ' + e.message,
+        icon: 'error'
+      });
+    }
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!confirm(`¿Importar configuración desde "${file.name}"?\n\nSe fusionarán las entradas de la base de conocimientos con las actuales.`)) {
+
+    const result = await fire({
+      title: `¿Importar configuración desde "${file.name}"?`,
+      text: 'Se fusionarán las entradas de la base de conocimientos con las actuales.',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, importar',
+      cancelButtonText: 'Cancelar'
+    });
+
+    if (!result.isConfirmed) {
       e.target.value = '';
       return;
     }
+
     setImporting(true);
     try {
       const text = await file.text();
@@ -352,10 +469,20 @@ export default function BotAdmin() {
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
       });
       if (res.data.ok) {
-        alert(`✅ Importación exitosa. ${res.data.data.kbEntries} entrada(s) cargadas.`);
+        fire({
+          title: 'Éxito',
+          text: `✅ Importación exitosa. ${res.data.data.kbEntries} entrada(s) cargadas.`,
+          icon: 'success'
+        });
         loadData();
       }
-    } catch (e: any) { alert('Error importando: ' + e.message); }
+    } catch (e: any) { 
+      fire({
+        title: 'Error',
+        text: 'Error importando: ' + e.message,
+        icon: 'error'
+      });
+    }
     finally {
       setImporting(false);
       e.target.value = '';
@@ -402,14 +529,14 @@ export default function BotAdmin() {
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
           <button
             onClick={() => { loadBotInfo(); loadData(); }}
-            className="flex-shrink-0 flex items-center gap-2 text-sm text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 px-3 py-2 rounded-xl transition-all"
+            className="shrink-0 flex items-center gap-2 text-sm text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 px-3 py-2 rounded-xl transition-all"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">Actualizar</span>
           </button>
           <button
             onClick={handleClearSession}
-            className="flex-shrink-0 flex items-center gap-2 text-sm text-orange-400 hover:text-white bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/20 px-3 py-2 rounded-xl transition-all"
+            className="shrink-0 flex items-center gap-2 text-sm text-orange-400 hover:text-white bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/20 px-3 py-2 rounded-xl transition-all"
             title="Elimina la sesión de Chrome para re-escanear el QR sin borrar el bot"
           >
             <RotateCcw className="h-4 w-4" />
@@ -417,7 +544,7 @@ export default function BotAdmin() {
           </button>
           <button
             onClick={handleExport}
-            className="flex-shrink-0 flex items-center gap-2 text-sm text-indigo-400 hover:text-white bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 px-3 py-2 rounded-xl transition-all"
+            className="shrink-0 flex items-center gap-2 text-sm text-indigo-400 hover:text-white bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 px-3 py-2 rounded-xl transition-all"
             title="Descarga la configuración del bot como JSON"
           >
             <Download className="h-4 w-4" />
@@ -427,7 +554,7 @@ export default function BotAdmin() {
           <button
             onClick={() => importInputRef.current?.click()}
             disabled={importing}
-            className="flex-shrink-0 flex items-center gap-2 text-sm text-emerald-400 hover:text-white bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 px-3 py-2 rounded-xl transition-all disabled:opacity-50"
+            className="shrink-0 flex items-center gap-2 text-sm text-emerald-400 hover:text-white bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 px-3 py-2 rounded-xl transition-all disabled:opacity-50"
             title="Importa configuración desde un JSON exportado"
           >
             <Upload className="h-4 w-4" />
@@ -442,7 +569,7 @@ export default function BotAdmin() {
           <button
             key={id}
             onClick={() => setActiveTab(id)}
-            className={`flex items-center gap-2 flex-shrink-0 sm:flex-1 justify-center px-3 sm:px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+            className={`flex items-center gap-2 shrink-0 sm:flex-1 justify-center px-3 sm:px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
               activeTab === id
                 ? 'bg-[#25d366]/10 text-[#25d366] shadow-sm'
                 : 'text-gray-400 hover:text-white hover:bg-white/5'
@@ -522,7 +649,7 @@ export default function BotAdmin() {
                         Cancelar
                       </button>
                     )}
-                    <button type="submit" className="flex-1 bg-gradient-to-r from-[#25d366] to-[#128c7e] hover:brightness-110 text-black font-bold px-4 py-2 rounded-xl text-sm transition-all">
+                    <button type="submit" className="flex-1 bg-linear-to-r from-[#25d366] to-[#128c7e] hover:brightness-110 text-black font-bold px-4 py-2 rounded-xl text-sm transition-all">
                       {editingRes ? 'Guardar Cambios' : 'Añadir a la Base'}
                     </button>
                   </div>

@@ -218,6 +218,45 @@ export class BotInstance extends EventEmitter {
     await this.client.sendMessage(chatId, media, options);
   }
 
+  // ── Generic chat methods (contacts + groups) ────────────────────────────────
+
+  /**
+   * Send a text message to any pre-normalized chatId (@c.us or @g.us).
+   */
+  async sendMessageToChat(chatId: string, message: string): Promise<void> {
+    if (!this.client || this.state.status !== "ready") {
+      throw new Error(`Bot ${this.botId} is not ready.`);
+    }
+    await this.client.sendMessage(chatId, message);
+  }
+
+  /**
+   * Send a media message (from URL or file path) to any pre-normalized chatId.
+   */
+  async sendMediaToChat(chatId: string, source: string, caption?: string): Promise<void> {
+    if (!this.client || this.state.status !== "ready") {
+      throw new Error(`Bot ${this.botId} is not ready.`);
+    }
+    let media: pkg.MessageMedia;
+    if (source.startsWith("http")) {
+      media = await pkg.MessageMedia.fromUrl(source);
+    } else {
+      media = pkg.MessageMedia.fromFilePath(source);
+    }
+    const options = caption ? { caption } : {};
+    await this.client.sendMessage(chatId, media, options);
+  }
+
+  /**
+   * Returns all chats from the WhatsApp client. Requires READY status.
+   */
+  async getChats(): Promise<any[]> {
+    if (!this.client || this.state.status !== "ready") {
+      throw new Error(`Bot ${this.botId} is not ready.`);
+    }
+    return this.client.getChats();
+  }
+
   private static readonly IGNORED_MSG_TYPES = new Set([
     "e2e_notification",
     "notification_template",

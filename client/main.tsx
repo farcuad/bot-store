@@ -4,12 +4,16 @@ import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import './index.css'
 import App from './App.tsx'
+import 'glass-alert-animation/styles'
+import { GlassAlertProvider } from 'glass-alert-animation'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <App />
+        <GlassAlertProvider>
+          <App />
+        </GlassAlertProvider>
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>,

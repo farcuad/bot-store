@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useGlassAlert } from 'glass-alert-animation';
 
 interface Subscription {
   id: string;
@@ -31,6 +32,7 @@ interface Transaction {
 
 const AdminSubscriptions: React.FC = () => {
   const { user } = useAuth();
+  const { fire } = useGlassAlert();
   const [tab, setTab] = useState<'pending' | 'active' | 'transactions'>('pending');
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -70,7 +72,16 @@ const AdminSubscriptions: React.FC = () => {
   }, [fetchData]);
 
   const handleApprove = async (botId: string) => {
-    if (!window.confirm('¿Seguro que deseas aprobar esta suscripción? Verifica que el pago se haya realizado.')) return;
+    const result = await fire({
+      title: '¿Aprobar esta suscripción?',
+      text: 'Verifica que el pago se haya realizado correctamente.',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, aprobar',
+      cancelButtonText: 'Cancelar'
+    });
+    if (!result.isConfirmed) return;
+
     setProcessingId(botId);
     try {
       const token = await user?.getIdToken();
@@ -85,18 +96,42 @@ const AdminSubscriptions: React.FC = () => {
       const data = await res.json();
       if (data.ok) {
         await fetchData();
+        fire({
+          title: 'Éxito',
+          text: 'Suscripción aprobada correctamente.',
+          icon: 'success',
+          toast: true,
+          position: 'top-end',
+          timer: 3000
+        });
       } else {
-        alert(data.error);
+        fire({
+          title: 'Error',
+          text: data.error,
+          icon: 'error'
+        });
       }
     } catch (e: any) {
-      alert(e.message);
+      fire({
+        title: 'Error',
+        text: e.message,
+        icon: 'error'
+      });
     } finally {
       setProcessingId(null);
     }
   };
 
   const handleReject = async (botId: string) => {
-    if (!window.confirm('¿Seguro que deseas rechazar esta solicitud?')) return;
+    const result = await fire({
+      title: '¿Rechazar esta solicitud?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, rechazar',
+      cancelButtonText: 'Cancelar'
+    });
+    if (!result.isConfirmed) return;
+
     setProcessingId(botId);
     try {
       const token = await user?.getIdToken();
@@ -111,11 +146,26 @@ const AdminSubscriptions: React.FC = () => {
       const data = await res.json();
       if (data.ok) {
         await fetchData();
+        fire({
+          title: 'Solicitud rechazada',
+          icon: 'success',
+          toast: true,
+          position: 'top-end',
+          timer: 3000
+        });
       } else {
-        alert(data.error);
+        fire({
+          title: 'Error',
+          text: data.error,
+          icon: 'error'
+        });
       }
     } catch (e: any) {
-      alert(e.message);
+      fire({
+        title: 'Error',
+        text: e.message,
+        icon: 'error'
+      });
     } finally {
       setProcessingId(null);
     }

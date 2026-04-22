@@ -3,7 +3,7 @@ import type { Request, Response, NextFunction } from "express";
 import admin from "firebase-admin";
 import { db } from "../config/firebase.js";
 import type { InfoRespuesta } from "../models/BotConfig.js";
-import { seendMessageController } from "./WhatsappController.js";
+import { seendMessageController, getGroupsController, sendGroupMessageController } from "./WhatsappController.js";
 import { validateApiKey } from "../middlewares/authWhatsapp.js";
 const router = Router();
 
@@ -26,6 +26,10 @@ export interface UserProfile {
 const usersCol = () => db.collection("users");
 
 router.post("/send-message", validateApiKey, seendMessageController);
+
+// ── Group endpoints (Firebase auth required) ──────────────────────────────────
+router.get("/groupsBots/:botId", validateApiKey, getGroupsController);
+router.post("/groupsBots/:botId", validateApiKey, sendGroupMessageController);
 
 const botRef = (req: Request) => {
   const botId = req.headers["x-bot-id"] as string;

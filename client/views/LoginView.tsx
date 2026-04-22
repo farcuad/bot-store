@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { useGlassAlert } from 'glass-alert-animation';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
 const LoginView: React.FC = () => {
   const { user, status, dbUser, logout, authInstance } = useAuth();
   const navigate = useNavigate();
+  const { fire } = useGlassAlert();
 
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
@@ -14,8 +16,11 @@ const LoginView: React.FC = () => {
   useEffect(() => {
     if (user && status === 'approved') {
       navigate('/saas');
+    } else if (user && status === 'pending' && dbUser?.phone) {
+      // Si ya tiene teléfono y está pendiente, enviarlo a la landing de espera
+      navigate('/request-received');
     }
-  }, [user, status, navigate]);
+  }, [user, status, dbUser, navigate]);
 
   const handleGoogleLogin = async () => {
     setLoading(true);
@@ -43,14 +48,26 @@ const LoginView: React.FC = () => {
       });
       const data = await res.json();
       if (data.ok) {
-        window.location.reload();
+        await fire({
+          title: 'Solicitud Recibida',
+          text: 'Tu solicitud ha sido enviada. El administrador la revisará pronto.',
+          icon: 'success',
+          toast: true,
+          position: 'top-end',
+          timer: 4000,
+          timerProgressBar: true,
+          showConfirmButton: true,
+          confirmButtonText: 'Ok'
+        });
+        navigate('/request-received');
       } else {
         setError(data.error);
       }
     } catch (e: any) {
       setError(e.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -88,7 +105,7 @@ const LoginView: React.FC = () => {
                   <button
                     onClick={submitPhone}
                     disabled={loading}
-                    className="w-full bg-gradient-to-r from-[#25d366] to-[#128c7e] hover:brightness-110 text-black font-bold py-3 px-4 rounded-xl transition-all shadow-lg shadow-[#25d366]/20 mb-4"
+                    className="w-full bg-linear-to-r from-[#25d366] to-[#128c7e] hover:brightness-110 text-black font-bold py-3 px-4 rounded-xl transition-all shadow-lg shadow-[#25d366]/20 mb-4"
                   >
                     {loading ? 'Guardando...' : 'Guardar Teléfono'}
                   </button>
