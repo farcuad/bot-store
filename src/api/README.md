@@ -583,12 +583,12 @@ message_logs/                     ← Auditoría de mensajes enviados vía API
 
 ```
 src/
+  api/
+    routes.ts              ← Rutas públicas de API (/send-message, /groupsBots)
+    WhatsappController.ts  ← Controladores para enviar mensajes y listar grupos
+    authWhatsapp.ts        ← Valida x-client-key y x-client-botid
   admin/
-    routes.ts              ← POST /api/send-message, GET/POST /api/groupsBots/:botId, auth
-    WhatsappController.ts  ← Controladores: sendContactMessage, getGroups, sendGroupMessage
     server.ts              ← Montaje de rutas y servidor Express (puerto 3001)
-  middlewares/
-    authWhatsapp.ts        ← Valida x-client-key (global API_KEY o clientKey por bot)
   saas/
     saasRoutes.ts          ← Todas las rutas /api/saas/*
     BotManager.ts          ← CRUD de bots, renameBot (actualiza ambas colecciones), getBotKey()

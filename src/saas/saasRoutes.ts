@@ -207,6 +207,23 @@ router.delete("/bots/:id", async (req: Request, res: Response) => {
   }
 });
 
+/** GET /api/saas/bots/:id/api-logs — get outbound message logs */
+router.get("/bots/:id/api-logs", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, "Bot not found");
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) {
+      return fail(res, 403, "No autorizado");
+    }
+    const snap = await db.collection("bots").doc(id).collection("message_logs").orderBy("timestamp", "desc").limit(100).get();
+    const logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return ok(res, logs);
+  } catch (e: any) {
+    return fail(res, 500, e.message);
+  }
+});
+
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 /** POST /api/saas/bots/:id/start */
