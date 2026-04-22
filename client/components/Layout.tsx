@@ -1,12 +1,38 @@
 import React, { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, FileText } from 'lucide-react';
 
 const Layout: React.FC = () => {
   const { user, status, logout, isAdmin, dbUser } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Bot selector for Plantillas nav entry
+  const [showPlantillasModal, setShowPlantillasModal] = useState(false);
+  const [plantillasBots, setPlantillasBots] = useState<{ botId: string; nombre: string }[]>([]);
+  const [loadingBots, setLoadingBots] = useState(false);
+
+  const openPlantillasModal = async () => {
+    setShowPlantillasModal(true);
+    setLoadingBots(true);
+    try {
+      const token = await user?.getIdToken();
+      const res = await fetch('/api/saas/bots', { headers: { 'Authorization': `Bearer ${token}` } });
+      const data = await res.json();
+      if (data.ok) setPlantillasBots(data.data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingBots(false);
+    }
+  };
+
+  const selectBotForPlantillas = (botId: string) => {
+    setShowPlantillasModal(false);
+    setSidebarOpen(false);
+    navigate(`/bot/${botId}`, { state: { initialTab: 'plantillas' } });
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -30,6 +56,7 @@ const Layout: React.FC = () => {
   }
 
   return (
+    <>
     <div className="h-screen bg-[#0a0a0f] text-gray-200 font-inter flex overflow-hidden">
 
       {/* Mobile overlay */}
@@ -72,6 +99,15 @@ const Layout: React.FC = () => {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" /></svg>
             <span className="text-sm">Suscripción</span>
           </NavLink>
+
+          {/* Plantillas button — opens bot-selector modal */}
+          <button
+            onClick={openPlantillasModal}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-gray-400 hover:bg-[#25d366]/10 hover:text-[#25d366]"
+          >
+            <FileText className="w-5 h-5" />
+            <span className="text-sm">Plantillas</span>
+          </button>
 
           {isAdmin && (
             <>
@@ -143,6 +179,63 @@ const Layout: React.FC = () => {
         </div>
       </main>
     </div>
+    {/* ── Plantillas Bot Selector Modal ── */}
+    {showPlantillasModal && (
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="bg-[#12121a] border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-[#25d366]/10 rounded-xl flex items-center justify-center">
+                <FileText className="h-4 w-4 text-[#25d366]" />
+              </div>
+              <div>
+                <h3 className="font-bold text-white text-sm">Plantillas</h3>
+                <p className="text-gray-500 text-xs">¿En qué bot quieres gestionar plantillas?</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowPlantillasModal(false)}
+              className="p-1.5 text-gray-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          {loadingBots ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#25d366]" />
+            </div>
+          ) : plantillasBots.length === 0 ? (
+            <div className="text-center text-gray-500 py-8 text-sm">
+              <p>No tienes bots creados aún.</p>
+              <button
+                onClick={() => { setShowPlantillasModal(false); navigate('/saas'); }}
+                className="mt-3 text-[#25d366] hover:underline text-xs"
+              >
+                Crear mi primer bot →
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {plantillasBots.map(bot => (
+                <button
+                  key={bot.botId}
+                  onClick={() => selectBotForPlantillas(bot.botId)}
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-black/20 hover:bg-[#25d366]/10 border border-white/5 hover:border-[#25d366]/20 rounded-xl transition-all group"
+                >
+                  <div className="text-left min-w-0">
+                    <div className="text-sm font-medium text-white group-hover:text-[#25d366] transition-colors truncate">{bot.nombre}</div>
+                    <div className="text-xs text-gray-600 font-mono truncate">{bot.botId}</div>
+                  </div>
+                  <FileText className="h-4 w-4 text-gray-600 group-hover:text-[#25d366] shrink-0 transition-colors" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+    </>
   );
 };
 

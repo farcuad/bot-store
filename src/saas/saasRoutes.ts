@@ -8,6 +8,7 @@ import { createConfigService } from "../services/configService.js";
 import { createSessionManager } from "../services/sessionManager.js";
 import { createStatsManager } from "../services/statsManager.js";
 import { createBotLogger } from "../services/botLogger.js";
+import { broadcastScheduler, calcNextRun } from "../services/broadcastScheduler.js";
 import type { UserProfile } from "../admin/routes.js";
 
 const router = Router();
@@ -671,5 +672,151 @@ router.delete("/bots/:id/logs", async (req: Request, res: Response) => {
   }
 });
 
+
+// ── Templates ─────────────────────────────────────────────────────────────────
+
+router.get('/bots/:id/templates', async (req, res) => {
+  const id = req.params.id as string;
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, 'Bot not found');
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) return fail(res, 403, 'No autorizado');
+    const snap = await db.collection('bots').doc(id).collection('templates').orderBy('createdAt', 'desc').get();
+    return ok(res, snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (e: any) { return fail(res, 500, e.message); }
+});
+
+router.post('/bots/:id/templates', async (req, res) => {
+  const id = req.params.id as string;
+  const { name, text, imageUrl } = req.body as { name: string; text: string; imageUrl?: string };
+  if (!name || !text) return fail(res, 400, 'name y text son requeridos');
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, 'Bot not found');
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) return fail(res, 403, 'No autorizado');
+    const ref = await db.collection('bots').doc(id).collection('templates').add({
+      name: name.trim(), text: text.trim(), imageUrl: imageUrl?.trim() || null, createdAt: new Date(),
+    });
+    return ok(res, { id: ref.id, name, text, imageUrl });
+  } catch (e: any) { return fail(res, 500, e.message); }
+});
+
+router.put('/bots/:id/templates/:tid', async (req, res) => {
+  const id = req.params.id as string;
+  const tid = req.params.tid as string;
+  const { name, text, imageUrl } = req.body as { name?: string; text?: string; imageUrl?: string };
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, 'Bot not found');
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) return fail(res, 403, 'No autorizado');
+    const updates: Record<string, any> = { updatedAt: new Date() };
+    if (name !== undefined) updates.name = name.trim();
+    if (text !== undefined) updates.text = text.trim();
+    if (imageUrl !== undefined) updates.imageUrl = imageUrl?.trim() || null;
+    await db.collection('bots').doc(id).collection('templates').doc(tid).update(updates);
+    return ok(res, { id: tid, ...updates });
+  } catch (e: any) { return fail(res, 500, e.message); }
+});
+
+router.delete('/bots/:id/templates/:tid', async (req, res) => {
+  const id = req.params.id as string;
+  const tid = req.params.tid as string;
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, 'Bot not found');
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) return fail(res, 403, 'No autorizado');
+    await db.collection('bots').doc(id).collection('templates').doc(tid).delete();
+    return ok(res, { deleted: tid });
+  } catch (e: any) { return fail(res, 500, e.message); }
+});
+
+// ── Groups ────────────────────────────────────────────────────────────────────────────
+
+router.get('/bots/:id/groups', async (req, res) => {
+  const id = req.params.id as string;
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, 'Bot not found');
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) return fail(res, 403, 'No autorizado');
+    const instance = botManager.getInstance(id);
+    if (!instance || instance.getState().status !== 'ready')
+      return fail(res, 409, 'El bot debe estar activo para listar grupos');
+    const chats = await instance.getChats();
+    return ok(res, chats.filter((c: any) => c.isGroup).map((c: any) => ({
+      id: c.id._serialized, name: c.name, participantCount: c.participants?.length ?? 0
+    })));
+  } catch (e: any) { return fail(res, 500, e.message); }
+});
+
+// ── Broadcasts ──────────────────────────────────────────────────────────────────────────
+
+router.get('/bots/:id/broadcasts', async (req, res) => {
+  const id = req.params.id as string;
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, 'Bot not found');
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) return fail(res, 403, 'No autorizado');
+    const snap = await db.collection('bots').doc(id).collection('broadcasts').orderBy('createdAt', 'desc').limit(100).get();
+    return ok(res, snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (e: any) { return fail(res, 500, e.message); }
+});
+
+router.post('/bots/:id/broadcasts', async (req, res) => {
+  const id = req.params.id as string;
+  const { templateId, templateSnapshot, recipients, schedule } = req.body;
+  if (!templateSnapshot?.text) return fail(res, 400, 'templateSnapshot.text es requerido');
+  if (!recipients || (!recipients.contactIds?.length && !recipients.groupIds?.length))
+    return fail(res, 400, 'Debes seleccionar al menos un destinatario');
+  if (!schedule?.type) return fail(res, 400, 'schedule.type es requerido');
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, 'Bot not found');
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) return fail(res, 403, 'No autorizado');
+    const ref = await db.collection('bots').doc(id).collection('broadcasts').add({
+      botId: id, templateId: templateId || null, templateSnapshot,
+      recipients: { contactIds: recipients.contactIds ?? [], groupIds: recipients.groupIds ?? [] },
+      schedule, status: 'pending', createdAt: new Date(),
+    });
+    const doc = { id: ref.id, botId: id, templateId, templateSnapshot, recipients, schedule, status: 'pending' as const, createdAt: { toMillis: () => Date.now() } as any };
+    if (schedule.type === 'now') {
+      broadcastScheduler.executeBroadcast(doc as any).catch((e: any) => console.error('broadcast err:', e));
+      return ok(res, { id: ref.id, status: 'sending' });
+    } else {
+      const nextRun = calcNextRun(schedule);
+      if (!nextRun) return fail(res, 400, 'La programación no produce ningún envío futuro válido');
+      broadcastScheduler.schedule(doc as any);
+      return ok(res, { id: ref.id, status: 'scheduled', nextRun: nextRun.toISOString() });
+    }
+  } catch (e: any) { return fail(res, 500, e.message); }
+});
+
+router.post('/bots/:id/broadcasts/:bid/send', async (req, res) => {
+  const id = req.params.id as string;
+  const bid = req.params.bid as string;
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, 'Bot not found');
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) return fail(res, 403, 'No autorizado');
+    const snap = await db.collection('bots').doc(id).collection('broadcasts').doc(bid).get();
+    if (!snap.exists) return fail(res, 404, 'Broadcast no encontrado');
+    const result = await broadcastScheduler.executeBroadcast({ id: snap.id, botId: id, ...snap.data() } as any);
+    return ok(res, result);
+  } catch (e: any) { return fail(res, 500, e.message); }
+});
+
+router.delete('/bots/:id/broadcasts/:bid', async (req, res) => {
+  const id = req.params.id as string;
+  const bid = req.params.bid as string;
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, 'Bot not found');
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) return fail(res, 403, 'No autorizado');
+    broadcastScheduler.cancelBroadcast(id, bid);
+    await db.collection('bots').doc(id).collection('broadcasts').doc(bid).delete();
+    return ok(res, { deleted: bid });
+  } catch (e: any) { return fail(res, 500, e.message); }
+});
+
 export default router;
+
 
