@@ -5,6 +5,8 @@ import { Activity, MessageSquare, Database, AlertCircle, RefreshCw, Edit2, Trash
 import axios from 'axios';
 import { useGlassAlert } from 'glass-alert-animation';
 import TemplatesTab from './TemplatesTab';
+import { getAppStorage } from '../firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 interface BotStats {
   mensajes_recibidos?: number;
@@ -20,6 +22,7 @@ interface RespuestaInfo {
   id: string;
   texto: string;
   activo: boolean;
+  mediaUrl?: string;
 }
 
 interface MensajeNoEntendido {
@@ -92,6 +95,8 @@ export default function BotAdmin() {
 
   const [editingRes, setEditingRes] = useState<RespuestaInfo | null>(null);
   const [resText, setResText]       = useState('');
+  const [resMediaUrl, setResMediaUrl] = useState('');
+  const [uploadingMedia, setUploadingMedia] = useState(false);
 
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editSessionName, setEditSessionName] = useState('');
@@ -293,14 +298,16 @@ export default function BotAdmin() {
     if (!resText.trim()) return;
     try {
       const headers = await getHeaders();
+      const payload = { texto: resText, mediaUrl: resMediaUrl || null };
       if (editingRes) {
-        await axios.put<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/respuestas-info/${editingRes.id}`, { texto: resText }, { headers });
+        await axios.put<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/respuestas-info/${editingRes.id}`, payload, { headers });
       } else {
         const rid = 'res_' + Math.random().toString(36).substring(2, 9);
-        await axios.post<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/respuestas-info`, { rid, texto: resText, activo: true }, { headers });
+        await axios.post<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/respuestas-info`, { rid, activo: true, ...payload }, { headers });
       }
       setEditingRes(null);
       setResText('');
+      setResMediaUrl('');
       loadData();
     } catch (e: any) {
       fire({
@@ -308,6 +315,30 @@ export default function BotAdmin() {
         text: 'Error guardando: ' + (e.response?.data?.error || e.message),
         icon: 'error'
       });
+    }
+  };
+
+  const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const storage = getAppStorage();
+    if (!storage) {
+      fire({ title: 'Error', text: 'Firebase Storage no inicializado.', icon: 'error' });
+      return;
+    }
+    setUploadingMedia(true);
+    try {
+      const ext = file.name.split('.').pop();
+      const filename = `${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
+      const fileRef = ref(storage, `whaibot/knowledge/${botNumber}/${filename}`);
+      await uploadBytes(fileRef, file);
+      const url = await getDownloadURL(fileRef);
+      setResMediaUrl(url);
+    } catch (error: any) {
+      fire({ title: 'Error', text: 'No se pudo subir la imagen: ' + error.message, icon: 'error' });
+    } finally {
+      setUploadingMedia(false);
+      e.target.value = '';
     }
   };
 
@@ -696,7 +727,7 @@ export default function BotAdmin() {
                       <p className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{r.texto}</p>
                     </div>
                     <div className="flex flex-col gap-1 shrink-0">
-                      <button onClick={() => { setEditingRes(r); setResText(r.texto); }} className="p-2 text-gray-500 hover:text-indigo-400 hover:bg-indigo-400/10 rounded-lg transition-colors" title="Editar"><Edit2 className="h-4 w-4" /></button>
+                      <button onClick={() => { setEditingRes(r); setResText(r.texto); setResMediaUrl(r.mediaUrl || ''); }} className="p-2 text-gray-500 hover:text-indigo-400 hover:bg-indigo-400/10 rounded-lg transition-colors" title="Editar"><Edit2 className="h-4 w-4" /></button>
                       <button onClick={() => toggleActiva(r)} className="p-2 text-gray-500 hover:text-yellow-400 hover:bg-yellow-400/10 rounded-lg transition-colors" title="Toggle activo"><Activity className="h-4 w-4" /></button>
                       <button onClick={() => deleteRespuesta(r.id)} className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors" title="Eliminar"><Trash2 className="h-4 w-4" /></button>
                     </div>
@@ -719,9 +750,30 @@ export default function BotAdmin() {
                       required
                     />
                   </div>
-                  <div className="flex gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Imagen (opcional)</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        value={resMediaUrl}
+                        onChange={e => setResMediaUrl(e.target.value)}
+                        placeholder="URL de imagen o sube un archivo"
+                        className="w-full bg-black/30 border border-white/5 rounded-xl px-4 py-3 text-white text-sm font-mono focus:outline-none focus:border-[#25d366] focus:ring-1 focus:ring-[#25d366] transition-all"
+                      />
+                      <label className="cursor-pointer shrink-0 bg-[#25d366]/10 text-[#25d366] px-4 py-3 rounded-xl flex items-center justify-center font-bold text-sm hover:bg-[#25d366]/20 transition-colors">
+                        <input type="file" className="hidden" accept="image/*" onChange={handleMediaUpload} disabled={uploadingMedia} />
+                        {uploadingMedia ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                      </label>
+                    </div>
+                    {resMediaUrl && (
+                      <div className="mt-2 rounded-xl overflow-hidden border border-white/5 max-h-40 flex items-center justify-center bg-black/20">
+                        <img src={resMediaUrl} alt="Preview" className="max-h-40 object-contain" onError={e => (e.currentTarget.src = '')} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-3 pt-2">
                     {editingRes && (
-                      <button type="button" onClick={() => { setEditingRes(null); setResText(''); }} className="px-4 py-2 border border-white/10 hover:bg-white/5 rounded-xl text-sm font-medium transition-colors">
+                      <button type="button" onClick={() => { setEditingRes(null); setResText(''); setResMediaUrl(''); }} className="px-4 py-2 border border-white/10 hover:bg-white/5 rounded-xl text-sm font-medium transition-colors">
                         Cancelar
                       </button>
                     )}

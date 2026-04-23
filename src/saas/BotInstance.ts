@@ -471,7 +471,8 @@ export class BotInstance extends EventEmitter {
         this.configSvc.getNombre(),
         config.respuestas_info,
         instruccionExtra,
-        config.prompt_ia
+        config.prompt_ia,
+        config.timezone
       );
 
       // 6. Finalizar respuesta (Validando estado humano nuevamente)
@@ -530,6 +531,7 @@ export class BotInstance extends EventEmitter {
   private async _finalizeResponse(from: string, nombre: string, session: any, respuesta: string, fullText: string, config: any) {
     const nowInSeconds = Math.floor(Date.now() / 1000);
     const sys = (key: string): string => (config.respuestas_info as any)[`sys_${key}`]?.texto ?? "";
+    const { MessageMedia } = await import("whatsapp-web.js");
 
     if (respuesta.includes("[NO_ENTENDI]")) {
       respuesta = respuesta.replace("[NO_ENTENDI]", "").trim();
@@ -558,9 +560,26 @@ export class BotInstance extends EventEmitter {
       this.logger.log(`👤 No se sobreescribe estado humano en ${from}.`);
     }
 
-    if (respuesta.trim()) {
-      this.recentlySentMessages.add(respuesta.trim());
+    // Extract and parse [URL_IMAGEN: ...] tags
+    const imageMatches = [...respuesta.matchAll(/\[URL_IMAGEN:\s*"?\s*(https?:\/\/[^\]"\s]+)\s*"?\s*\]/gi)];
+    const imageUrls = imageMatches.map(m => m[1] as string);
+    
+    // Remove the tags from the final text
+    respuesta = respuesta.replace(/\[URL_IMAGEN:[^\]]+\]/gi, "").trim();
+
+    if (respuesta) {
+      this.recentlySentMessages.add(respuesta);
       await this.client?.sendMessage(from, respuesta);
+    }
+
+    // Send images one by one if there are any
+    for (const url of imageUrls) {
+      try {
+        const media = await MessageMedia.fromUrl(url, { unsafeMime: true });
+        await this.client?.sendMessage(from, media);
+      } catch (err) {
+        this.logger.error(`Error enviando imagen extraída (${url}):`, err);
+      }
     }
   }
 

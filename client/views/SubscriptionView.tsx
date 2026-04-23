@@ -26,30 +26,6 @@ interface UserBot {
   status: string;
 }
 
-// ── Plan cards ────────────────────────────────────────────────────────────────
-
-const PLANS = [
-  {
-    key: 'monthly' as const,
-    label: 'Mensual',
-    price: 30,
-    period: '/mes',
-    savings: null,
-    badge: null,
-    description: 'Ideal para empezar. Cancela cuando quieras.',
-    features: ['1 bot activo', 'IA ilimitada', 'API pública', 'Soporte por WhatsApp'],
-  },
-  {
-    key: 'annual' as const,
-    label: 'Anual',
-    price: 270,
-    period: '/año',
-    savings: '25% descuento',
-    badge: 'Más popular',
-    description: '$22.5/mes — ahorra $90 al año vs mensual.',
-    features: ['1 bot activo', 'IA ilimitada', 'API pública', 'Soporte prioritario', 'Ahorro garantizado'],
-  },
-];
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
@@ -102,13 +78,15 @@ function RequestModal({
   onClose,
   onSuccess,
   token,
+  plans,
 }: {
   bot: UserBot;
   onClose: () => void;
   onSuccess: () => void;
   token: string;
+  plans: any[];
 }) {
-  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'annual'>('monthly');
+  const [selectedPlan, setSelectedPlan] = useState<string>(plans[0]?.name?.toLowerCase() || 'basic');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -161,26 +139,28 @@ function RequestModal({
           Selecciona el plan que deseas. El administrador revisará tu solicitud y te notificará para coordinar el pago.
         </p>
 
-        <div className="grid grid-cols-2 gap-3 mb-5">
-          {PLANS.map((plan) => (
-            <button
-              key={plan.key}
-              onClick={() => setSelectedPlan(plan.key)}
-              className={`relative p-4 rounded-xl border text-left transition-all duration-200 cursor-pointer ${selectedPlan === plan.key
-                  ? 'border-[#25d366]/50 bg-[#25d366]/8'
-                  : 'border-white/8 bg-white/3 hover:border-white/15'
-                }`}
-            >
-              {plan.badge && (
-                <span className="absolute -top-2 right-3 text-[10px] font-bold bg-[#25d366] text-black px-2 py-0.5 rounded-full">
-                  {plan.badge}
-                </span>
-              )}
-              <p className="font-bold text-white text-base mb-0.5">${plan.price}<span className="text-sm font-normal text-gray-400">{plan.period}</span></p>
-              <p className="text-xs text-gray-400">{plan.label}</p>
-              {plan.savings && <p className="text-xs text-[#25d366] mt-1 font-medium">{plan.savings}</p>}
-            </button>
-          ))}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-5">
+          {plans.map((plan) => {
+            const key = plan.name.toLowerCase();
+            return (
+              <button
+                key={key}
+                onClick={() => setSelectedPlan(key)}
+                className={`relative p-4 rounded-xl border text-left transition-all duration-200 cursor-pointer ${selectedPlan === key
+                    ? 'border-[#25d366]/50 bg-[#25d366]/8'
+                    : 'border-white/8 bg-white/3 hover:border-white/15'
+                  }`}
+              >
+                {plan.popular && (
+                  <span className="absolute -top-2 right-3 text-[10px] font-bold bg-[#25d366] text-black px-2 py-0.5 rounded-full">
+                    Popular
+                  </span>
+                )}
+                <p className="font-bold text-white text-base mb-0.5">{plan.price}<span className="text-sm font-normal text-gray-400">/mes</span></p>
+                <p className="text-xs text-gray-400">{plan.name}</p>
+              </button>
+            );
+          })}
         </div>
 
         {error && <p className="text-sm text-red-400 mb-4 px-3 py-2 bg-red-500/10 rounded-lg border border-red-500/20">{error}</p>}
@@ -215,22 +195,26 @@ const SubscriptionView: React.FC = () => {
   const [bots, setBots] = useState<UserBot[]>([]);
   const [loading, setLoading] = useState(true);
   const [requestBot, setRequestBot] = useState<UserBot | null>(null);
+  const [plans, setPlans] = useState<any[]>([]);
 
   const fetchData = useCallback(async () => {
     try {
       const token = await user?.getIdToken();
       if (!token) return;
 
-      const [billingRes, botsRes] = await Promise.all([
+      const [billingRes, botsRes, plansRes] = await Promise.all([
         fetch('/api/saas/billing/me', { headers: { 'Authorization': `Bearer ${token}` } }),
         fetch('/api/saas/bots?onlyMine=true', { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch('/api/plans'),
       ]);
 
       const billingData = await billingRes.json();
       const botsData = await botsRes.json();
+      const plansData = await plansRes.json();
 
       if (billingData.ok) setBilling(billingData);
       if (botsData.ok) setBots(botsData.data);
+      if (plansData.ok && plansData.plans && plansData.plans.length > 0) setPlans(plansData.plans);
     } catch (e) {
       console.error(e);
     } finally {
@@ -382,33 +366,28 @@ const SubscriptionView: React.FC = () => {
       {/* Plans info */}
       <div>
         <h2 className="text-base font-semibold text-white mb-4">Planes disponibles</h2>
-        <div className="grid md:grid-cols-2 gap-4">
-          {PLANS.map((plan) => (
+        <div className="grid md:grid-cols-3 gap-4">
+          {plans.map((plan) => (
             <div
-              key={plan.key}
-              className={`relative bg-[#12121a] border rounded-2xl p-6 ${plan.badge ? 'border-[#25d366]/30' : 'border-white/8'
+              key={plan.name}
+              className={`relative bg-[#12121a] border rounded-2xl p-6 ${plan.popular ? 'border-[#25d366]/30' : 'border-white/8'
                 }`}
             >
-              {plan.badge && (
+              {plan.popular && (
                 <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-bold bg-[#25d366] text-black px-3 py-1 rounded-full">
-                  {plan.badge}
+                  Popular
                 </span>
               )}
               <div className="mb-4">
-                <p className="text-gray-400 text-sm mb-1">{plan.label}</p>
+                <p className="text-gray-400 text-sm mb-1">{plan.name}</p>
                 <div className="flex items-end gap-1">
-                  <span className="text-4xl font-black text-white">${plan.price}</span>
-                  <span className="text-gray-400 text-sm mb-1.5">{plan.period}</span>
+                  <span className="text-4xl font-black text-white">{plan.price}</span>
+                  <span className="text-gray-400 text-sm mb-1.5">/mes</span>
                 </div>
-                {plan.savings && (
-                  <span className="inline-block text-xs font-bold text-[#25d366] bg-[#25d366]/10 px-2 py-0.5 rounded-full border border-[#25d366]/20 mt-1">
-                    {plan.savings}
-                  </span>
-                )}
                 <p className="text-gray-500 text-xs mt-2">{plan.description}</p>
               </div>
               <ul className="space-y-2">
-                {plan.features.map((f) => (
+                {plan.features.map((f: string) => (
                   <li key={f} className="flex items-center gap-2 text-sm text-gray-300">
                     <CheckIcon />
                     {f}
@@ -428,26 +407,17 @@ const SubscriptionView: React.FC = () => {
 
       {/* Request Modal */}
       {requestBot && (
-        <RequestModal
-          bot={requestBot}
-          token={''}
-          onClose={() => setRequestBot(null)}
-          onSuccess={fetchData}
-        />
-      )}
-
-      {/* Fix: pass real token to modal */}
-      {requestBot && (
-        <TokenInjector bot={requestBot} user={user} onClose={() => setRequestBot(null)} onSuccess={fetchData} />
+        <TokenInjector bot={requestBot} user={user} plans={plans} onClose={() => setRequestBot(null)} onSuccess={fetchData} />
       )}
     </div>
   );
 };
 
 // Workaround: get the token async and pass it to the modal
-function TokenInjector({ bot, user, onClose, onSuccess }: {
+function TokenInjector({ bot, user, plans, onClose, onSuccess }: {
   bot: UserBot;
   user: any;
+  plans: any[];
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -459,7 +429,7 @@ function TokenInjector({ bot, user, onClose, onSuccess }: {
 
   if (!token) return null;
 
-  return <RequestModal bot={bot} token={token} onClose={onClose} onSuccess={onSuccess} />;
+  return <RequestModal bot={bot} token={token} plans={plans} onClose={onClose} onSuccess={onSuccess} />;
 }
 
 export default SubscriptionView;
