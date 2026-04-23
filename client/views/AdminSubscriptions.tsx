@@ -3,27 +3,24 @@ import { useAuth } from '../context/AuthContext';
 import { useGlassAlert } from 'glass-alert-animation';
 
 interface Subscription {
-  id: string;
-  botId: string;
+  id: string; // The uid
   uid: string;
   userEmail: string;
   userName: string;
-  plan: 'monthly' | 'annual';
+  planId: string;
   status: 'active' | 'pending_approval' | 'expired' | 'rejected';
   requestedAt: number;
   approvedAt?: number;
   expiresAt?: number;
-  isActive: boolean;
 }
 
 interface Transaction {
   id: string;
   txId: string;
-  botId: string;
   uid: string;
   userEmail: string;
   userName: string;
-  plan: 'monthly' | 'annual';
+  planId: string;
   amount: number;
   status: string;
   approvedAt: number;
@@ -71,7 +68,7 @@ const AdminSubscriptions: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
-  const handleApprove = async (botId: string) => {
+  const handleApprove = async (uid: string) => {
     const result = await fire({
       title: '¿Aprobar esta suscripción?',
       text: 'Verifica que el pago se haya realizado correctamente.',
@@ -82,10 +79,10 @@ const AdminSubscriptions: React.FC = () => {
     });
     if (!result.isConfirmed) return;
 
-    setProcessingId(botId);
+    setProcessingId(uid);
     try {
       const token = await user?.getIdToken();
-      const res = await fetch(`/api/saas/billing/admin/bots/${botId}/approve`, {
+      const res = await fetch(`/api/saas/billing/admin/users/${uid}/approve`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -122,7 +119,7 @@ const AdminSubscriptions: React.FC = () => {
     }
   };
 
-  const handleReject = async (botId: string) => {
+  const handleReject = async (uid: string) => {
     const result = await fire({
       title: '¿Rechazar esta solicitud?',
       icon: 'warning',
@@ -132,10 +129,10 @@ const AdminSubscriptions: React.FC = () => {
     });
     if (!result.isConfirmed) return;
 
-    setProcessingId(botId);
+    setProcessingId(uid);
     try {
       const token = await user?.getIdToken();
-      const res = await fetch(`/api/saas/billing/admin/bots/${botId}/reject`, {
+      const res = await fetch(`/api/saas/billing/admin/users/${uid}/reject`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -172,7 +169,7 @@ const AdminSubscriptions: React.FC = () => {
   };
 
   const pendingSubs = subscriptions.filter((s) => s.status === 'pending_approval');
-  const activeSubs = subscriptions.filter((s) => s.status === 'active' && s.isActive);
+  const activeSubs = subscriptions.filter((s) => s.status === 'active');
 
   if (loading) {
     return (
@@ -215,7 +212,7 @@ const AdminSubscriptions: React.FC = () => {
               : 'border-transparent text-gray-400 hover:text-white'
           }`}
         >
-          Activas ({activeSubs.length})
+          Resueltas/Activas ({activeSubs.length})
         </button>
         <button
           onClick={() => setTab('transactions')}
@@ -236,7 +233,7 @@ const AdminSubscriptions: React.FC = () => {
             <thead className="bg-white/5 text-gray-400">
               <tr>
                 <th className="px-6 py-4 font-medium">Usuario</th>
-                <th className="px-6 py-4 font-medium">Bot ID</th>
+                <th className="px-6 py-4 font-medium">UID</th>
                 <th className="px-6 py-4 font-medium">Plan Solicitado</th>
                 <th className="px-6 py-4 font-medium">Fecha</th>
                 <th className="px-6 py-4 text-right font-medium">Acciones</th>
@@ -256,10 +253,10 @@ const AdminSubscriptions: React.FC = () => {
                       <div className="font-medium text-white">{sub.userName || 'Usuario'}</div>
                       <div className="text-xs text-gray-500">{sub.userEmail}</div>
                     </td>
-                    <td className="px-6 py-4 font-mono text-xs">{sub.botId}</td>
+                    <td className="px-6 py-4 font-mono text-xs text-gray-500">{sub.uid}</td>
                     <td className="px-6 py-4">
-                      <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2.5 py-1 rounded-full text-xs font-medium">
-                        {sub.plan === 'monthly' ? 'Mensual ($30)' : 'Anual ($270)'}
+                      <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2.5 py-1 rounded-full text-xs font-medium uppercase tracking-wider">
+                        {sub.planId}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-gray-400 text-xs">
@@ -268,18 +265,18 @@ const AdminSubscriptions: React.FC = () => {
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2">
                         <button
-                          onClick={() => handleReject(sub.botId)}
-                          disabled={processingId === sub.botId}
+                          onClick={() => handleReject(sub.uid)}
+                          disabled={processingId === sub.uid}
                           className="px-3 py-1.5 text-xs font-medium bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded-lg transition-colors border border-red-500/20 disabled:opacity-50"
                         >
                           Rechazar
                         </button>
                         <button
-                          onClick={() => handleApprove(sub.botId)}
-                          disabled={processingId === sub.botId}
+                          onClick={() => handleApprove(sub.uid)}
+                          disabled={processingId === sub.uid}
                           className="px-3 py-1.5 text-xs font-medium bg-[#25d366] text-black hover:bg-[#20c55d] rounded-lg transition-colors disabled:opacity-50"
                         >
-                          {processingId === sub.botId ? '...' : 'Aprobar Pago'}
+                          {processingId === sub.uid ? '...' : 'Aprobar Pago'}
                         </button>
                       </div>
                     </td>
@@ -298,46 +295,34 @@ const AdminSubscriptions: React.FC = () => {
             <thead className="bg-white/5 text-gray-400">
               <tr>
                 <th className="px-6 py-4 font-medium">Usuario</th>
-                <th className="px-6 py-4 font-medium">Bot ID</th>
+                <th className="px-6 py-4 font-medium">UID</th>
                 <th className="px-6 py-4 font-medium">Plan</th>
                 <th className="px-6 py-4 font-medium">Aprobada</th>
-                <th className="px-6 py-4 font-medium">Vencimiento</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {activeSubs.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                    No hay suscripciones activas
+                  <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
+                    No hay solicitudes resueltas
                   </td>
                 </tr>
               ) : (
                 activeSubs.map((sub) => {
-                  const daysLeft = sub.expiresAt 
-                    ? Math.max(0, Math.ceil((sub.expiresAt - Date.now()) / (1000 * 60 * 60 * 24)))
-                    : 0;
                   return (
                     <tr key={sub.id} className="hover:bg-white/5 transition-colors">
                       <td className="px-6 py-4">
                         <div className="font-medium text-white">{sub.userName || 'Usuario'}</div>
                         <div className="text-xs text-gray-500">{sub.userEmail}</div>
                       </td>
-                      <td className="px-6 py-4 font-mono text-xs">{sub.botId}</td>
+                      <td className="px-6 py-4 font-mono text-xs text-gray-500">{sub.uid}</td>
                       <td className="px-6 py-4">
-                        <span className="bg-[#25d366]/10 text-[#25d366] border border-[#25d366]/20 px-2.5 py-1 rounded-full text-xs font-medium">
-                          {sub.plan === 'monthly' ? 'Mensual' : 'Anual'}
+                        <span className="bg-[#25d366]/10 text-[#25d366] border border-[#25d366]/20 px-2.5 py-1 rounded-full text-xs font-medium uppercase">
+                          {sub.planId}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-gray-400 text-xs">
                         {sub.approvedAt ? new Date(sub.approvedAt).toLocaleDateString() : '—'}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-white text-xs">
-                          {sub.expiresAt ? new Date(sub.expiresAt).toLocaleDateString() : '—'}
-                        </div>
-                        {daysLeft <= 7 && (
-                          <div className="text-xs text-amber-500 mt-0.5">Renueva en {daysLeft} d</div>
-                        )}
                       </td>
                     </tr>
                   );
@@ -356,7 +341,6 @@ const AdminSubscriptions: React.FC = () => {
               <tr>
                 <th className="px-6 py-4 font-medium">Tx ID</th>
                 <th className="px-6 py-4 font-medium">Usuario</th>
-                <th className="px-6 py-4 font-medium">Bot ID</th>
                 <th className="px-6 py-4 font-medium">Monto</th>
                 <th className="px-6 py-4 font-medium">Fecha</th>
               </tr>
@@ -364,7 +348,7 @@ const AdminSubscriptions: React.FC = () => {
             <tbody className="divide-y divide-white/5">
               {transactions.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
                     No hay transacciones registradas
                   </td>
                 </tr>
@@ -374,12 +358,12 @@ const AdminSubscriptions: React.FC = () => {
                     <td className="px-6 py-4 font-mono text-xs text-gray-500">{tx.txId || tx.id}</td>
                     <td className="px-6 py-4">
                       <div className="font-medium text-white">{tx.userName || 'Usuario'}</div>
+                      <div className="text-xs text-gray-500">{tx.userEmail}</div>
                     </td>
-                    <td className="px-6 py-4 font-mono text-xs">{tx.botId}</td>
                     <td className="px-6 py-4">
                       <span className="font-medium text-[#25d366]">${tx.amount}</span>
-                      <span className="text-xs text-gray-500 ml-1">
-                        ({tx.plan === 'monthly' ? 'Mensual' : 'Anual'})
+                      <span className="text-xs text-gray-500 ml-1 uppercase">
+                        ({tx.planId})
                       </span>
                     </td>
                     <td className="px-6 py-4 text-gray-400 text-xs">

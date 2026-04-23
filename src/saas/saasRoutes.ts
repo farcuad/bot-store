@@ -9,6 +9,7 @@ import { createSessionManager } from "../services/sessionManager.js";
 import { createStatsManager } from "../services/statsManager.js";
 import { createBotLogger } from "../services/botLogger.js";
 import { broadcastScheduler, calcNextRun } from "../services/broadcastScheduler.js";
+import { subscriptionService } from "../services/subscriptionService.js";
 import type { UserProfile } from "../admin/routes.js";
 
 const router = Router();
@@ -108,16 +109,16 @@ router.post("/bots", async (req: Request, res: Response) => {
   // ── Enforce per-user bot limit (skip for admins creating their own bots) ────
   if (!req.isAdmin) {
     try {
-      const userSnap = await db.collection("users").doc(ownerUid).get();
-      const maxBots: number = userSnap.exists
-        ? (userSnap.data()?.maxBots ?? 1)
-        : 1;
+      const userSub = await subscriptionService.getUserSubscription(ownerUid);
+      const plan = await subscriptionService.getPlanInfo(userSub.planId);
+      const maxBots = plan.features.maxBots;
+      
       const currentBots = await botManager.listBots(ownerUid);
       if (currentBots.length >= maxBots) {
-        return fail(res, 403, `Límite de bots alcanzado (máximo: ${maxBots})`);
+        return fail(res, 403, `Tu plan actual (${plan.name}) solo permite tener ${maxBots} bot(s). Actualiza a un plan superior para agregar más.`);
       }
     } catch (e: any) {
-      return fail(res, 500, "Error verificando límite de bots: " + e.message);
+      return fail(res, 500, "Error verificando límite de bots por suscripción: " + e.message);
     }
   }
   // ────────────────────────────────────────────────────────────────────────────
@@ -730,6 +731,13 @@ router.post('/bots/:id/templates', async (req, res) => {
     const orig = await botManager.getBot(id);
     if (!orig) return fail(res, 404, 'Bot not found');
     if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) return fail(res, 403, 'No autorizado');
+    
+    // 🛑 Gate by Subscription Plan
+    const subContext = await subscriptionService.getBotSubscriptionContext(id);
+    if (!subContext.plan.features.whatsappTemplates) {
+      return fail(res, 403, `Tu plan actual (${subContext.plan.name}) no incluye el uso de Plantillas. Actualiza al plan Pro o Premium.`);
+    }
+
     const ref = await db.collection('bots').doc(id).collection('templates').add({
       name: name.trim(), text: text.trim(), imageUrl: imageUrl?.trim() || null, createdAt: new Date(),
     });
@@ -808,6 +816,12 @@ router.post('/bots/:id/broadcasts', async (req, res) => {
     const orig = await botManager.getBot(id);
     if (!orig) return fail(res, 404, 'Bot not found');
     if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) return fail(res, 403, 'No autorizado');
+
+    // 🛑 Gate by Subscription Plan
+    const subContext = await subscriptionService.getBotSubscriptionContext(id);
+    if (!subContext.plan.features.whatsappTemplates) {
+      return fail(res, 403, `Tu plan actual (${subContext.plan.name}) no incluye el envío de Campañas masivas. Actualiza al plan Pro o Premium.`);
+    }
     const ref = await db.collection('bots').doc(id).collection('broadcasts').add({
       botId: id, templateId: templateId || null, templateSnapshot,
       recipients: { contactIds: recipients.contactIds ?? [], groupIds: recipients.groupIds ?? [] },

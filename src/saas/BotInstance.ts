@@ -10,6 +10,7 @@ import { createSessionManager } from "../services/sessionManager.js";
 import { createConfigService } from "../services/configService.js";
 import { createStatsManager } from "../services/statsManager.js";
 import { createBotLogger } from "../services/botLogger.js";
+import { subscriptionService } from "../services/subscriptionService.js";
 import type { BotLogger } from "../services/botLogger.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -511,6 +512,15 @@ export class BotInstance extends EventEmitter {
       const botData = botDoc.data() ?? {};
       const openaiApiKey = (botData.openaiApiKey as string) || "";
       if (!botData.audioAnalysisEnabled || !openaiApiKey) return "[Envió audio]";
+
+      // 🛑 Gate by Subscription Plan
+      const subContext = await subscriptionService.getBotSubscriptionContext(this.botId);
+      if (!subContext.plan.features.audioTranscription) {
+        const warning = "Mi administrador no me tiene permitido escuchar audios de voz en este momento. Por favor, escríbeme por texto. 📝";
+        this.recentlySentMessages.add(warning);
+        await msg.reply(warning);
+        return "[Envió audio (Bloqueado por suscripción)]";
+      }
 
       const listeningRes = "Dame un momento mientras escucho tu audio... 🎧";
       this.recentlySentMessages.add(listeningRes);
