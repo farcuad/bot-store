@@ -103,10 +103,10 @@ const faqItems: FaqItem[] = [
   },
 ];
 
-const pricingPlans = [
+const defaultPricingPlans = [
   {
     name: "Basic",
-    price: "$19",
+    price: "$15",
     description: "Ideal para pequeños negocios que están empezando.",
     features: [
       "Respuestas 24/7 con IA",
@@ -207,15 +207,9 @@ function Navbar() {
         <div className="flex items-center gap-3">
           <a
             href="/login"
-            className="text-sm font-semibold text-slate-300 hover:text-white px-4 py-2 rounded-lg hover:bg-white/5 transition-all duration-200 cursor-pointer"
-          >
-            Iniciar sesión
-          </a>
-          <a
-            href="/login"
             className="text-sm font-semibold text-white px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-all duration-200 cursor-pointer border border-white/10"
           >
-            Registrarse
+            Iniciar sesión / Registrarse
           </a>
           <a
             href="https://wa.me/584127575904"
@@ -560,6 +554,19 @@ function UseCases() {
 }
 
 function Pricing() {
+  const [plans, setPlans] = useState<any[]>(defaultPricingPlans);
+
+  useEffect(() => {
+    fetch("/api/plans")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.ok && data.plans && data.plans.length > 0) {
+          setPlans(data.plans);
+        }
+      })
+      .catch((err) => console.error("Error fetching plans:", err));
+  }, []);
+
   return (
     <section id="precios" className="py-24 px-6 relative overflow-hidden">
       {/* Background decoration */}
@@ -579,7 +586,7 @@ function Pricing() {
         </div>
 
         <div className="grid md:grid-cols-3 gap-8">
-          {pricingPlans.map((plan) => (
+          {plans.map((plan: any) => (
             <div
               key={plan.name}
               className={`relative flex flex-col p-8 rounded-3xl bg-[#0d0d1a] border transition-all duration-500 hover:translate-y-[-8px] ${plan.popular ? "border-[#25d366]/50 shadow-2xl shadow-[#25d366]/10 scale-105 z-10" : "border-white/5"
@@ -602,7 +609,7 @@ function Pricing() {
               </div>
 
               <div className="space-y-4 mb-10 flex-grow">
-                {plan.features.map((feature, i) => (
+                {plan.features.map((feature: string, i: number) => (
                   <div key={i} className="flex items-start gap-3">
                     <div className={`mt-1 shrink-0 ${plan.popular ? "text-[#25d366]" : "text-slate-400"}`}>
                       <CheckIcon />

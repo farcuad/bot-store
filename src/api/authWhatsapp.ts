@@ -21,12 +21,12 @@ export const validateApiKey = async (
   }
 
   // Verificación de llave específica por bot
-  const targetBotId = req.headers["x-client-botid"] as string;
+  const targetBotId = (req.headers["x-client-botid"] || req.params.botId || req.body.botId) as string;
 
   if (!targetBotId) {
     res.status(400).json({
       error: "Bad Request",
-      message: "botId es requerido en el header x-client-botid de la petición",
+      message: "botId es requerido (preferiblemente en el header x-client-botid)",
     });
     return;
   }

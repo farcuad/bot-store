@@ -3,8 +3,7 @@ import type { Request, Response, NextFunction } from "express";
 import admin from "firebase-admin";
 import { db } from "../config/firebase.js";
 import type { InfoRespuesta } from "../models/BotConfig.js";
-import { seendMessageController, getGroupsController, sendGroupMessageController } from "./WhatsappController.js";
-import { validateApiKey } from "../middlewares/authWhatsapp.js";
+
 const router = Router();
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -25,14 +24,7 @@ export interface UserProfile {
 
 const usersCol = () => db.collection("users");
 
-router.post("/send-message", validateApiKey, seendMessageController);
-
-// ── Group endpoints (Firebase auth required) ──────────────────────────────────
-router.get("/groupsBots", validateApiKey, getGroupsController);
-router.post("/groupsBots", validateApiKey, sendGroupMessageController);
-
 const botRef = (req: Request) => {
-  const botId = req.headers["x-bot-id"] as string;
   if (!botId) return null;
   return db.collection("bots").doc(botId);
 };
@@ -113,7 +105,9 @@ export async function requireAdminRole(
     if (snap.exists && snap.data()?.role === "admin") {
       next();
     } else {
-      res.status(403).json({ ok: false, error: "No tienes permisos de administrador" });
+      res
+        .status(403)
+        .json({ ok: false, error: "No tienes permisos de administrador" });
     }
   } catch (e: any) {
     res.status(500).json({ ok: false, error: "Error verificando permisos" });
@@ -129,6 +123,40 @@ export function requireAuth(
   requireFirebaseAuth(req, res, next);
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// Plans / Subscriptions (Public & Admin)
+// ══════════════════════════════════════════════════════════════════════════════
+
+router.get("/plans", async (_req, res) => {
+  try {
+    const snap = await db.collection("platform").doc("plans").get();
+    if (!snap.exists) {
+      // Default mock plans if none in DB
+      return res.json({ ok: true, plans: [] });
+    }
+    res.json({ ok: true, plans: snap.data()?.plans || [] });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+router.put(
+  "/plans",
+  requireFirebaseAuth,
+  requireAdminRole,
+  async (req, res) => {
+    try {
+      const { plans } = req.body as { plans: any[] };
+      if (!Array.isArray(plans)) {
+        return res.status(400).json({ ok: false, error: "Formato inválido" });
+      }
+      await db.collection("platform").doc("plans").set({ plans });
+      res.json({ ok: true, plans });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  },
+);
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Firebase user registration / profile endpoints
@@ -204,54 +232,77 @@ router.get("/auth/me", async (req, res) => {
   }
 });
 
-
 /** GET /api/admin/users — lista todos los usuarios */
-router.get("/admin/users", requireFirebaseAuth, requireAdminRole, async (_req, res) => {
-  try {
-    const snap = await usersCol().orderBy("createdAt", "desc").get();
-    res.json({ ok: true, users: snap.docs.map(d => d.data()) });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
+router.get(
+  "/admin/users",
+  requireFirebaseAuth,
+  requireAdminRole,
+  async (_req, res) => {
+    try {
+      const snap = await usersCol().orderBy("createdAt", "desc").get();
+      res.json({ ok: true, users: snap.docs.map((d) => d.data()) });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  },
+);
 
 /** POST /api/admin/users/:uid/approve */
-router.post("/admin/users/:uid/approve", requireFirebaseAuth, requireAdminRole, async (req, res) => {
-  try {
-    const uid = req.params["uid"] as string;
-    await usersCol().doc(uid).update({ status: "approved", approvedAt: Date.now() });
-    res.json({ ok: true, uid, status: "approved" });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
+router.post(
+  "/admin/users/:uid/approve",
+  requireFirebaseAuth,
+  requireAdminRole,
+  async (req, res) => {
+    try {
+      const uid = req.params["uid"] as string;
+      await usersCol()
+        .doc(uid)
+        .update({ status: "approved", approvedAt: Date.now() });
+      res.json({ ok: true, uid, status: "approved" });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  },
+);
 
 /** PATCH /api/admin/users/:uid/maxBots — admin sets how many bots a user can create */
-router.patch("/admin/users/:uid/maxBots", requireFirebaseAuth, requireAdminRole, async (req, res) => {
-  try {
-    const uid = req.params["uid"] as string;
-    const { maxBots } = req.body as { maxBots?: number };
-    if (typeof maxBots !== "number" || maxBots < 0) {
-      res.status(400).json({ ok: false, error: "maxBots debe ser un número >= 0" });
-      return;
+router.patch(
+  "/admin/users/:uid/maxBots",
+  requireFirebaseAuth,
+  requireAdminRole,
+  async (req, res) => {
+    try {
+      const uid = req.params["uid"] as string;
+      const { maxBots } = req.body as { maxBots?: number };
+      if (typeof maxBots !== "number" || maxBots < 0) {
+        res
+          .status(400)
+          .json({ ok: false, error: "maxBots debe ser un número >= 0" });
+        return;
+      }
+      await usersCol().doc(uid).update({ maxBots });
+      res.json({ ok: true, uid, maxBots });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e.message });
     }
-    await usersCol().doc(uid).update({ maxBots });
-    res.json({ ok: true, uid, maxBots });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
+  },
+);
 
 /** POST /api/admin/users/:uid/reject */
-router.post("/admin/users/:uid/reject", requireFirebaseAuth, requireAdminRole, async (req, res) => {
-  try {
-    const uid = req.params["uid"] as string;
-    await usersCol().doc(uid).update({ status: "rejected" });
-    res.json({ ok: true, uid, status: "rejected" });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
+router.post(
+  "/admin/users/:uid/reject",
+  requireFirebaseAuth,
+  requireAdminRole,
+  async (req, res) => {
+    try {
+      const uid = req.params["uid"] as string;
+      await usersCol().doc(uid).update({ status: "rejected" });
+      res.json({ ok: true, uid, status: "rejected" });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  },
+);
 
 // ══════════════════════════════════════════════════════════════════════════════
 // A partir de aquí todas las rutas requieren auth
@@ -301,13 +352,12 @@ router.get("/respuestas-info", async (req, res) => {
 
 router.post("/respuestas-info", async (req, res) => {
   try {
-    const { id, texto, activo } =
-      req.body as {
-        id: string;
-        texto: string;
-        activo: boolean;
-      };
-    if (!id || !texto ) {
+    const { id, texto, activo } = req.body as {
+      id: string;
+      texto: string;
+      activo: boolean;
+    };
+    if (!id || !texto) {
       res.status(400).json({
         ok: false,
         error: "Faltan campos obligatorios: id, texto",
@@ -328,8 +378,7 @@ router.post("/respuestas-info", async (req, res) => {
 router.put("/respuestas-info/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { texto, activo } =
-      req.body as Partial<InfoRespuesta>;
+    const { texto, activo } = req.body as Partial<InfoRespuesta>;
     const updates: Partial<InfoRespuesta> = {};
     if (texto !== undefined) updates.texto = texto;
     if (activo !== undefined) updates.activo = activo;
@@ -356,7 +405,10 @@ router.delete("/respuestas-info/:id", async (req, res) => {
 
 router.get("/no-entendidos", async (req, res) => {
   try {
-    const snap = await noEntRef(req).orderBy("timestamp", "desc").limit(200).get();
+    const snap = await noEntRef(req)
+      .orderBy("timestamp", "desc")
+      .limit(200)
+      .get();
     const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     res.json({ ok: true, data });
   } catch (e: any) {
@@ -396,7 +448,10 @@ const sessionsRef = (req: Request) => {
 // GET /sessions — listar todas las sesiones
 router.get("/sessions", async (req, res) => {
   try {
-    const snap = await sessionsRef(req).orderBy("last_interaction", "desc").limit(200).get();
+    const snap = await sessionsRef(req)
+      .orderBy("last_interaction", "desc")
+      .limit(200)
+      .get();
     const data = snap.docs.map((d) => ({ id: d.id, phone: d.id, ...d.data() }));
     res.json({ ok: true, data });
   } catch (e: any) {
@@ -410,12 +465,16 @@ router.patch("/sessions/:phone/status", async (req, res) => {
     const { phone } = req.params;
     const { status } = req.body as { status: "bot" | "human" };
     if (!["bot", "human"].includes(status)) {
-      res.status(400).json({ ok: false, error: "status debe ser 'bot' o 'human'" });
+      res
+        .status(400)
+        .json({ ok: false, error: "status debe ser 'bot' o 'human'" });
       return;
     }
     const update: Record<string, unknown> = { status, updated_at: Date.now() };
     if (status === "human") update.human_since = Math.floor(Date.now() / 1000);
-    else { update.human_since = null; }
+    else {
+      update.human_since = null;
+    }
     await sessionsRef(req).doc(phone).update(update);
     res.json({ ok: true, phone, status });
   } catch (e: any) {
