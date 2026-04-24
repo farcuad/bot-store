@@ -7,6 +7,7 @@ import UserManagement from './views/UserManagement';
 import AdminBots from './views/AdminBots';
 import SubscriptionView from './views/SubscriptionView';
 import AdminSubscriptions from './views/AdminSubscriptions';
+import AdminPlans from './views/AdminPlans';
 import RequestReceived from './views/RequestReceived';
 import Layout from './components/Layout';
 import './App.css';
@@ -25,6 +26,7 @@ function App() {
         {/* Admin: gestión de todos los bots */}
         <Route path="/saas/admin" element={<AdminBots />} />
         <Route path="/saas/admin/subscriptions" element={<AdminSubscriptions />} />
+        <Route path="/saas/admin/plans" element={<AdminPlans />} />
         {/* Admin: gestión de usuarios */}
         <Route path="/saas/users" element={<UserManagement />} />
         <Route path="/bot/:botId" element={<BotAdmin />} />

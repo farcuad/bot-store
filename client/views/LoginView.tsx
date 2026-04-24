@@ -5,14 +5,15 @@ import { useGlassAlert } from 'glass-alert-animation';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
 const LoginView: React.FC = () => {
-  const { user, status, dbUser, logout, authInstance } = useAuth();
+  const { user, status, dbUser, logout, authInstance, checkUserStatus } = useAuth();
   const navigate = useNavigate();
   const { fire } = useGlassAlert();
 
   const [dialCode, setDialCode] = useState('+54');
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [saveLoading, setSaveLoading] = useState(false);
 
   useEffect(() => {
     if (user && status === 'approved') {
@@ -24,7 +25,7 @@ const LoginView: React.FC = () => {
   }, [user, status, dbUser, navigate]);
 
   const handleGoogleLogin = async () => {
-    setLoading(true);
+    setLoginLoading(true);
     setError('');
     try {
       if (!authInstance) return setError('Cargando servicios de autenticación... por favor reintenta en un momento.');
@@ -33,14 +34,15 @@ const LoginView: React.FC = () => {
       // El onAuthStateChanged en AuthContext disparará la verificación
     } catch (e: any) {
       setError(e.message || 'Error al iniciar sesión con Google');
-      setLoading(false);
+    } finally {
+      setLoginLoading(false);
     }
   };
 
   const submitPhone = async () => {
     if (!phone) return setError('Ingresa tu teléfono');
     const fullPhone = `${dialCode}${phone.replace(/\D/g, '')}`;
-    setLoading(true);
+    setSaveLoading(true);
     try {
       const idToken = await user?.getIdToken();
       const res = await fetch('/api/auth/firebase-verify', {
@@ -50,6 +52,9 @@ const LoginView: React.FC = () => {
       });
       const data = await res.json();
       if (data.ok) {
+        // Actualizar el estado global del usuario para que AuthContext tenga el teléfono
+        if (user) await checkUserStatus(user);
+        
         await fire({
           title: 'Solicitud Recibida',
           text: 'Tu solicitud ha sido enviada. El administrador la revisará pronto.',
@@ -68,7 +73,7 @@ const LoginView: React.FC = () => {
     } catch (e: any) {
       setError(e.message);
     } finally {
-      setLoading(false);
+      setSaveLoading(false);
     }
   };
 
@@ -86,8 +91,6 @@ const LoginView: React.FC = () => {
         <div className="bg-[#12121a]/80 backdrop-blur-xl border border-white/5 rounded-2xl p-8 shadow-2xl">
           {user && status === 'pending' ? (
             <div className="text-center">
-              <div className="text-4xl mb-4">⏳</div>
-              <h2 className="text-xl font-bold mb-2">Solicitud Recibida</h2>
 
               {!dbUser?.phone ? (
                 <>
@@ -136,10 +139,10 @@ const LoginView: React.FC = () => {
 
                   <button
                     onClick={submitPhone}
-                    disabled={loading}
+                    disabled={saveLoading}
                     className="w-full bg-linear-to-r from-[#25d366] to-[#128c7e] hover:brightness-110 text-black font-bold py-3 px-4 rounded-xl transition-all shadow-lg shadow-[#25d366]/20 mb-4"
                   >
-                    {loading ? 'Guardando...' : 'Guardar Teléfono'}
+                    {saveLoading ? 'Guardando...' : 'Guardar Teléfono'}
                   </button>
                 </>
               ) : (
@@ -172,11 +175,11 @@ const LoginView: React.FC = () => {
 
               <button
                 onClick={handleGoogleLogin}
-                disabled={loading}
+                disabled={loginLoading}
                 className="w-full bg-white hover:bg-gray-100 text-gray-900 font-semibold py-3 px-4 rounded-xl flex items-center justify-center gap-3 transition-all shadow-xl"
               >
                 <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5" alt="Google" />
-                {loading ? 'Conectando...' : 'Continuar con Google'}
+                {loginLoading ? 'Conectando...' : 'Continuar con Google'}
               </button>
             </>
           )}

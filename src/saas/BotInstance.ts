@@ -10,6 +10,7 @@ import { createSessionManager } from "../services/sessionManager.js";
 import { createConfigService } from "../services/configService.js";
 import { createStatsManager } from "../services/statsManager.js";
 import { createBotLogger } from "../services/botLogger.js";
+import { subscriptionService } from "../services/subscriptionService.js";
 import type { BotLogger } from "../services/botLogger.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -49,6 +50,12 @@ export class BotInstance extends EventEmitter {
   private statsMgr: ReturnType<typeof createStatsManager>;
   private logger: BotLogger;
   private recentlySentMessages = new Set<string>();
+
+  /** Auto-expire entries from recentlySentMessages after 60s to prevent unbounded growth */
+  private addRecentSent(text: string): void {
+    this.recentlySentMessages.add(text);
+    setTimeout(() => this.recentlySentMessages.delete(text), 60_000);
+  }
 
   // ── Aggregation state ──────────────────────────────────────────────────────
   private aggregationMap = new Map<string, {
@@ -261,6 +268,20 @@ export class BotInstance extends EventEmitter {
     return this.client.getChats();
   }
 
+  /**
+   * Normalizes any WhatsApp ID (including @lid, :device suffixes)
+   * to a standard @c.us ID for sendMessage compatibility.
+   */
+  private normalizeToContactId(id: string): string {
+    // Remove device suffix (:1, :2, etc)
+    const withoutDevice = id.split(":")[0];
+
+    if (!withoutDevice) return id;
+    // Remove domain part (@c.us, @lid, etc)
+    const number = withoutDevice.split("@")[0];
+    return `${number}@c.us`;
+  }
+
   private static readonly IGNORED_MSG_TYPES = new Set([
     "e2e_notification",
     "notification_template",
@@ -274,23 +295,18 @@ export class BotInstance extends EventEmitter {
 
   private async _handleOutgoingMessage(msg: any): Promise<void> {
     const rawTo = typeof msg.to === "string" ? msg.to : msg.to._serialized;
-    // Normalizar ID: eliminar sufijos de dispositivo (:1, :2...) y lids si es posible,
-    // o simplemente confiar en que el mensaje fue enviado a un ID que queremos rastrear.
-    // Usualmente para sesiones usamos el ID principal.
     const remoteId = rawTo.split(':')[0].split('@')[0] + "@c.us";
 
     const config = this.configSvc.getConfig();
     const nowInSeconds = Math.floor(Date.now() / 1000);
 
     const remoteSession = await this.sessionMgr.getSession(remoteId);
-    if (!remoteSession) return;
-
-    const sessionHistory = remoteSession.history;
 
     const isHistoryMatch = (() => {
+      if (!remoteSession) return false;
+      const sessionHistory = remoteSession.history;
       if (!sessionHistory || sessionHistory.length === 0) return false;
       const lastMsg = sessionHistory[sessionHistory.length - 1];
-
       if (!lastMsg) return false;
       return (
         lastMsg.role === "assistant" &&
@@ -314,12 +330,25 @@ export class BotInstance extends EventEmitter {
       return;
     }
 
-    await this.sessionMgr.saveSession(remoteId, {
-      ...remoteSession,
-      last_interaction: nowInSeconds,
-      status: "human",
-      human_since: nowInSeconds,
-    });
+    // Es un mensaje humano real. Actualizar o crear la sesión con estado "human".
+    if (remoteSession) {
+      await this.sessionMgr.saveSession(remoteId, {
+        ...remoteSession,
+        last_interaction: nowInSeconds,
+        status: "human",
+        human_since: nowInSeconds,
+      });
+    } else {
+      // No hay sesión previa: crear una nueva con estado humano para que si el
+      // cliente responde luego, el bot sepa que ya hubo intervención humana.
+      await this.sessionMgr.saveSession(remoteId, {
+        contactName: "desconocido",
+        last_interaction: nowInSeconds,
+        status: "human",
+        human_since: nowInSeconds,
+        history: [],
+      });
+    }
 
     // Cancelar cualquier agregación pendiente si el humano respondió
     const pending = this.aggregationMap.get(remoteId);
@@ -394,15 +423,27 @@ export class BotInstance extends EventEmitter {
       const sys = (key: string): string => (config.respuestas_info as any)[`sys_${key}`]?.texto ?? "";
 
       // 1. Obtener datos de sesión y contacto de forma segura
+      // IMPORTANTE: Limpiamos rawMessages ANTES del primer await para evitar que
+      // mensajes que lleguen durante el procesamiento se dupliquen si hay un error.
       const snapshotMessages = [...pending.rawMessages];
-      pending.rawMessages = []; // Limpiamos el buffer actual para capturar nuevos mensajes durante el await
+      pending.rawMessages = [];
 
       const firstMsg = snapshotMessages[0];
-      const contact = await firstMsg.getContact();
       
-      // Normalización del ID: usamos el ID serializado del contacto (canonical JID)
-      // para asegurar que la sesión se guarde por número y no por IDs temporales/lids.
-      const realFrom = contact.id._serialized;
+      // Obtener contacto con fallback seguro si getContact() falla (ej: IDs @lid inestables)
+      let contact: any;
+      let realFrom: string;
+      try {
+        contact = await firstMsg.getContact();
+        realFrom = contact.id._serialized;
+        // Siempre normalizar a @c.us para garantizar compatibilidad con sendMessage
+        realFrom = this.normalizeToContactId(realFrom);
+      } catch (contactErr) {
+        // Fallback: usar el `from` original normalizado a @c.us
+        this.logger.error(`Error obteniendo contacto para ${from}, usando fallback:`, contactErr);
+        contact = null;
+        realFrom = this.normalizeToContactId(from);
+      }
 
       // Log del mensaje entrante
       const incomingText = snapshotMessages
@@ -411,7 +452,7 @@ export class BotInstance extends EventEmitter {
       this.logger.logMessage(realFrom, incomingText);
 
       let session = await this.sessionMgr.getSession(realFrom);
-      const nombre = contact.pushname || "amigo";
+      const nombre = contact?.pushname || "amigo";
       let instruccionExtra = "";
 
       // 2. Manejo de Sesión Nueva / Recontacto
@@ -428,8 +469,13 @@ export class BotInstance extends EventEmitter {
           instruccionExtra = `Saluda cálidamente a ${nombre} usando: "${welcomeTemplate.replace(/\{name\}/g, nombre)}".`;
         }
       } else if (nowInSeconds - session.last_interaction > this.sessionMgr.TWENTY_FOUR_HOURS) {
+        // El usuario regresa después de 24h: resetear historial y estado
+        // IMPORTANTE: Guardar en Firestore aquí para que human_since quede limpio
+        // y no afecte a este ciclo si el bot se reiniciara durante el proceso.
         session.history = [];
         session.status = "bot";
+        session.human_since = undefined;
+        await this.sessionMgr.saveSession(realFrom, session);
         const recontactTemplate = sys("saludoRecontacto");
         if (recontactTemplate) {
           instruccionExtra = `Saluda nuevamente usando: "${recontactTemplate.replace(/\{name\}/g, nombre)}".`;
@@ -444,7 +490,7 @@ export class BotInstance extends EventEmitter {
           await this.sessionMgr.saveSession(realFrom, session);
           const reactivacionMsg = sys("botReactivado");
           if (reactivacionMsg) {
-            this.recentlySentMessages.add(reactivacionMsg.trim());
+            this.addRecentSent(reactivacionMsg.trim());
             await firstMsg.reply(reactivacionMsg);
           }
         } else {
@@ -471,13 +517,18 @@ export class BotInstance extends EventEmitter {
         this.configSvc.getNombre(),
         config.respuestas_info,
         instruccionExtra,
-        config.prompt_ia
+        config.prompt_ia,
+        config.timezone
       );
 
-      // 6. Finalizar respuesta (Validando estado humano nuevamente)
+      // 6. Verificar estado humano ANTES de finalizar (puede haber cambiado durante la generación IA)
       const currentStatus = await this.sessionMgr.getStatusFromFirestore(realFrom);
       if (currentStatus === "human") {
         this.logger.log(`👤 Abortando respuesta IA en ${realFrom} (Intervención humana detectada durante generación).`);
+        // Limpiar el mensaje del usuario del historial para no contaminar la siguiente consulta IA
+        if (session.history.length > 0 && session.history[session.history.length - 1]?.role === "user") {
+          session.history.pop();
+        }
         return;
       }
 
@@ -511,8 +562,17 @@ export class BotInstance extends EventEmitter {
       const openaiApiKey = (botData.openaiApiKey as string) || "";
       if (!botData.audioAnalysisEnabled || !openaiApiKey) return "[Envió audio]";
 
+      // 🛑 Gate by Subscription Plan
+      const subContext = await subscriptionService.getBotSubscriptionContext(this.botId);
+      if (!subContext.plan.features.audioTranscription) {
+        const warning = "Mi administrador no me tiene permitido escuchar audios de voz en este momento. Por favor, escríbeme por texto. 📝";
+        this.addRecentSent(warning);
+        await msg.reply(warning);
+        return "[Envió audio (Bloqueado por suscripción)]";
+      }
+
       const listeningRes = "Dame un momento mientras escucho tu audio... 🎧";
-      this.recentlySentMessages.add(listeningRes);
+      this.addRecentSent(listeningRes);
       await msg.reply(listeningRes);
 
       const transcription = await this._transcribeAudio(msg, openaiApiKey);
@@ -530,6 +590,7 @@ export class BotInstance extends EventEmitter {
   private async _finalizeResponse(from: string, nombre: string, session: any, respuesta: string, fullText: string, config: any) {
     const nowInSeconds = Math.floor(Date.now() / 1000);
     const sys = (key: string): string => (config.respuestas_info as any)[`sys_${key}`]?.texto ?? "";
+    const { MessageMedia } = await import("whatsapp-web.js");
 
     if (respuesta.includes("[NO_ENTENDI]")) {
       respuesta = respuesta.replace("[NO_ENTENDI]", "").trim();
@@ -558,9 +619,29 @@ export class BotInstance extends EventEmitter {
       this.logger.log(`👤 No se sobreescribe estado humano en ${from}.`);
     }
 
-    if (respuesta.trim()) {
-      this.recentlySentMessages.add(respuesta.trim());
-      await this.client?.sendMessage(from, respuesta);
+    // Extract and parse [URL_IMAGEN: ...] tags
+    const imageMatches = [...respuesta.matchAll(/\[URL_IMAGEN:\s*"?\s*(https?:\/\/[^\]"\s]+)\s*"?\s*\]/gi)];
+    const imageUrls = imageMatches.map(m => m[1] as string);
+    
+    // Remove the tags from the final text
+    respuesta = respuesta.replace(/\[URL_IMAGEN:[^\]]+\]/gi, "").trim();
+
+    if (respuesta) {
+      this.addRecentSent(respuesta);
+      // Normalizar siempre el destino a @c.us para evitar errores con IDs @lid
+      const safeFrom = this.normalizeToContactId(from);
+      await this.client?.sendMessage(safeFrom, respuesta);
+    }
+
+    // Send images one by one if there are any
+    for (const url of imageUrls) {
+      try {
+        const safeFrom = this.normalizeToContactId(from);
+        const media = await MessageMedia.fromUrl(url, { unsafeMime: true });
+        await this.client?.sendMessage(safeFrom, media);
+      } catch (err) {
+        this.logger.error(`Error enviando imagen extraída (${url}):`, err);
+      }
     }
   }
 

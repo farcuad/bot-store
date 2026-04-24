@@ -27,9 +27,13 @@ interface GroupMessageBody {
 
 /**
  * Validates that the bot instance exists, belongs to the authenticated user,
- * and is in READY state. Returns the instance or sends an error response.
+ * and has an active WhatsApp connection (status = "ready").
+ * 
+ * NOTE: A bot with `isAutoResponseEnabled = false` (paused) still has status "ready"
+ * and a live WhatsApp client, so the API will work normally in that state.
+ * This helper ONLY blocks when the bot is truly stopped (idle/disconnected/error).
  */
-async function getReadyInstance(
+async function getActiveInstance(
   botId: string,
   req: Request,
   res: Response,
@@ -57,16 +61,20 @@ async function getReadyInstance(
 
   const state = instance.getState();
   if (state.status !== "ready") {
-    res
-      .status(409)
-      .json({
-        error: `Bot '${botId}' no está listo (estado: ${state.status})`,
-      });
+    // Distinguish between "stopped" and other transient states for a clearer error message
+    const hint =
+      state.status === "idle" || state.status === "disconnected"
+        ? `El bot '${botId}' está detenido. Inícialo desde el panel para poder enviar mensajes.`
+        : `El bot '${botId}' no está listo para enviar mensajes (estado actual: ${state.status}).`;
+    res.status(409).json({ error: hint });
     return null;
   }
 
   return instance;
 }
+
+// Keep the old name as an alias for any internal callers
+const getReadyInstance = getActiveInstance;
 
 /**
  * Records an audit log entry for outbound API messages.

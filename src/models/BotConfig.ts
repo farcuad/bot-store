@@ -13,6 +13,8 @@ export interface InfoRespuesta {
   activo?: boolean;
   /** Si true, solo responde en horario laboral; fuera de él avisa del horario */
   requiere_horario?: boolean;
+  /** URL de imagen asociada a la respuesta */
+  mediaUrl?: string;
 }
 
 /**

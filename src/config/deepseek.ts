@@ -69,21 +69,43 @@ export const tools = [
   },
 ];
 
-export const llamarDeepseek = async (messages: any[]) => {
-  const response = await axios.post(
-    "https://api.deepseek.com/chat/completions",
-    {
-      model: "deepseek-chat",
-      messages,
-    },
-    {
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${DEEP_SEEK_API_KEY}`,
-      },
-      timeout: 60000,
-    },
-  );
+export const llamarDeepseek = async (messages: any[], retries = 2): Promise<any> => {
+  let lastError: any;
 
-  return response.data;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await axios.post(
+        "https://api.deepseek.com/chat/completions",
+        {
+          model: "deepseek-chat",
+          messages,
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${DEEP_SEEK_API_KEY}`,
+          },
+          timeout: 60000,
+        },
+      );
+      return response.data;
+    } catch (err: any) {
+      lastError = err;
+      const isTransient =
+        err.code === "ECONNRESET" ||
+        err.code === "ECONNABORTED" ||
+        err.code === "ETIMEDOUT" ||
+        err.message === "aborted";
+
+      if (isTransient && attempt < retries) {
+        const waitMs = 2000 * (attempt + 1); // 2s, 4s
+        console.warn(`⚠️ DeepSeek: error transitorio (${err.code || err.message}), reintentando en ${waitMs}ms... (intento ${attempt + 1}/${retries})`);
+        await new Promise((r) => setTimeout(r, waitMs));
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw lastError;
 };
