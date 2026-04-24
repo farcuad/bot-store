@@ -3,8 +3,10 @@ import axios from 'axios';
 import { useGlassAlert } from 'glass-alert-animation';
 import {
   FileText, Plus, Edit2, Trash2, Send, Clock, Users, Image, X,
-  CheckSquare, Square, Calendar, RefreshCw, ChevronRight, Zap, Repeat
+  CheckSquare, Square, Calendar, RefreshCw, ChevronRight, Zap, Repeat, Upload
 } from 'lucide-react';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getAppStorage } from '../firebase';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -87,6 +89,14 @@ function scheduleLabel(s: Schedule): string {
   return '—';
 }
 
+function parseDate(val: any): Date | null {
+  if (!val) return null;
+  if (typeof val === 'object' && '_seconds' in val) return new Date(val._seconds * 1000);
+  if (typeof val === 'object' && 'seconds' in val) return new Date(val.seconds * 1000);
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 interface Props {
@@ -108,10 +118,15 @@ export default function TemplatesTab({ botNumber, getHeaders }: Props) {
   const [tText, setTText] = useState('');
   const [tImageUrl, setTImageUrl] = useState('');
   const [savingTemplate, setSavingTemplate] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
-  // ── Broadcasts state
   const [broadcasts, setBroadcasts] = useState<BroadcastRecord[]>([]);
   const [loadingBroadcasts, setLoadingBroadcasts] = useState(true);
+
+  // ── Bot config state
+  const [botTimezone, setBotTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const [currentTimeStr, setCurrentTimeStr] = useState('');
+  const [minDateTime, setMinDateTime] = useState('');
 
   // ── Send modal state
   const [sendModal, setSendModal] = useState<Template | null>(null);
@@ -152,7 +167,35 @@ export default function TemplatesTab({ botNumber, getHeaders }: Props) {
   useEffect(() => {
     loadTemplates();
     loadBroadcasts();
-  }, [loadTemplates, loadBroadcasts]);
+    // Load timezone
+    getHeaders().then(headers => {
+      axios.get(`${API_URL}/api/saas/bots/${botNumber}`, { headers }).then(res => {
+        if (res.data.ok && res.data.data.timezone) {
+          setBotTimezone(res.data.data.timezone);
+        }
+      }).catch(console.error);
+    });
+  }, [loadTemplates, loadBroadcasts, botNumber, getHeaders]);
+
+  // Update current time display for scheduling
+  useEffect(() => {
+    if (sendStep !== 'schedule') return;
+    const updateTime = () => {
+      const d = new Date();
+      // Format display string
+      const formatter = new Intl.DateTimeFormat('es-ES', { timeZone: botTimezone, dateStyle: 'long', timeStyle: 'short' });
+      setCurrentTimeStr(formatter.format(d) + ` (${botTimezone})`);
+      
+      // Format min for inputs (YYYY-MM-DDTHH:mm)
+      const parts = new Intl.DateTimeFormat('en-US', { timeZone: botTimezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(d);
+      const p = Object.fromEntries(parts.map(x => [x.type, x.value]));
+      const hour = p.hour === '24' ? '00' : p.hour;
+      setMinDateTime(`${p.year}-${p.month}-${p.day}T${hour}:${p.minute}`);
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 60000);
+    return () => clearInterval(interval);
+  }, [botTimezone, sendStep]);
 
   // ── Template CRUD
   const openCreate = () => {
@@ -184,6 +227,30 @@ export default function TemplatesTab({ botNumber, getHeaders }: Props) {
       fire({ title: 'Error', text: e.response?.data?.error || e.message, icon: 'error' });
     } finally {
       setSavingTemplate(false);
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const storage = getAppStorage();
+    if (!storage) {
+      fire({ title: 'Error', text: 'Firebase Storage no inicializado.', icon: 'error' });
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      const ext = file.name.split('.').pop();
+      const filename = `${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
+      const fileRef = ref(storage, `whaibot/templates/${botNumber}/${filename}`);
+      await uploadBytes(fileRef, file);
+      const url = await getDownloadURL(fileRef);
+      setTImageUrl(url);
+    } catch (error: any) {
+      fire({ title: 'Error', text: 'No se pudo subir la imagen: ' + error.message, icon: 'error' });
+    } finally {
+      setUploadingImage(false);
+      e.target.value = '';
     }
   };
 
@@ -428,8 +495,8 @@ export default function TemplatesTab({ botNumber, getHeaders }: Props) {
                   <p className="text-sm text-gray-300 truncate">"{b.templateSnapshot?.text?.slice(0, 80)}{(b.templateSnapshot?.text?.length ?? 0) > 80 ? '…' : ''}"</p>
                   <div className="flex items-center gap-3 text-xs text-gray-600">
                     <span><Users className="h-3 w-3 inline mr-1" />{(b.recipients?.contactIds?.length ?? 0) + (b.recipients?.groupIds?.length ?? 0)} dest.</span>
-                    {b.nextRun && <span><Clock className="h-3 w-3 inline mr-1" />Próximo: {new Date((b.nextRun as any)?.seconds ? (b.nextRun as any).seconds * 1000 : b.nextRun).toLocaleString('es', { dateStyle: 'short', timeStyle: 'short' })}</span>}
-                    {b.lastRun && <span>Último: {new Date((b.lastRun as any)?.seconds ? (b.lastRun as any).seconds * 1000 : b.lastRun).toLocaleString('es', { dateStyle: 'short', timeStyle: 'short' })}</span>}
+                    {b.nextRun && parseDate(b.nextRun) && <span><Clock className="h-3 w-3 inline mr-1" />Próximo: {parseDate(b.nextRun)!.toLocaleString('es', { dateStyle: 'short', timeStyle: 'short' })}</span>}
+                    {b.lastRun && parseDate(b.lastRun) && <span>Último: {parseDate(b.lastRun)!.toLocaleString('es', { dateStyle: 'short', timeStyle: 'short' })}</span>}
                   </div>
                   {b.errorMessage && <p className="text-xs text-red-400">{b.errorMessage}</p>}
                 </div>
@@ -478,13 +545,19 @@ export default function TemplatesTab({ botNumber, getHeaders }: Props) {
 
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">URL de imagen <span className="text-gray-600 normal-case font-normal">(opcional)</span></label>
-                <input
-                  type="url"
-                  value={tImageUrl}
-                  onChange={e => setTImageUrl(e.target.value)}
-                  placeholder="https://ejemplo.com/imagen.jpg"
-                  className="w-full bg-black/30 border border-white/5 rounded-xl px-4 py-3 text-white text-sm font-mono focus:outline-none focus:border-[#25d366] focus:ring-1 focus:ring-[#25d366] transition-all"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={tImageUrl}
+                    onChange={e => setTImageUrl(e.target.value)}
+                    placeholder="https://ejemplo.com/imagen.jpg o sube un archivo"
+                    className="w-full bg-black/30 border border-white/5 rounded-xl px-4 py-3 text-white text-sm font-mono focus:outline-none focus:border-[#25d366] focus:ring-1 focus:ring-[#25d366] transition-all"
+                  />
+                  <label className="cursor-pointer shrink-0 bg-[#25d366]/10 text-[#25d366] px-4 py-3 rounded-xl flex items-center justify-center font-bold text-sm hover:bg-[#25d366]/20 transition-colors">
+                    <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} disabled={uploadingImage} />
+                    {uploadingImage ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  </label>
+                </div>
                 {tImageUrl && (
                   <div className="mt-2 rounded-xl overflow-hidden border border-white/5 max-h-40 flex items-center justify-center bg-black/20">
                     <img src={tImageUrl} alt="Preview" className="max-h-40 object-contain" onError={e => (e.currentTarget.src = '')} />
@@ -679,9 +752,15 @@ export default function TemplatesTab({ botNumber, getHeaders }: Props) {
                   {/* Once */}
                   {schedule.type === 'once' && (
                     <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Fecha y hora</label>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Fecha y hora</label>
+                        <span className="text-xs text-[#25d366] bg-[#25d366]/10 px-2 py-0.5 rounded-md border border-[#25d366]/20">
+                          Hora actual: {currentTimeStr}
+                        </span>
+                      </div>
                       <input
                         type="datetime-local"
+                        min={minDateTime}
                         value={schedule.datetime || ''}
                         onChange={e => setSchedule(s => ({ ...s, datetime: e.target.value }))}
                         className="w-full bg-black/30 border border-white/5 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-[#25d366] focus:ring-1 focus:ring-[#25d366] transition-all"
@@ -711,12 +790,15 @@ export default function TemplatesTab({ botNumber, getHeaders }: Props) {
                         </div>
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Hora</label>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Hora</label>
+                          <span className="text-[10px] text-gray-500">Hora actual: {currentTimeStr.split(' ').pop()}</span>
+                        </div>
                         <input
                           type="time"
                           value={schedule.time || ''}
                           onChange={e => setSchedule(s => ({ ...s, time: e.target.value }))}
-                          className="bg-black/30 border border-white/5 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-[#25d366] focus:ring-1 focus:ring-[#25d366] transition-all"
+                          className="w-full bg-black/30 border border-white/5 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-[#25d366] focus:ring-1 focus:ring-[#25d366] transition-all"
                         />
                       </div>
                     </div>
@@ -744,12 +826,15 @@ export default function TemplatesTab({ botNumber, getHeaders }: Props) {
                         </div>
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Hora</label>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Hora</label>
+                          <span className="text-[10px] text-gray-500">Hora actual: {currentTimeStr.split(' ').pop()}</span>
+                        </div>
                         <input
                           type="time"
                           value={schedule.time || ''}
                           onChange={e => setSchedule(s => ({ ...s, time: e.target.value }))}
-                          className="bg-black/30 border border-white/5 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-[#25d366] focus:ring-1 focus:ring-[#25d366] transition-all"
+                          className="w-full bg-black/30 border border-white/5 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-[#25d366] focus:ring-1 focus:ring-[#25d366] transition-all"
                         />
                       </div>
                     </div>
