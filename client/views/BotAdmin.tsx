@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useLocation } from 'react-router-dom';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Activity, MessageSquare, Database, AlertCircle, RefreshCw, Edit2, Trash2, Download, Upload, RotateCcw, ScrollText, FileText } from 'lucide-react';
+import { Activity, MessageSquare, Database, AlertCircle, RefreshCw, Edit2, Trash2, Download, Upload, RotateCcw, ScrollText, FileText, Code, BookOpen, Copy } from 'lucide-react';
 import axios from 'axios';
 import { useGlassAlert } from 'glass-alert-animation';
 import TemplatesTab from './TemplatesTab';
@@ -84,6 +84,7 @@ export default function BotAdmin() {
   const { botId } = useParams<{ botId: string }>();
   const botNumber = botId || '';
   const location = useLocation();
+  const navigate = useNavigate();
   const initialTab = (location.state as any)?.initialTab as Tab | undefined;
   const [activeTab, setActiveTab] = useState<Tab>(initialTab || 'stats');
   const { user, isAdmin } = useAuth();
@@ -116,6 +117,7 @@ export default function BotAdmin() {
 
   // API Logs state
   const [apiLogs, setApiLogs] = useState<ApiLog[]>([]);
+  const [apiKey, setApiKey]   = useState<string>('');
 
   // Bot metadata state
   const [botName, setBotName]           = useState<string>('');
@@ -126,7 +128,7 @@ export default function BotAdmin() {
   const loadBotInfo = async () => {
     try {
       const token = await user?.getIdToken();
-      const res = await axios.get<ApiResponse<{ nombre: string; timezone?: string }>>(`${API_URL}/api/saas/bots/${botNumber}`, {
+      const res = await axios.get<ApiResponse<{ nombre: string; timezone?: string; clientKey?: string }>>(`${API_URL}/api/saas/bots/${botNumber}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.data.ok) {
@@ -134,6 +136,9 @@ export default function BotAdmin() {
         setEditNameValue(res.data.data.nombre);
         if (res.data.data.timezone) {
           setBotTimezone(res.data.data.timezone);
+        }
+        if (res.data.data.clientKey) {
+          setApiKey(res.data.data.clientKey);
         }
       }
     } catch (e) {
@@ -145,6 +150,28 @@ export default function BotAdmin() {
     if (!botId || !user) return;
     loadBotInfo();
   }, [botId, user]);
+
+  useEffect(() => {
+    if (!user || isAdmin) return;
+    const checkBilling = async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch('/api/saas/billing/me', { headers: { 'Authorization': `Bearer ${token}` } });
+        const d = await res.json();
+        if (d.ok) {
+          const status = d.subscription?.status;
+          const expiresAt = d.subscription?.expiresAt;
+          const now = Math.floor(Date.now() / 1000);
+          if (status !== 'active' || (expiresAt && expiresAt <= now)) {
+            navigate('/saas/subscription');
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    checkBilling();
+  }, [user, isAdmin, navigate]);
 
   useEffect(() => {
     if (!botId || !user) return;
@@ -1060,6 +1087,55 @@ export default function BotAdmin() {
                   <RefreshCw className="h-3.5 w-3.5" />
                   Actualizar
                 </button>
+              </div>
+
+              {/* API Credentials Card */}
+              <div className="bg-[#1a1a2e]/50 border border-white/10 rounded-3xl p-8 backdrop-blur-sm shadow-2xl mb-8">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                  <div className="space-y-2">
+                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                      <Code className="h-5 w-5 text-indigo-400" />
+                      Credenciales de API
+                    </h3>
+                    <p className="text-sm text-gray-400">
+                      Usa estas credenciales para enviar mensajes desde sistemas externos.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => navigate('/saas/api-docs')}
+                    className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/20"
+                  >
+                    <BookOpen className="h-4 w-4" />
+                    Ver Documentación
+                  </button>
+                </div>
+
+                <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-black/40 border border-white/5 rounded-2xl p-4 flex flex-col gap-1">
+                    <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">x-client-botid</span>
+                    <div className="flex items-center justify-between">
+                      <code className="text-indigo-400 font-mono text-sm">{botNumber}</code>
+                      <button 
+                        onClick={() => { navigator.clipboard.writeText(botNumber); fire({ title: 'Copiado', toast: true, position: 'top-end', timer: 2000, icon: 'success' }); }}
+                        className="p-2 hover:bg-white/5 rounded-lg transition-all text-gray-500 hover:text-white"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="bg-black/40 border border-white/5 rounded-2xl p-4 flex flex-col gap-1">
+                    <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">x-client-key</span>
+                    <div className="flex items-center justify-between">
+                      <code className="text-indigo-400 font-mono text-sm">{apiKey || 'Cargando...'}</code>
+                      <button 
+                        onClick={() => { navigator.clipboard.writeText(apiKey); fire({ title: 'Copiado', toast: true, position: 'top-end', timer: 2000, icon: 'success' }); }}
+                        className="p-2 hover:bg-white/5 rounded-lg transition-all text-gray-500 hover:text-white"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {apiLogs.length === 0 ? (

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, getAppStorage } from '../firebase';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -87,18 +88,43 @@ function RequestModal({
   token: string;
   plans: PricingPlan[];
 }) {
+  const [step, setStep] = useState(1);
   const [selectedPlan, setSelectedPlan] = useState<string>(currentPlanId);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  const [banks, setBanks] = useState<any[]>([]);
+  const [referenceNumber, setReferenceNumber] = useState('');
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+
+  useEffect(() => {
+    fetch('/api/saas/billing/banks', { headers: { 'Authorization': `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => { if(d.ok) setBanks(d.banks) });
+  }, [token]);
 
   const submit = async () => {
+    if (!referenceNumber || !receiptFile) {
+      setError('Por favor, ingresa el número de referencia y sube el comprobante.');
+      return;
+    }
+
     setLoading(true);
     setError('');
     try {
+      const storage = getAppStorage();
+      if (!storage) throw new Error('Storage no inicializado');
+      
+      const fileExt = receiptFile.name.split('.').pop();
+      const fileName = `receipts/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const storageRef = ref(storage, fileName);
+      await uploadBytes(storageRef, receiptFile);
+      const receiptUrl = await getDownloadURL(storageRef);
+
       const r = await fetch(`/api/saas/billing/request`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planId: selectedPlan }),
+        body: JSON.stringify({ planId: selectedPlan, referenceNumber, receiptUrl }),
       });
       const d = await r.json();
       if (d.ok) {
@@ -114,61 +140,78 @@ function RequestModal({
     }
   };
 
-  const availablePlans = plans.filter(p => p.id !== 'basic');
+  const getPlanLevel = (pid: string) => pid === 'basic' ? 1 : pid === 'pro' ? 2 : pid === 'premium' ? 3 : 0;
+  const currentLevel = getPlanLevel(currentPlanId);
+  const availablePlans = plans.filter(p => p.id !== 'basic' && getPlanLevel(p.id) >= currentLevel);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
       <div className="bg-[#12121a] border border-white/10 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-bold text-white">Mejorar mi Plan</h3>
+          <h3 className="text-lg font-bold text-white">Mejorar mi Plan - {step === 1 ? 'Paso 1' : 'Paso 2'}</h3>
           <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors p-1 cursor-pointer">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
-        <p className="text-sm text-gray-400 mb-5">
-          Selecciona el plan al que deseas mejorar. El administrador revisará tu solicitud y te notificará para coordinar el pago.
-        </p>
-
-        <div className="grid grid-cols-2 gap-3 mb-5">
-          {availablePlans.map((plan) => {
-            return (
-              <button
-                key={plan.id}
-                onClick={() => setSelectedPlan(plan.id)}
-                className={`relative p-4 rounded-xl border text-left transition-all duration-200 cursor-pointer ${
-                  selectedPlan === plan.id
-                    ? 'border-[#25d366]/50 bg-[#25d366]/8'
-                    : 'border-white/8 bg-white/3 hover:border-white/15'
+        {step === 1 ? (
+          <>
+            <p className="text-sm text-gray-400 mb-5">Selecciona el plan al que deseas mejorar o renovar.</p>
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              {availablePlans.map((plan) => (
+                <button
+                  key={plan.id}
+                  onClick={() => setSelectedPlan(plan.id)}
+                  className={`relative p-4 rounded-xl border text-left transition-all duration-200 cursor-pointer ${
+                    selectedPlan === plan.id ? 'border-[#25d366]/50 bg-[#25d366]/8' : 'border-white/8 bg-white/3 hover:border-white/15'
                   }`}
-              >
-                <p className="font-bold text-white text-base mb-0.5">${plan.price}<span className="text-sm font-normal text-gray-400">/mes</span></p>
-                <p className="text-xs text-gray-400">{plan.name}</p>
+                >
+                  <p className="font-bold text-white text-base mb-0.5">${plan.price}<span className="text-sm font-normal text-gray-400">/mes</span></p>
+                  <p className="text-xs text-gray-400">{plan.name}</p>
+                </button>
+              ))}
+            </div>
+            {error && <p className="text-sm text-red-400 mb-4">{error}</p>}
+            <div className="flex justify-end gap-3">
+              <button onClick={onClose} className="px-5 py-2.5 rounded-xl border border-white/10 text-gray-400 hover:text-white transition-colors text-sm font-medium">Cancelar</button>
+              <button onClick={() => setStep(2)} disabled={selectedPlan === currentPlanId && currentLevel > 1 ? false : (selectedPlan === currentPlanId || selectedPlan === 'basic')} className="px-5 py-2.5 rounded-xl bg-[#25d366] text-black font-bold text-sm transition-colors disabled:opacity-50">Siguiente</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="mb-5 p-4 bg-white/5 border border-white/10 rounded-xl space-y-3 max-h-48 overflow-y-auto">
+              <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-2">Cuentas Disponibles para Transferencia</p>
+              {banks.length === 0 && <p className="text-sm text-gray-500">No hay cuentas bancarias configuradas.</p>}
+              {banks.map(b => (
+                <div key={b.id} className="text-sm text-gray-300 bg-black/20 p-3 rounded-lg border border-white/5">
+                  <div className="font-bold text-white">{b.bankName} - {b.country}</div>
+                  <div>Titular: {b.accountHolder}</div>
+                  <div className="font-mono text-[#25d366]">{b.accountNumber} <span className="text-xs text-gray-500">({b.accountType})</span></div>
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-4 mb-5">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Número de Referencia de la Transferencia</label>
+                <input required value={referenceNumber} onChange={e => setReferenceNumber(e.target.value)} className="w-full bg-[#1a1a26] border border-white/10 rounded-xl px-4 py-2 text-white outline-none focus:border-[#25d366]" placeholder="Ej: 000123456" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Comprobante (Imagen o PDF)</label>
+                <input type="file" required accept="image/*,.pdf" onChange={e => setReceiptFile(e.target.files?.[0] || null)} className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-[#25d366]/10 file:text-[#25d366] hover:file:bg-[#25d366]/20 cursor-pointer" />
+              </div>
+            </div>
+
+            {error && <p className="text-sm text-red-400 mb-4 px-3 py-2 bg-red-500/10 rounded-lg border border-red-500/20">{error}</p>}
+
+            <div className="flex gap-3">
+              <button onClick={() => setStep(1)} disabled={loading} className="flex-1 py-2.5 rounded-xl border border-white/10 text-gray-400 hover:text-white transition-colors text-sm font-medium">Atrás</button>
+              <button onClick={submit} disabled={loading || !referenceNumber || !receiptFile} className="flex-1 py-2.5 rounded-xl bg-[#25d366] text-black font-bold text-sm transition-colors disabled:opacity-60">
+                {loading ? 'Enviando…' : 'Enviar Comprobante'}
               </button>
-            );
-          })}
-        </div>
-
-        {error && <p className="text-sm text-red-400 mb-4 px-3 py-2 bg-red-500/10 rounded-lg border border-red-500/20">{error}</p>}
-
-        <div className="flex gap-3">
-          <button
-            onClick={onClose}
-            disabled={loading}
-            className="flex-1 py-2.5 rounded-xl border border-white/10 text-gray-400 hover:text-white hover:bg-white/5 transition-colors text-sm font-medium cursor-pointer"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={submit}
-            disabled={loading || selectedPlan === currentPlanId || selectedPlan === 'basic'}
-            className="flex-1 py-2.5 rounded-xl bg-[#25d366] hover:bg-[#20c55d] text-black font-bold text-sm transition-colors cursor-pointer disabled:opacity-60"
-          >
-            {loading ? 'Enviando…' : 'Solicitar Mejora'}
-          </button>
-        </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

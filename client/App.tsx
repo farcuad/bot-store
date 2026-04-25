@@ -9,6 +9,8 @@ import SubscriptionView from './views/SubscriptionView';
 import AdminSubscriptions from './views/AdminSubscriptions';
 import AdminPlans from './views/AdminPlans';
 import RequestReceived from './views/RequestReceived';
+import AdminBankAccounts from './views/AdminBankAccounts';
+import ApiDocsView from './views/ApiDocsView';
 import Layout from './components/Layout';
 import './App.css';
 
@@ -27,8 +29,10 @@ function App() {
         <Route path="/saas/admin" element={<AdminBots />} />
         <Route path="/saas/admin/subscriptions" element={<AdminSubscriptions />} />
         <Route path="/saas/admin/plans" element={<AdminPlans />} />
+        <Route path="/saas/admin/banks" element={<AdminBankAccounts />} />
         {/* Admin: gestión de usuarios */}
         <Route path="/saas/users" element={<UserManagement />} />
+        <Route path="/saas/api-docs" element={<ApiDocsView />} />
         <Route path="/bot/:botId" element={<BotAdmin />} />
       </Route>
     </Routes>
