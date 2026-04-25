@@ -11,7 +11,8 @@ WhaiBot expone una API REST para interactuar con los bots de WhatsApp de forma p
 | `/api/saas/*` | Firebase ID Token (`Bearer`) | Gestión de bots, configuración, sesiones, KB, templates, broadcasts |
 | `/api/auth/*` | Ninguna / Firebase Token | Registro y perfil de usuario |
 
-> **Puerto por defecto:** `3001` (configurable en `ADMIN_PORT` del `.env`)
+> **Dominio Base:** `https://whaibot.com`
+> **Puerto local (desarrollo):** `3001` (configurable en `ADMIN_PORT` del `.env`)
 
 ---
 
@@ -96,8 +97,8 @@ Envía un mensaje de texto (o texto + imagen) a un número de WhatsApp.
 
 | Código | Descripción |
 |---|---|
-| `400` | Faltan `to`, `message`, `botId` o `fromMe` |
-| `401` | `x-client-key` ausente o incorrecto |
+| `400` | Faltan `to`, `message` o `fromMe` |
+| `401` | `x-client-key` o `x-client-botid` ausente o incorrecto |
 | `404` | El bot no existe o no ha iniciado |
 | `409` | El bot no está en estado `ready` |
 | `500` | Error interno al enviar |
@@ -420,13 +421,13 @@ Respuesta:
 ### cURL — Texto simple
 
 ```bash
-curl -X POST https://tudominio.com/api/send-message \
+curl -X POST https://whaibot.com/api/send-message \
   -H "Content-Type: application/json" \
   -H "x-client-key: TU_CLIENT_KEY" \
+  -H "x-client-botid: bot_1776008571136" \
   -d '{
     "to": "584245435637",
     "message": "Tu pedido #1234 está listo 🛍️",
-    "botId": "bot_1776008571136",
     "fromMe": "Sistema de pedidos"
   }'
 ```
@@ -434,13 +435,13 @@ curl -X POST https://tudominio.com/api/send-message \
 ### cURL — Texto + imagen
 
 ```bash
-curl -X POST https://tudominio.com/api/send-message \
+curl -X POST https://whaibot.com/api/send-message \
   -H "Content-Type: application/json" \
   -H "x-client-key: TU_CLIENT_KEY" \
+  -H "x-client-botid: bot_1776008571136" \
   -d '{
     "to": "584245435637",
     "message": "Mira nuestra nueva promoción 🎉",
-    "botId": "bot_1776008571136",
     "fromMe": "Marketing",
     "mediaUrl": "https://ejemplo.com/promo.jpg"
   }'
@@ -449,16 +450,16 @@ curl -X POST https://tudominio.com/api/send-message \
 ### JavaScript / Fetch
 
 ```javascript
-const response = await fetch("https://tudominio.com/api/send-message", {
+const response = await fetch("https://whaibot.com/api/send-message", {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
     "x-client-key": "TU_CLIENT_KEY",
+    "x-client-botid": "bot_1776008571136",
   },
   body: JSON.stringify({
     to: "584245435637",
     message: "Tu pedido está listo 🎉",
-    botId: "bot_1776008571136",
     fromMe: "Tienda Online",
   }),
 });
@@ -467,24 +468,45 @@ const result = await response.json();
 // { success: true, message: "Mensaje enviado a 584245435637@c.us" }
 ```
 
-### Python / requests
+### Python / requests — Envío a Contacto
 
 ```python
 import requests
 
-response = requests.post(
-    "https://tudominio.com/api/send-message",
-    headers={
-        "Content-Type": "application/json",
-        "x-client-key": "TU_CLIENT_KEY",
-    },
-    json={
-        "to": "584245435637",
-        "message": "Tu pedido está listo 🎉",
-        "botId": "bot_1776008571136",
-        "fromMe": "Sistema Python",
-    }
-)
+url = "https://whaibot.com/api/send-message"
+headers = {
+    "Content-Type": "application/json",
+    "x-client-key": "TU_CLIENT_KEY",
+    "x-client-botid": "bot_1776008571136"
+}
+payload = {
+    "to": "584245435637",
+    "message": "Tu pedido está listo 🎉",
+    "fromMe": "Sistema Python"
+}
+
+response = requests.post(url, headers=headers, json=payload)
+print(response.json())
+```
+
+### Python / requests — Envío a Grupo 🆕
+
+```python
+import requests
+
+url = "https://whaibot.com/api/groupsBots"
+headers = {
+    "Content-Type": "application/json",
+    "x-client-key": "TU_CLIENT_KEY",
+    "x-client-botid": "bot_1776008571136"
+}
+payload = {
+    "to": "1234567890-1234567890@g.us", # ID del grupo obtenido previamente
+    "message": "📢 Notificación importante para el grupo",
+    "fromMe": "Script de Alerta"
+}
+
+response = requests.post(url, headers=headers, json=payload)
 print(response.json())
 ```
 
@@ -493,16 +515,16 @@ print(response.json())
 Usa un nodo **HTTP Request** con:
 
 - **Método:** `POST`
-- **URL:** `https://tudominio.com/api/send-message`
+- **URL:** `https://whaibot.com/api/send-message`
 - **Headers:**
   - `Content-Type: application/json`
   - `x-client-key: TU_CLIENT_KEY`
+  - `x-client-botid: bot_1776008571136`
 - **Body (JSON):**
   ```json
   {
     "to": "{{numero_destino}}",
     "message": "{{texto_del_mensaje}}",
-    "botId": "bot_1776008571136",
     "fromMe": "n8n Automation"
   }
   ```
@@ -569,7 +591,7 @@ message_logs/                     ← Auditoría de mensajes enviados vía API
    - Colombia: `571234567890`
    - México: `521551234567`
 
-3. **IDs de grupos:** Tienen formato `XXXXXXXXXX-XXXXXXXXXX@g.us`. Obtenlos con `GET /api/saas/bots/:id/groups` o `GET /api/groupsBots/:botId`.
+3. **IDs de grupos:** Tienen formato `XXXXXXXXXX-XXXXXXXXXX@g.us`. Obtenlos con `GET /api/saas/bots/:id/groups` (requiere Firebase Auth) o `GET /api/groupsBots` (requiere API Key).
 
 4. **El `clientKey` es secreto** — nunca lo expongas en el frontend. Úsalo solo desde backend, n8n self-hosted, o herramientas server-side.
 

@@ -8,6 +8,7 @@ export interface PlanFeatures {
 export interface PricingPlan {
   id: string; // 'basic', 'pro', 'premium'
   name: string;
+  price?: number;
   features: PlanFeatures;
 }
 

@@ -152,9 +152,10 @@ function Navbar() {
         : "bg-transparent"
         }`}
     >
-      <nav className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-        <div className="flex items-center">
-          <img src="/whaibot.png" alt="Whaibot Logo" className="h-20 object-contain" />
+      <nav className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex justify-between items-center gap-3">
+        <div className="flex items-center shrink-0">
+          <img src="/logo.png" alt="Whaibot Logo" className="h-10 md:hidden object-contain" />
+          <img src="/whaibot.png" alt="Whaibot Logo" className="h-16 hidden md:block object-contain" />
         </div>
 
         <div className="hidden md:flex items-center space-x-8">
@@ -169,10 +170,10 @@ function Navbar() {
           ))}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-1 md:flex-none justify-end">
           <a
             href="/login"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-all duration-200 cursor-pointer border border-white/10"
+            className="flex-1 md:flex-none flex justify-center items-center gap-1.5 sm:gap-2 bg-[#ffffff] hover:bg-[#cccccc] text-black text-xs sm:text-sm font-bold px-2 py-2 sm:px-5 sm:py-2.5 rounded-xl transition-all duration-200 shadow-lg shadow-white/10 cursor-pointer border border-white/10 whitespace-nowrap"
           >
             <LoginIcon />
             Ingresar
@@ -181,7 +182,7 @@ function Navbar() {
             href="https://wa.me/584127575904"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-[#25d366] hover:bg-[#20c55d] text-black text-sm font-bold px-5 py-2.5 rounded-xl transition-all duration-200 shadow-lg shadow-[#25d366]/25 cursor-pointer"
+            className="flex-1 md:flex-none flex justify-center items-center gap-1.5 sm:gap-2 bg-[#25d366] hover:bg-[#20c55d] text-black text-xs sm:text-sm font-bold px-2 py-2 sm:px-5 sm:py-2.5 rounded-xl transition-all duration-200 shadow-lg shadow-[#25d366]/25 cursor-pointer whitespace-nowrap"
           >
             <WhatsAppIcon />
             Probar Gratis

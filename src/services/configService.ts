@@ -92,19 +92,11 @@ export function createConfigService(botId: string) {
   }
 
   function startConfigRefresh(): void {
-    if (refreshTimer) return; // already running
-    refreshTimer = setInterval(() => {
-      loadConfig().catch((e) =>
-        console.error(`[${botId}] ❌ Refresh fallido:`, e),
-      );
-    }, REFRESH_INTERVAL_MS);
+    // Ya no se recarga periódicamente, sino bajo demanda cuando se modifica la config
   }
 
   function stopConfigRefresh(): void {
-    if (refreshTimer) {
-      clearInterval(refreshTimer);
-      refreshTimer = null;
-    }
+    // Vacío
   }
 
   function getConfig(): BotConfig {

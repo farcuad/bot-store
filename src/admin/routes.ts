@@ -25,6 +25,7 @@ export interface UserProfile {
 const usersCol = () => db.collection("users");
 
 const botRef = (req: Request) => {
+  const botId = (req.query.botId || req.body.botId || req.headers["x-bot-id"] || req.headers["x-client-botid"] || req.params.botId) as string;
   if (!botId) return null;
   return db.collection("bots").doc(botId);
 };

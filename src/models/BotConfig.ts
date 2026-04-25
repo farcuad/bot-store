@@ -5,7 +5,9 @@
  * Representa una respuesta informativa ligada a una intención de la IA.
  */
 export interface InfoRespuesta {
-  /** El texto que verá el cliente */
+  /** Nombre o título identificatorio de la información */
+  nombre?: string;
+  /** El texto que verá el cliente o la descripción general de la información */
   texto: string;
   /** Instrucción para que la IA sepa cuándo usar esta información */
   descripcion_ia?: string;
@@ -13,8 +15,10 @@ export interface InfoRespuesta {
   activo?: boolean;
   /** Si true, solo responde en horario laboral; fuera de él avisa del horario */
   requiere_horario?: boolean;
-  /** URL de imagen asociada a la respuesta */
+  /** URL de imagen asociada a la respuesta (legado) */
   mediaUrl?: string;
+  /** Arreglo de URLs de imágenes asociadas a la respuesta */
+  mediaUrls?: string[];
 }
 
 /**

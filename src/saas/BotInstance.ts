@@ -50,11 +50,17 @@ export class BotInstance extends EventEmitter {
   private statsMgr: ReturnType<typeof createStatsManager>;
   private logger: BotLogger;
   private recentlySentMessages = new Set<string>();
+  private recentlySentMediaTo = new Set<string>();
 
   /** Auto-expire entries from recentlySentMessages after 60s to prevent unbounded growth */
   private addRecentSent(text: string): void {
     this.recentlySentMessages.add(text);
     setTimeout(() => this.recentlySentMessages.delete(text), 60_000);
+  }
+
+  private addRecentMediaSent(remoteId: string): void {
+    this.recentlySentMediaTo.add(remoteId);
+    setTimeout(() => this.recentlySentMediaTo.delete(remoteId), 30_000);
   }
 
   // ── Aggregation state ──────────────────────────────────────────────────────
@@ -324,6 +330,12 @@ export class BotInstance extends EventEmitter {
       if (!texto) return false;
       return msg.body.includes(texto.trim().slice(0, 25));
     });
+
+    // Si es un mensaje con media (imagen, doc, audio) y recientemente le enviamos un media al mismo chat
+    if (msg.hasMedia && this.recentlySentMediaTo.has(remoteId)) {
+      this.recentlySentMediaTo.delete(remoteId);
+      return;
+    }
 
     if (isHistoryMatch || isConfigMatch || isRecentMatch) {
       this.recentlySentMessages.delete(msg.body.trim());
@@ -637,7 +649,8 @@ export class BotInstance extends EventEmitter {
     for (const url of imageUrls) {
       try {
         const safeFrom = this.normalizeToContactId(from);
-        const media = await MessageMedia.fromUrl(url, { unsafeMime: true });
+        this.addRecentMediaSent(safeFrom);
+        const media = await pkg.MessageMedia.fromUrl(url, { unsafeMime: true });
         await this.client?.sendMessage(safeFrom, media);
       } catch (err) {
         this.logger.error(`Error enviando imagen extraída (${url}):`, err);

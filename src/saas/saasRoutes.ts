@@ -611,19 +611,37 @@ router.get("/bots/:id/respuestas-info", async (req, res) => {
 /** POST /api/saas/bots/:id/respuestas-info */
 router.post("/bots/:id/respuestas-info", async (req, res) => {
   const id = req.params.id as string;
-  const { rid, texto, activo } = req.body as {
+  const { rid, texto, activo, nombre, mediaUrl, mediaUrls } = req.body as {
     rid: string;
     texto: string;
     activo: boolean;
+    nombre?: string;
+    mediaUrl?: string;
+    mediaUrls?: string[];
   };
   if (!rid || !texto) return fail(res, 400, "Faltan campos: rid, texto");
   try {
+    const payload: any = { texto, activo: activo ?? true };
+    if (nombre !== undefined) payload.nombre = nombre;
+    if (mediaUrls !== undefined) {
+      payload.mediaUrls = mediaUrls;
+    } else if (mediaUrl !== undefined) {
+      payload.mediaUrls = mediaUrl ? [mediaUrl] : [];
+    }
+
     await db
       .collection("bots")
       .doc(id)
       .collection("respuestas_info")
       .doc(rid)
-      .set({ texto, activo: activo ?? true });
+      .set(payload);
+    
+    // Recarga inmediata de la config del bot
+    const instance = botManager.getInstance(id);
+    if (instance) {
+      instance.reloadConfig().catch(e => console.error(`Error recargando config de bot ${id}:`, e));
+    }
+
     return ok(res, { id: rid });
   } catch (e: any) {
     return fail(res, 500, e.message);
@@ -633,17 +651,32 @@ router.post("/bots/:id/respuestas-info", async (req, res) => {
 /** PUT /api/saas/bots/:id/respuestas-info/:rid */
 router.put("/bots/:id/respuestas-info/:rid", async (req, res) => {
   const { id, rid } = req.params;
-  const { texto, activo } = req.body;
+  const { texto, activo, nombre, mediaUrl, mediaUrls } = req.body;
   try {
     const updates: any = {};
     if (texto !== undefined) updates.texto = texto;
     if (activo !== undefined) updates.activo = activo;
+    if (nombre !== undefined) updates.nombre = nombre;
+    
+    if (mediaUrls !== undefined) {
+      updates.mediaUrls = mediaUrls;
+    } else if (mediaUrl !== undefined) {
+      updates.mediaUrls = mediaUrl === "" ? [] : [mediaUrl];
+    }
+
     await db
       .collection("bots")
       .doc(id)
       .collection("respuestas_info")
       .doc(rid)
       .update(updates);
+    
+    // Recarga inmediata de la config del bot
+    const instance = botManager.getInstance(id);
+    if (instance) {
+      instance.reloadConfig().catch(e => console.error(`Error recargando config de bot ${id}:`, e));
+    }
+
     return ok(res, { id: rid });
   } catch (e: any) {
     return fail(res, 500, e.message);
@@ -660,6 +693,13 @@ router.delete("/bots/:id/respuestas-info/:rid", async (req, res) => {
       .collection("respuestas_info")
       .doc(rid)
       .delete();
+    
+    // Recarga inmediata de la config del bot
+    const instance = botManager.getInstance(id);
+    if (instance) {
+      instance.reloadConfig().catch(e => console.error(`Error recargando config de bot ${id}:`, e));
+    }
+
     return ok(res, { id: rid });
   } catch (e: any) {
     return fail(res, 500, e.message);

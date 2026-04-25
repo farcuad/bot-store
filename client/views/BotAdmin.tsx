@@ -20,9 +20,11 @@ interface BotStats {
 
 interface RespuestaInfo {
   id: string;
+  nombre?: string;
   texto: string;
   activo: boolean;
   mediaUrl?: string;
+  mediaUrls?: string[];
 }
 
 interface MensajeNoEntendido {
@@ -94,8 +96,10 @@ export default function BotAdmin() {
   const [noEntendidos, setNoEntendidos] = useState<MensajeNoEntendido[]>([]);
 
   const [editingRes, setEditingRes] = useState<RespuestaInfo | null>(null);
+  const [resNombre, setResNombre]   = useState('');
   const [resText, setResText]       = useState('');
-  const [resMediaUrl, setResMediaUrl] = useState('');
+  const [resMediaUrls, setResMediaUrls] = useState<string[]>([]);
+  const [tempMediaUrl, setTempMediaUrl] = useState('');
   const [uploadingMedia, setUploadingMedia] = useState(false);
 
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
@@ -298,7 +302,7 @@ export default function BotAdmin() {
     if (!resText.trim()) return;
     try {
       const headers = await getHeaders();
-      const payload = { texto: resText, mediaUrl: resMediaUrl || null };
+      const payload = { nombre: resNombre, texto: resText, mediaUrls: resMediaUrls };
       if (editingRes) {
         await axios.put<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/respuestas-info/${editingRes.id}`, payload, { headers });
       } else {
@@ -306,8 +310,10 @@ export default function BotAdmin() {
         await axios.post<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/respuestas-info`, { rid, activo: true, ...payload }, { headers });
       }
       setEditingRes(null);
+      setResNombre('');
       setResText('');
-      setResMediaUrl('');
+      setResMediaUrls([]);
+      setTempMediaUrl('');
       loadData();
     } catch (e: any) {
       fire({
@@ -333,13 +339,26 @@ export default function BotAdmin() {
       const fileRef = ref(storage, `whaibot/knowledge/${botNumber}/${filename}`);
       await uploadBytes(fileRef, file);
       const url = await getDownloadURL(fileRef);
-      setResMediaUrl(url);
+      setResMediaUrls(prev => [...prev, url]);
     } catch (error: any) {
       fire({ title: 'Error', text: 'No se pudo subir la imagen: ' + error.message, icon: 'error' });
     } finally {
       setUploadingMedia(false);
       e.target.value = '';
     }
+  };
+
+  const handleAddTempMediaUrl = () => {
+    if (tempMediaUrl.trim().startsWith('http')) {
+      setResMediaUrls(prev => [...prev, tempMediaUrl.trim()]);
+      setTempMediaUrl('');
+    } else {
+      fire({ title: 'Error', text: 'Por favor, introduce una URL válida (http/https).', icon: 'error' });
+    }
+  };
+
+  const handleRemoveMediaUrl = (index: number) => {
+    setResMediaUrls(prev => prev.filter((_, i) => i !== index));
   };
 
   const deleteRespuesta = async (id: string) => {
@@ -715,24 +734,37 @@ export default function BotAdmin() {
               {/* Lista */}
               <div className="lg:col-span-2 space-y-3">
                 {respuestas.length === 0 && <Empty icon={Database} text="No hay datos en la base de conocimientos." />}
-                {respuestas.map(r => (
-                  <div key={r.id} className="bg-[#12121a] border border-white/5 rounded-xl p-4 flex items-start gap-4 hover:border-white/10 transition-all">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <span className="text-xs font-mono text-gray-500">{r.id}</span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${r.activo ? 'bg-[#25d366]/10 text-[#25d366] border-[#25d366]/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
-                          {r.activo ? 'Activo' : 'Inactivo'}
-                        </span>
+                {respuestas.map(r => {
+                  const images = r.mediaUrls && r.mediaUrls.length > 0 ? r.mediaUrls : (r.mediaUrl ? [r.mediaUrl] : []);
+                  return (
+                    <div key={r.id} className="bg-[#12121a] border border-white/5 rounded-xl p-4 flex items-start gap-4 hover:border-white/10 transition-all">
+                      {images.length > 0 && (
+                        <div className="shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-black/40 border border-white/5 flex items-center justify-center relative">
+                          <img src={images[0]} alt={r.nombre || "Media"} className="w-full h-full object-cover" />
+                          {images.length > 1 && (
+                            <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-[2px]">
+                              <span className="text-white font-bold text-xs">+{images.length - 1}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="font-bold text-white truncate">{r.nombre || "Sin título"}</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${r.activo ? 'bg-[#25d366]/10 text-[#25d366] border-[#25d366]/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+                            {r.activo ? 'Activo' : 'Inactivo'}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed line-clamp-3">{r.texto}</p>
                       </div>
-                      <p className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{r.texto}</p>
+                      <div className="flex flex-col gap-1 shrink-0">
+                        <button onClick={() => { setEditingRes(r); setResNombre(r.nombre || ''); setResText(r.texto); setResMediaUrls(images); }} className="p-2 text-gray-500 hover:text-indigo-400 hover:bg-indigo-400/10 rounded-lg transition-colors" title="Editar"><Edit2 className="h-4 w-4" /></button>
+                        <button onClick={() => toggleActiva(r)} className="p-2 text-gray-500 hover:text-yellow-400 hover:bg-yellow-400/10 rounded-lg transition-colors" title="Toggle activo"><Activity className="h-4 w-4" /></button>
+                        <button onClick={() => deleteRespuesta(r.id)} className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors" title="Eliminar"><Trash2 className="h-4 w-4" /></button>
+                      </div>
                     </div>
-                    <div className="flex flex-col gap-1 shrink-0">
-                      <button onClick={() => { setEditingRes(r); setResText(r.texto); setResMediaUrl(r.mediaUrl || ''); }} className="p-2 text-gray-500 hover:text-indigo-400 hover:bg-indigo-400/10 rounded-lg transition-colors" title="Editar"><Edit2 className="h-4 w-4" /></button>
-                      <button onClick={() => toggleActiva(r)} className="p-2 text-gray-500 hover:text-yellow-400 hover:bg-yellow-400/10 rounded-lg transition-colors" title="Toggle activo"><Activity className="h-4 w-4" /></button>
-                      <button onClick={() => deleteRespuesta(r.id)} className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors" title="Eliminar"><Trash2 className="h-4 w-4" /></button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Editor */}
@@ -741,7 +773,18 @@ export default function BotAdmin() {
                 <form onSubmit={saveRespuesta} className="space-y-4">
                   {editingRes && <div className="text-xs text-gray-500 font-mono">{editingRes.id}</div>}
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Contenido (Texto con el que la IA se entrenará)</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Título de la regla</label>
+                    <input
+                      type="text"
+                      value={resNombre}
+                      onChange={e => setResNombre(e.target.value)}
+                      className="w-full bg-black/30 border border-white/5 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-[#25d366] focus:ring-1 focus:ring-[#25d366] transition-all"
+                      placeholder="Ej: Horarios de atención"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Contenido detallado (Descripción)</label>
                     <textarea
                       value={resText}
                       onChange={e => setResText(e.target.value)}
@@ -751,29 +794,43 @@ export default function BotAdmin() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Imagen (opcional)</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Imágenes (opcional)</label>
                     <div className="flex gap-2">
                       <input
                         type="url"
-                        value={resMediaUrl}
-                        onChange={e => setResMediaUrl(e.target.value)}
-                        placeholder="URL de imagen o sube un archivo"
+                        value={tempMediaUrl}
+                        onChange={e => setTempMediaUrl(e.target.value)}
+                        placeholder="Pega una URL y presiona '+'"
                         className="w-full bg-black/30 border border-white/5 rounded-xl px-4 py-3 text-white text-sm font-mono focus:outline-none focus:border-[#25d366] focus:ring-1 focus:ring-[#25d366] transition-all"
                       />
+                      <button type="button" onClick={handleAddTempMediaUrl} className="shrink-0 bg-white/10 text-white px-4 py-3 rounded-xl flex items-center justify-center font-bold text-sm hover:bg-white/20 transition-colors">
+                        +
+                      </button>
                       <label className="cursor-pointer shrink-0 bg-[#25d366]/10 text-[#25d366] px-4 py-3 rounded-xl flex items-center justify-center font-bold text-sm hover:bg-[#25d366]/20 transition-colors">
                         <input type="file" className="hidden" accept="image/*" onChange={handleMediaUpload} disabled={uploadingMedia} />
                         {uploadingMedia ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                       </label>
                     </div>
-                    {resMediaUrl && (
-                      <div className="mt-2 rounded-xl overflow-hidden border border-white/5 max-h-40 flex items-center justify-center bg-black/20">
-                        <img src={resMediaUrl} alt="Preview" className="max-h-40 object-contain" onError={e => (e.currentTarget.src = '')} />
+                    {resMediaUrls.length > 0 && (
+                      <div className="mt-4 grid grid-cols-2 gap-3">
+                        {resMediaUrls.map((url, i) => (
+                          <div key={i} className="relative rounded-xl overflow-hidden border border-white/5 h-24 bg-black/40 group flex items-center justify-center">
+                            <img src={url} alt={`Preview ${i}`} className="h-full w-full object-cover" onError={e => (e.currentTarget.src = '')} />
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveMediaUrl(i)}
+                              className="absolute top-1 right-1 p-1 bg-red-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
                   <div className="flex gap-3 pt-2">
                     {editingRes && (
-                      <button type="button" onClick={() => { setEditingRes(null); setResText(''); setResMediaUrl(''); }} className="px-4 py-2 border border-white/10 hover:bg-white/5 rounded-xl text-sm font-medium transition-colors">
+                      <button type="button" onClick={() => { setEditingRes(null); setResNombre(''); setResText(''); setResMediaUrls([]); setTempMediaUrl(''); }} className="px-4 py-2 border border-white/10 hover:bg-white/5 rounded-xl text-sm font-medium transition-colors">
                         Cancelar
                       </button>
                     )}
