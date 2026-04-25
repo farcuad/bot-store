@@ -267,7 +267,7 @@ export const sendGroupMessageController = async (
     // Audit log
     const client = instance.getClient();
     const botNumber = client?.info?.wid?.user || "unknown";
-    await recordAuditLog(botId, botNumber, to, message, "true", !!mediaUrl);
+    await recordAuditLog(botId, botNumber, to, message, fromMe, !!mediaUrl);
 
     res
       .status(200)

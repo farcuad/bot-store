@@ -11,11 +11,19 @@ function buildSystemPrompt(
   const infoText = Object.values(respuestasInfo)
     .filter((r) => r.activo !== false)
     .map((r) => {
-      let line = `- ${r.texto}`;
+      let line = `- `;
+      if (r.nombre) {
+        line += `[${r.nombre}]: `;
+      }
+      line += r.texto;
       if (r.descripcion_ia) {
         line += ` (Nota: ${r.descripcion_ia})`;
       }
-      if (r.mediaUrl) {
+      if (r.mediaUrls && r.mediaUrls.length > 0) {
+        r.mediaUrls.forEach((url) => {
+          line += ` [URL_IMAGEN: ${url}]`;
+        });
+      } else if (r.mediaUrl) {
         line += ` [URL_IMAGEN: ${r.mediaUrl}]`;
       }
       return line;
