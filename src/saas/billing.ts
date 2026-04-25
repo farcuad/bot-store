@@ -10,6 +10,7 @@ import {
   requireAdminRole,
 } from "../admin/routes.js";
 import { subscriptionService } from "../services/subscriptionService.js";
+import type { BankAccount } from "../models/BankAccount.js";
 
 const router = Router();
 
@@ -55,10 +56,13 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       const uid = req.firebaseUid!;
-      const { planId } = req.body as { planId?: string };
+      const { planId, referenceNumber, receiptUrl } = req.body as { planId?: string; referenceNumber?: string; receiptUrl?: string };
 
       if (!planId) {
         return res.status(400).json({ ok: false, error: "planId inválido" });
+      }
+      if (!referenceNumber || !receiptUrl) {
+        return res.status(400).json({ ok: false, error: "Referencia y comprobante son requeridos" });
       }
 
       const plan = await subscriptionService.getPlanInfo(planId);
@@ -81,6 +85,8 @@ router.post(
         userName: userInfo.displayName ?? "",
         planId,
         amount: plan.price,
+        referenceNumber,
+        receiptUrl,
         status: "pending_approval",
         requestedAt: Date.now(),
         notes: "",
@@ -164,13 +170,9 @@ router.post(
       const sub = subSnap.data()!;
 
       const durationMs = 30 * 24 * 60 * 60 * 1000; // 30 días
+      const expiresAt = Math.floor((now + durationMs) / 1000);
 
       const userSubRef = usersCol().doc(uid);
-      const userSnap = await userSubRef.get();
-      const currentSub = userSnap.data()?.subscription || { expiresAt: Math.floor(now/1000) };
-
-      const baseTime = (currentSub.expiresAt * 1000 > now) ? currentSub.expiresAt * 1000 : now;
-      const expiresAt = Math.floor((baseTime + durationMs) / 1000);
 
       // 1. Actualizar usuario
       await userSubRef.update({
@@ -255,6 +257,77 @@ router.get(
     }
   }
 );
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Bank Accounts CRUD
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const banksCol = () => db.collection("bank_accounts");
+
+/** GET /api/saas/billing/banks */
+router.get("/banks", requireFirebaseAuth, async (_req: Request, res: Response) => {
+  try {
+    const snap = await banksCol().get();
+    const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as BankAccount));
+    // Si no es admin, solo devolver las activas
+    const isAdmin = (_req as any).isAdmin;
+    const finalData = isAdmin ? data : data.filter(b => b.isActive);
+    res.json({ ok: true, banks: finalData });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/** POST /api/saas/billing/admin/banks */
+router.post("/admin/banks", requireFirebaseAuth, requireAdminRole, async (req: Request, res: Response) => {
+  try {
+    const { country, bankName, accountHolder, accountNumber, accountType, isActive } = req.body;
+    const ref = banksCol().doc();
+    const payload = {
+      country: country || "",
+      bankName: bankName || "",
+      accountHolder: accountHolder || "",
+      accountNumber: accountNumber || "",
+      accountType: accountType || "",
+      isActive: isActive !== false, // default true
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    await ref.set(payload);
+    res.json({ ok: true, bank: { id: ref.id, ...payload } });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/** PUT /api/saas/billing/admin/banks/:id */
+router.put("/admin/banks/:id", requireFirebaseAuth, requireAdminRole, async (req: Request, res: Response) => {
+  try {
+    const { country, bankName, accountHolder, accountNumber, accountType, isActive } = req.body;
+    const updates: any = { updatedAt: Date.now() };
+    if (country !== undefined) updates.country = country;
+    if (bankName !== undefined) updates.bankName = bankName;
+    if (accountHolder !== undefined) updates.accountHolder = accountHolder;
+    if (accountNumber !== undefined) updates.accountNumber = accountNumber;
+    if (accountType !== undefined) updates.accountType = accountType;
+    if (isActive !== undefined) updates.isActive = isActive;
+
+    await banksCol().doc(req.params.id as string).update(updates);
+    res.json({ ok: true, message: "Cuenta actualizada" });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/** DELETE /api/saas/billing/admin/banks/:id */
+router.delete("/admin/banks/:id", requireFirebaseAuth, requireAdminRole, async (req: Request, res: Response) => {
+  try {
+    await banksCol().doc(req.params.id as string).delete();
+    res.json({ ok: true, message: "Cuenta eliminada" });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
 
 /**
  * Utility para verificar si un bot puede arrancar.

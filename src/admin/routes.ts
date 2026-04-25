@@ -130,12 +130,9 @@ export function requireAuth(
 
 router.get("/plans", async (_req, res) => {
   try {
-    const snap = await db.collection("platform").doc("plans").get();
-    if (!snap.exists) {
-      // Default mock plans if none in DB
-      return res.json({ ok: true, plans: [] });
-    }
-    res.json({ ok: true, plans: snap.data()?.plans || [] });
+    const snap = await db.collection("plans").get();
+    const plans = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    res.json({ ok: true, plans });
   } catch (e: any) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -151,7 +148,15 @@ router.put(
       if (!Array.isArray(plans)) {
         return res.status(400).json({ ok: false, error: "Formato inválido" });
       }
-      await db.collection("platform").doc("plans").set({ plans });
+      const batch = db.batch();
+      for (const p of plans) {
+        if (!p.id) continue;
+        const ref = db.collection("plans").doc(p.id);
+        const data = { ...p };
+        delete data.id;
+        batch.set(ref, data, { merge: true });
+      }
+      await batch.commit();
       res.json({ ok: true, plans });
     } catch (e: any) {
       res.status(500).json({ ok: false, error: e.message });
@@ -182,7 +187,7 @@ router.post("/auth/firebase-verify", async (req, res) => {
 
     if (!snap.exists) {
       // New user — create with pending status, default role and bot limit
-      const TRIAL_DAYS = 15;
+      const TRIAL_DAYS = 7;
       const profile: UserProfile = {
         uid,
         email: decoded.email ?? "",

@@ -12,6 +12,8 @@ interface Subscription {
   requestedAt: number;
   approvedAt?: number;
   expiresAt?: number;
+  referenceNumber?: string;
+  receiptUrl?: string;
 }
 
 interface Transaction {
@@ -235,6 +237,7 @@ const AdminSubscriptions: React.FC = () => {
                 <th className="px-6 py-4 font-medium">Usuario</th>
                 <th className="px-6 py-4 font-medium">UID</th>
                 <th className="px-6 py-4 font-medium">Plan Solicitado</th>
+                <th className="px-6 py-4 font-medium">Pago</th>
                 <th className="px-6 py-4 font-medium">Fecha</th>
                 <th className="px-6 py-4 text-right font-medium">Acciones</th>
               </tr>
@@ -258,6 +261,10 @@ const AdminSubscriptions: React.FC = () => {
                       <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2.5 py-1 rounded-full text-xs font-medium uppercase tracking-wider">
                         {sub.planId}
                       </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      {sub.referenceNumber && <div className="text-xs text-white mb-1">Ref: {sub.referenceNumber}</div>}
+                      {sub.receiptUrl && <a href={sub.receiptUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-400 hover:underline">Ver Comprobante</a>}
                     </td>
                     <td className="px-6 py-4 text-gray-400 text-xs">
                       {new Date(sub.requestedAt).toLocaleString()}

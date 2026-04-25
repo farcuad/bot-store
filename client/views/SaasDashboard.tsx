@@ -66,6 +66,13 @@ const SaasDashboard: React.FC = () => {
       
       if (bData.ok) {
         setBillingData(bData);
+        // Check expiration
+        const subStatus = bData.subscription?.status;
+        const expiresAt = bData.subscription?.expiresAt;
+        const now = Math.floor(Date.now() / 1000);
+        if (!isAdmin && (subStatus !== 'active' || (expiresAt && expiresAt <= now))) {
+          navigate('/saas/subscription');
+        }
       }
     } catch (e: any) {
       setError(e.message);
@@ -373,12 +380,13 @@ const SaasDashboard: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
           {bots.map(bot => {
-            // Find subscription for this bot
-            const sub = billingData?.subscriptions?.find((s: any) => s.botId === bot.botId);
-            const trialActive = billingData?.trial?.active ?? false;
+            // Check subscription status
+            const subStatus = billingData?.subscription?.status;
+            const expiresAt = billingData?.subscription?.expiresAt;
+            const now = Math.floor(Date.now() / 1000);
             
             // Check if it can run
-            const canRun = trialActive || (sub?.isActive ?? false);
+            const canRun = subStatus === "active" && (expiresAt > now);
             
             return (
             <div key={bot.botId} className="bg-[#12121a] border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-all shadow-xl flex flex-col">

@@ -36,13 +36,21 @@ class SubscriptionService {
       if (data?.subscription) {
         return data.subscription as UserSubscription;
       }
+      
+      if (data?.trialEndsAt) {
+        return {
+          planId: "basic",
+          status: "active",
+          expiresAt: Math.floor(data.trialEndsAt / 1000)
+        };
+      }
     }
 
     // Default trial/basic subscription
     return {
       planId: "basic",
       status: "active",
-      expiresAt: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // +30 days
+      expiresAt: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60) // +7 days
     };
   }
 

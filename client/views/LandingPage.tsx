@@ -576,14 +576,24 @@ function Pricing() {
               </div>
 
               <div className="space-y-4 mb-10 flex-grow">
-                {plan.features.map((feature: string, i: number) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <div className={`mt-1 shrink-0 ${plan.popular ? "text-[#25d366]" : "text-slate-400"}`}>
-                      <CheckIcon />
+                {(() => {
+                  const f = plan.features;
+                  const list = Array.isArray(f) ? f : [
+                    f.maxBots ? `Hasta ${f.maxBots} Bot${f.maxBots > 1 ? 's' : ''}` : null,
+                    f.audioTranscription ? "Transcripción de Audios" : null,
+                    f.whatsappTemplates ? "Campañas (Broadcasts)" : null,
+                    f.apiAccess ? "Acceso a API externa" : null
+                  ].filter(Boolean);
+
+                  return list.map((feature: string, i: number) => (
+                    <div key={i} className="flex items-start gap-3">
+                      <div className={`mt-1 shrink-0 ${plan.popular ? "text-[#25d366]" : "text-slate-400"}`}>
+                        <CheckIcon />
+                      </div>
+                      <span className="text-slate-400 text-sm leading-tight">{feature}</span>
                     </div>
-                    <span className="text-slate-400 text-sm leading-tight">{feature}</span>
-                  </div>
-                ))}
+                  ));
+                })()}
               </div>
 
               <a
