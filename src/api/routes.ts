@@ -4,6 +4,7 @@ import {
   seendMessageController,
   getGroupsController,
   sendGroupMessageController,
+  sendStatusController,
 } from "./WhatsappController.js";
 
 const router = Router();
@@ -17,5 +18,9 @@ router.get("/groupsBots", validateApiKey, getGroupsController);
 router.post("/groupsBots", validateApiKey, sendGroupMessageController);
 router.get("/groupsBots/:botId", validateApiKey, getGroupsController);
 router.post("/groupsBots/:botId", validateApiKey, sendGroupMessageController);
+
+// ── Status endpoints ─────────────────────────────────────────────────────────
+router.post("/send-status", validateApiKey, sendStatusController);
+router.post("/send-status/:botId", validateApiKey, sendStatusController);
 
 export default router;

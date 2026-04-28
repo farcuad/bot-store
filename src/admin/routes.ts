@@ -294,6 +294,31 @@ router.patch(
   },
 );
 
+/** PATCH /api/admin/users/:uid/plan — admin updates subscription */
+router.patch(
+  "/admin/users/:uid/plan",
+  requireFirebaseAuth,
+  requireAdminRole,
+  async (req, res) => {
+    try {
+      const uid = req.params["uid"] as string;
+      const { planId, expiresAt } = req.body as { planId?: string; expiresAt?: number };
+      if (!planId) {
+        return res.status(400).json({ ok: false, error: "planId requerido" });
+      }
+      const update: any = { "subscription.planId": planId };
+      if (typeof expiresAt === "number") {
+        update["subscription.expiresAt"] = expiresAt;
+      }
+      await usersCol().doc(uid).update(update);
+      res.json({ ok: true, uid, planId, expiresAt });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  }
+);
+
+
 /** POST /api/admin/users/:uid/reject */
 router.post(
   "/admin/users/:uid/reject",

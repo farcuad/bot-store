@@ -60,7 +60,8 @@ class SubscriptionService {
       return {
         planId: "basic",
         status: "active",
-        expiresAt: Math.floor(data.trialEndsAt / 1000)
+        expiresAt: Math.floor(data.trialEndsAt / 1000),
+        isTrial: true
       };
     }
 
@@ -69,7 +70,8 @@ class SubscriptionService {
     return {
       planId: "basic",
       status: "active",
-      expiresAt: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60) // +7 days
+      expiresAt: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60), // +7 days
+      isTrial: true
     };
   }
 

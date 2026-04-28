@@ -431,7 +431,7 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
               </>
             ) : (
               <p className="text-xs mt-1 text-amber-400/70">
-                Tu plan actual (Basic) no incluye plantillas. <a href="/saas/subscription" className="underline hover:text-amber-400">Actualiza al plan Pro o Premium →</a>
+                Tu plan actual (Basic) no incluye plantillas. <a href="/saas/subscription" className="underline hover:text-amber-400 font-bold">Actualiza al plan Pro o Premium →</a>
               </p>
             )}
           </div>

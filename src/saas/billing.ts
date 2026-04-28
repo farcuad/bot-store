@@ -95,7 +95,7 @@ router.post(
         planId,
         amount: plan.price,
         referenceNumber,
-        receiptUrl: "asdas.png",
+        receiptUrl: receiptUrl || "",
         status: "pending_approval",
         requestedAt: Date.now(),
         notes: "",
