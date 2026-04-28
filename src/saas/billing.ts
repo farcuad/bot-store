@@ -5,18 +5,15 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { db } from "../config/firebase.js";
-import {
-  requireFirebaseAuth,
-  requireAdminRole,
-} from "../admin/routes.js";
+import { requireFirebaseAuth, requireAdminRole } from "../admin/routes.js";
 import { subscriptionService } from "../services/subscriptionService.js";
 import type { BankAccount } from "../models/BankAccount.js";
 
 const router = Router();
 
-const usersCol    = () => db.collection("users");
+const usersCol = () => db.collection("users");
 const userSubsCol = () => db.collection("user_subscription_requests");
-const txCol       = () => db.collection("transactions");
+const txCol = () => db.collection("transactions");
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -38,7 +35,7 @@ router.get("/me", requireFirebaseAuth, async (req: Request, res: Response) => {
       ok: true,
       subscription: userSub,
       plan: planInfo,
-      pendingRequest
+      pendingRequest,
     });
   } catch (e: any) {
     res.status(500).json({ ok: false, error: e.message });
@@ -56,24 +53,36 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       const uid = req.firebaseUid!;
-      const { planId, referenceNumber, receiptUrl } = req.body as { planId?: string; referenceNumber?: string; receiptUrl?: string };
+      const { planId, referenceNumber, receiptUrl } = req.body as {
+        planId?: string;
+        referenceNumber?: string;
+        receiptUrl?: string;
+      };
 
       if (!planId) {
         return res.status(400).json({ ok: false, error: "planId inválido" });
       }
-      if (!referenceNumber || !receiptUrl) {
-        return res.status(400).json({ ok: false, error: "Referencia y comprobante son requeridos" });
+      if (!referenceNumber) {
+        return res.status(400).json({
+          ok: false,
+          error: "Referencia y comprobante son requeridos",
+        });
       }
 
       const plan = await subscriptionService.getPlanInfo(planId);
       if (!plan || plan.id === "basic") {
-        return res.status(400).json({ ok: false, error: "Plan inválido para solicitar" });
+        return res
+          .status(400)
+          .json({ ok: false, error: "Plan inválido para solicitar" });
       }
 
       // Verificar que no haya una solicitud pendiente
       const subSnap = await userSubsCol().doc(uid).get();
       if (subSnap.exists && subSnap.data()?.status === "pending_approval") {
-        return res.status(409).json({ ok: false, error: "Ya tienes una solicitud pendiente de aprobación" });
+        return res.status(409).json({
+          ok: false,
+          error: "Ya tienes una solicitud pendiente de aprobación",
+        });
       }
 
       const userSnap = await usersCol().doc(uid).get();
@@ -86,7 +95,7 @@ router.post(
         planId,
         amount: plan.price,
         referenceNumber,
-        receiptUrl,
+        receiptUrl: "asdas.png",
         status: "pending_approval",
         requestedAt: Date.now(),
         notes: "",
@@ -94,11 +103,14 @@ router.post(
 
       await userSubsCol().doc(uid).set(payload, { merge: true });
 
-      res.json({ ok: true, message: "Solicitud enviada. El administrador la revisará pronto." });
+      res.json({
+        ok: true,
+        message: "Solicitud enviada. El administrador la revisará pronto.",
+      });
     } catch (e: any) {
       res.status(500).json({ ok: false, error: e.message });
     }
-  }
+  },
 );
 
 /**
@@ -114,7 +126,9 @@ router.post(
 
       const subSnap = await userSubsCol().doc(uid).get();
       if (!subSnap.exists) {
-        return res.status(403).json({ ok: false, error: "Solicitud no encontrada" });
+        return res
+          .status(403)
+          .json({ ok: false, error: "Solicitud no encontrada" });
       }
 
       await userSubsCol().doc(uid).delete();
@@ -122,7 +136,7 @@ router.post(
     } catch (e: any) {
       res.status(500).json({ ok: false, error: e.message });
     }
-  }
+  },
 );
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -145,7 +159,7 @@ router.get(
     } catch (e: any) {
       res.status(500).json({ ok: false, error: e.message });
     }
-  }
+  },
 );
 
 /**
@@ -165,7 +179,9 @@ router.post(
 
       const subSnap = await userSubsCol().doc(uid).get();
       if (!subSnap.exists || subSnap.data()?.status !== "pending_approval") {
-        return res.status(404).json({ ok: false, error: "Solicitud pendiente no encontrada" });
+        return res
+          .status(404)
+          .json({ ok: false, error: "Solicitud pendiente no encontrada" });
       }
       const sub = subSnap.data()!;
 
@@ -179,8 +195,8 @@ router.post(
         subscription: {
           planId: sub.planId,
           status: "active",
-          expiresAt
-        }
+          expiresAt,
+        },
       });
 
       // 2. Marcar request como aprobado
@@ -188,7 +204,7 @@ router.post(
         status: "active",
         approvedAt: now,
         approvedBy: adminUid,
-        notes
+        notes,
       });
 
       // 3. Crear transacción
@@ -212,7 +228,7 @@ router.post(
     } catch (e: any) {
       res.status(500).json({ ok: false, error: e.message });
     }
-  }
+  },
 );
 
 /**
@@ -230,14 +246,14 @@ router.post(
       await userSubsCol().doc(uid).update({
         status: "rejected",
         rejectedAt: Date.now(),
-        notes
+        notes,
       });
 
       res.json({ ok: true, message: "Solicitud rechazada" });
     } catch (e: any) {
       res.status(500).json({ ok: false, error: e.message });
     }
-  }
+  },
 );
 
 /**
@@ -255,7 +271,7 @@ router.get(
     } catch (e: any) {
       res.status(500).json({ ok: false, error: e.message });
     }
-  }
+  },
 );
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -265,74 +281,116 @@ router.get(
 const banksCol = () => db.collection("bank_accounts");
 
 /** GET /api/saas/billing/banks */
-router.get("/banks", requireFirebaseAuth, async (_req: Request, res: Response) => {
-  try {
-    const snap = await banksCol().get();
-    const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as BankAccount));
-    // Si no es admin, solo devolver las activas
-    const isAdmin = (_req as any).isAdmin;
-    const finalData = isAdmin ? data : data.filter(b => b.isActive);
-    res.json({ ok: true, banks: finalData });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
+router.get(
+  "/banks",
+  requireFirebaseAuth,
+  async (_req: Request, res: Response) => {
+    try {
+      const snap = await banksCol().get();
+      const data = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() }) as BankAccount,
+      );
+      // Si no es admin, solo devolver las activas
+      const isAdmin = (_req as any).isAdmin;
+      const finalData = isAdmin ? data : data.filter((b) => b.isActive);
+      res.json({ ok: true, banks: finalData });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  },
+);
 
 /** POST /api/saas/billing/admin/banks */
-router.post("/admin/banks", requireFirebaseAuth, requireAdminRole, async (req: Request, res: Response) => {
-  try {
-    const { country, bankName, accountHolder, accountNumber, accountType, isActive } = req.body;
-    const ref = banksCol().doc();
-    const payload = {
-      country: country || "",
-      bankName: bankName || "",
-      accountHolder: accountHolder || "",
-      accountNumber: accountNumber || "",
-      accountType: accountType || "",
-      isActive: isActive !== false, // default true
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
-    await ref.set(payload);
-    res.json({ ok: true, bank: { id: ref.id, ...payload } });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
+router.post(
+  "/admin/banks",
+  requireFirebaseAuth,
+  requireAdminRole,
+  async (req: Request, res: Response) => {
+    try {
+      const {
+        country,
+        bankName,
+        accountHolder,
+        accountNumber,
+        accountType,
+        isActive,
+      } = req.body;
+      const ref = banksCol().doc();
+      const payload = {
+        country: country || "",
+        bankName: bankName || "",
+        accountHolder: accountHolder || "",
+        accountNumber: accountNumber || "",
+        accountType: accountType || "",
+        isActive: isActive !== false, // default true
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      await ref.set(payload);
+      res.json({ ok: true, bank: { id: ref.id, ...payload } });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  },
+);
 
 /** PUT /api/saas/billing/admin/banks/:id */
-router.put("/admin/banks/:id", requireFirebaseAuth, requireAdminRole, async (req: Request, res: Response) => {
-  try {
-    const { country, bankName, accountHolder, accountNumber, accountType, isActive } = req.body;
-    const updates: any = { updatedAt: Date.now() };
-    if (country !== undefined) updates.country = country;
-    if (bankName !== undefined) updates.bankName = bankName;
-    if (accountHolder !== undefined) updates.accountHolder = accountHolder;
-    if (accountNumber !== undefined) updates.accountNumber = accountNumber;
-    if (accountType !== undefined) updates.accountType = accountType;
-    if (isActive !== undefined) updates.isActive = isActive;
+router.put(
+  "/admin/banks/:id",
+  requireFirebaseAuth,
+  requireAdminRole,
+  async (req: Request, res: Response) => {
+    try {
+      const {
+        country,
+        bankName,
+        accountHolder,
+        accountNumber,
+        accountType,
+        isActive,
+      } = req.body;
+      const updates: any = { updatedAt: Date.now() };
+      if (country !== undefined) updates.country = country;
+      if (bankName !== undefined) updates.bankName = bankName;
+      if (accountHolder !== undefined) updates.accountHolder = accountHolder;
+      if (accountNumber !== undefined) updates.accountNumber = accountNumber;
+      if (accountType !== undefined) updates.accountType = accountType;
+      if (isActive !== undefined) updates.isActive = isActive;
 
-    await banksCol().doc(req.params.id as string).update(updates);
-    res.json({ ok: true, message: "Cuenta actualizada" });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
+      await banksCol()
+        .doc(req.params.id as string)
+        .update(updates);
+      res.json({ ok: true, message: "Cuenta actualizada" });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  },
+);
 
 /** DELETE /api/saas/billing/admin/banks/:id */
-router.delete("/admin/banks/:id", requireFirebaseAuth, requireAdminRole, async (req: Request, res: Response) => {
-  try {
-    await banksCol().doc(req.params.id as string).delete();
-    res.json({ ok: true, message: "Cuenta eliminada" });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
+router.delete(
+  "/admin/banks/:id",
+  requireFirebaseAuth,
+  requireAdminRole,
+  async (req: Request, res: Response) => {
+    try {
+      await banksCol()
+        .doc(req.params.id as string)
+        .delete();
+      res.json({ ok: true, message: "Cuenta eliminada" });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  },
+);
 
 /**
  * Utility para verificar si un bot puede arrancar.
  */
-export async function canBotStart(botId: string, uid: string): Promise<{ allowed: boolean; reason?: string }> {
+export async function canBotStart(
+  botId: string,
+  uid: string,
+): Promise<{ allowed: boolean; reason?: string }> {
   try {
     const sub = await subscriptionService.getUserSubscription(uid);
     if (sub.status === "active" && sub.expiresAt * 1000 > Date.now()) {

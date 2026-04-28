@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import LoadingScreen from '../components/LoadingScreen';
 import { collection, getDocs } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+//import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, getAppStorage } from '../firebase';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -92,19 +93,19 @@ function RequestModal({
   const [selectedPlan, setSelectedPlan] = useState<string>(currentPlanId);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
+
   const [banks, setBanks] = useState<any[]>([]);
   const [referenceNumber, setReferenceNumber] = useState('');
-  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  // const [setReceiptFile] = useState<File | null>(null);
 
   useEffect(() => {
     fetch('/api/saas/billing/banks', { headers: { 'Authorization': `Bearer ${token}` } })
       .then(r => r.json())
-      .then(d => { if(d.ok) setBanks(d.banks) });
+      .then(d => { if (d.ok) setBanks(d.banks) });
   }, [token]);
 
   const submit = async () => {
-    if (!referenceNumber || !receiptFile) {
+    if (!referenceNumber) {
       setError('Por favor, ingresa el número de referencia y sube el comprobante.');
       return;
     }
@@ -114,17 +115,17 @@ function RequestModal({
     try {
       const storage = getAppStorage();
       if (!storage) throw new Error('Storage no inicializado');
-      
-      const fileExt = receiptFile.name.split('.').pop();
-      const fileName = `receipts/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const storageRef = ref(storage, fileName);
-      await uploadBytes(storageRef, receiptFile);
-      const receiptUrl = await getDownloadURL(storageRef);
+
+      //const fileExt = receiptFile.name.split('.').pop();
+      //const fileName = `receipts/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      //const storageRef = ref(storage, fileName);
+      //await uploadBytes(storageRef, receiptFile);
+      //const receiptUrl = await getDownloadURL(storageRef);
 
       const r = await fetch(`/api/saas/billing/request`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planId: selectedPlan, referenceNumber, receiptUrl }),
+        body: JSON.stringify({ planId: selectedPlan, referenceNumber }),
       });
       const d = await r.json();
       if (d.ok) {
@@ -162,9 +163,8 @@ function RequestModal({
                 <button
                   key={plan.id}
                   onClick={() => setSelectedPlan(plan.id)}
-                  className={`relative p-4 rounded-xl border text-left transition-all duration-200 cursor-pointer ${
-                    selectedPlan === plan.id ? 'border-[#25d366]/50 bg-[#25d366]/8' : 'border-white/8 bg-white/3 hover:border-white/15'
-                  }`}
+                  className={`relative p-4 rounded-xl border text-left transition-all duration-200 cursor-pointer ${selectedPlan === plan.id ? 'border-[#25d366]/50 bg-[#25d366]/8' : 'border-white/8 bg-white/3 hover:border-white/15'
+                    }`}
                 >
                   <p className="font-bold text-white text-base mb-0.5">${plan.price}<span className="text-sm font-normal text-gray-400">/mes</span></p>
                   <p className="text-xs text-gray-400">{plan.name}</p>
@@ -194,19 +194,19 @@ function RequestModal({
             <div className="space-y-4 mb-5">
               <div>
                 <label className="block text-xs font-semibold text-gray-500 mb-1">Número de Referencia de la Transferencia</label>
-                <input required value={referenceNumber} onChange={e => setReferenceNumber(e.target.value)} className="w-full bg-[#1a1a26] border border-white/10 rounded-xl px-4 py-2 text-white outline-none focus:border-[#25d366]" placeholder="Ej: 000123456" />
+                <input value={referenceNumber} onChange={e => setReferenceNumber(e.target.value)} className="w-full bg-[#1a1a26] border border-white/10 rounded-xl px-4 py-2 text-white outline-none focus:border-[#25d366]" placeholder="Ej: 000123456" />
               </div>
-              <div>
+              {/* <div>
                 <label className="block text-xs font-semibold text-gray-500 mb-1">Comprobante (Imagen o PDF)</label>
-                <input type="file" required accept="image/*,.pdf" onChange={e => setReceiptFile(e.target.files?.[0] || null)} className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-[#25d366]/10 file:text-[#25d366] hover:file:bg-[#25d366]/20 cursor-pointer" />
-              </div>
+                <input type="file" accept="image/*,.pdf" onChange={e => setReceiptFile(e.target.files?.[0] || null)} className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-[#25d366]/10 file:text-[#25d366] hover:file:bg-[#25d366]/20 cursor-pointer" />
+              </div> */}
             </div>
 
             {error && <p className="text-sm text-red-400 mb-4 px-3 py-2 bg-red-500/10 rounded-lg border border-red-500/20">{error}</p>}
 
             <div className="flex gap-3">
               <button onClick={() => setStep(1)} disabled={loading} className="flex-1 py-2.5 rounded-xl border border-white/10 text-gray-400 hover:text-white transition-colors text-sm font-medium">Atrás</button>
-              <button onClick={submit} disabled={loading || !referenceNumber || !receiptFile} className="flex-1 py-2.5 rounded-xl bg-[#25d366] text-black font-bold text-sm transition-colors disabled:opacity-60">
+              <button onClick={submit} disabled={loading || !referenceNumber} className="flex-1 py-2.5 rounded-xl bg-[#25d366] text-black font-bold text-sm transition-colors disabled:opacity-60">
                 {loading ? 'Enviando…' : 'Enviar Comprobante'}
               </button>
             </div>
@@ -244,7 +244,7 @@ const SubscriptionView: React.FC = () => {
       // Traer planes desde Firestore
       const snap = await getDocs(collection(db, 'plans'));
       const plansList = snap.docs.map(d => ({ id: d.id, ...d.data() } as PricingPlan));
-      
+
       // Ordenar por precio
       plansList.sort((a, b) => a.price - b.price);
       setPlans(plansList);
@@ -259,11 +259,7 @@ const SubscriptionView: React.FC = () => {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-[#25d366] border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <LoadingScreen message="Cargando información de facturación..." />;
   }
 
   const sub = billing?.subscription;
@@ -291,9 +287,8 @@ const SubscriptionView: React.FC = () => {
             <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-1">Plan Actual</p>
             <div className="flex items-center gap-3">
               <h2 className="text-2xl font-bold text-white">{currentPlan?.name || 'Cargando...'}</h2>
-              <span className={`text-xs font-bold px-3 py-1 rounded-full border ${
-                sub?.status === 'active' ? 'bg-[#25d366]/15 text-[#25d366] border-[#25d366]/20' : 'bg-red-500/15 text-red-400 border-red-500/20'
-              }`}>
+              <span className={`text-xs font-bold px-3 py-1 rounded-full border ${sub?.status === 'active' ? 'bg-[#25d366]/15 text-[#25d366] border-[#25d366]/20' : 'bg-red-500/15 text-red-400 border-red-500/20'
+                }`}>
                 {sub?.status === 'active' ? 'Activo' : 'Inactivo'}
               </span>
             </div>
@@ -333,46 +328,46 @@ const SubscriptionView: React.FC = () => {
         <div className="grid md:grid-cols-3 gap-5">
           {plans.map((plan) => {
             const isCurrent = currentPlan?.id === plan.id;
-            
+
             return (
-            <div
-              key={plan.id}
-              className={`relative bg-[#12121a] border rounded-2xl p-6 ${
-                isCurrent ? 'border-[#25d366]/50 bg-[#25d366]/5' : 'border-white/8'
-              }`}
-            >
-              {isCurrent && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] uppercase tracking-wider font-bold bg-[#25d366] text-black px-3 py-1 rounded-full">
-                  Tu Plan Actual
-                </span>
-              )}
-              <div className="mb-6">
-                <p className="text-gray-400 text-sm mb-1">{plan.name}</p>
-                <div className="flex items-end gap-1">
-                  <span className="text-4xl font-black text-white">${plan.price}</span>
-                  <span className="text-gray-400 text-sm mb-1.5">/mes</span>
+              <div
+                key={plan.id}
+                className={`relative bg-[#12121a] border rounded-2xl p-6 ${isCurrent ? 'border-[#25d366]/50 bg-[#25d366]/5' : 'border-white/8'
+                  }`}
+              >
+                {isCurrent && (
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] uppercase tracking-wider font-bold bg-[#25d366] text-black px-3 py-1 rounded-full">
+                    Tu Plan Actual
+                  </span>
+                )}
+                <div className="mb-6">
+                  <p className="text-gray-400 text-sm mb-1">{plan.name}</p>
+                  <div className="flex items-end gap-1">
+                    <span className="text-4xl font-black text-white">${plan.price}</span>
+                    <span className="text-gray-400 text-sm mb-1.5">/mes</span>
+                  </div>
                 </div>
+                <ul className="space-y-3">
+                  <li className="flex items-center gap-3 text-sm text-gray-300">
+                    <CheckIcon />
+                    Hasta {plan.features.maxBots} Bot{plan.features.maxBots > 1 ? 's' : ''}
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-gray-300">
+                    {plan.features.audioTranscription ? <CheckIcon /> : <CrossIcon />}
+                    Transcripción de Audios
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-gray-300">
+                    {plan.features.whatsappTemplates ? <CheckIcon /> : <CrossIcon />}
+                    Campañas (Broadcasts)
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-gray-300">
+                    {plan.features.apiAccess ? <CheckIcon /> : <CrossIcon />}
+                    Acceso a API externa
+                  </li>
+                </ul>
               </div>
-              <ul className="space-y-3">
-                <li className="flex items-center gap-3 text-sm text-gray-300">
-                  <CheckIcon />
-                  Hasta {plan.features.maxBots} Bot{plan.features.maxBots > 1 ? 's' : ''}
-                </li>
-                <li className="flex items-center gap-3 text-sm text-gray-300">
-                  {plan.features.audioTranscription ? <CheckIcon /> : <CrossIcon />}
-                  Transcripción de Audios
-                </li>
-                <li className="flex items-center gap-3 text-sm text-gray-300">
-                  {plan.features.whatsappTemplates ? <CheckIcon /> : <CrossIcon />}
-                  Campañas (Broadcasts)
-                </li>
-                <li className="flex items-center gap-3 text-sm text-gray-300">
-                  {plan.features.apiAccess ? <CheckIcon /> : <CrossIcon />}
-                  Acceso a API externa
-                </li>
-              </ul>
-            </div>
-          )})}
+            )
+          })}
         </div>
 
         <div className="mt-6 px-5 py-4 bg-white/3 border border-white/8 rounded-xl">
@@ -384,12 +379,12 @@ const SubscriptionView: React.FC = () => {
 
       {/* Request Modal */}
       {showRequestModal && (
-        <TokenInjector 
-          currentPlanId={currentPlan?.id || 'basic'} 
-          user={user} 
-          plans={plans} 
-          onClose={() => setShowRequestModal(false)} 
-          onSuccess={fetchData} 
+        <TokenInjector
+          currentPlanId={currentPlan?.id || 'basic'}
+          user={user}
+          plans={plans}
+          onClose={() => setShowRequestModal(false)}
+          onSuccess={fetchData}
         />
       )}
     </div>

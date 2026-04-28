@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { Activity, MessageSquare, Database, AlertCircle, RefreshCw, Edit2, Trash2, Download, Upload, RotateCcw, ScrollText, FileText, Code, BookOpen, Copy, Bell, Plus, X } from 'lucide-react';
 import axios from 'axios';
 import { useGlassAlert } from 'glass-alert-animation';
+import LoadingScreen from '../components/LoadingScreen';
 import TemplatesTab from './TemplatesTab';
 import { getAppStorage } from '../firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -790,9 +791,7 @@ export default function BotAdmin() {
 
       {/* ── Content ──────────────────────────────────────────────────── */}
       {loading ? (
-        <div className="flex justify-center py-24">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#25d366]" />
-        </div>
+        <LoadingScreen message="Cargando configuración del bot..." />
       ) : (
         <div>
           {/* MÉTRICAS */}
