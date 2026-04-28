@@ -30,23 +30,42 @@ class SubscriptionService {
    */
   async getUserSubscription(userId: string): Promise<UserSubscription> {
     const doc = await db.collection("users").doc(userId).get();
-    
-    if (doc.exists) {
-      const data = doc.data();
-      if (data?.subscription) {
-        return data.subscription as UserSubscription;
-      }
-      
-      if (data?.trialEndsAt) {
+    const data = doc.exists ? doc.data() : null;
+
+    // 1. Prioridad Máxima: Suscripción explícita en el documento del usuario
+    if (data?.subscription) {
+      return data.subscription as UserSubscription;
+    }
+
+    // 2. Segunda Prioridad: Solicitud de suscripción aprobada/activa
+    // (Útil si el admin aprobó pero el documento de usuario no se actualizó)
+    const reqDoc = await db.collection("user_subscription_requests").doc(userId).get();
+    if (reqDoc.exists) {
+      const reqData = reqDoc.data();
+      if (reqData?.status === "active" && reqData?.planId) {
+        console.log(`[SubscriptionService] Suscripción encontrada en SOLICITUD ACTIVA para ${userId}`);
+        const durationMs = 30 * 24 * 60 * 60 * 1000; // 30 días default
+        const approvedAt = reqData.approvedAt || reqData.requestedAt || Date.now();
         return {
-          planId: "basic",
+          planId: reqData.planId as string,
           status: "active",
-          expiresAt: Math.floor(data.trialEndsAt / 1000)
+          expiresAt: Math.floor((approvedAt + durationMs) / 1000),
         };
       }
     }
 
-    // Default trial/basic subscription
+    // 3. Tercera Prioridad: Periodo de prueba (Trial)
+    if (data?.trialEndsAt) {
+      console.log(`[SubscriptionService] Usando periodo de prueba para ${userId}`);
+      return {
+        planId: "basic",
+        status: "active",
+        expiresAt: Math.floor(data.trialEndsAt / 1000)
+      };
+    }
+
+    // 4. Default: Basic Trial de 7 días
+    console.log(`[SubscriptionService] Sin suscripción encontrada para ${userId}, usando default.`);
     return {
       planId: "basic",
       status: "active",
@@ -60,12 +79,20 @@ class SubscriptionService {
   async getBotSubscriptionContext(botId: string) {
     const botDoc = await db.collection("bots").doc(botId).get();
     if (!botDoc.exists) {
+      console.error(`[SubscriptionService] Bot ${botId} no encontrado`);
       throw new Error(`Bot ${botId} no encontrado`);
     }
-    const ownerId = botDoc.data()?.ownerId || botId; // Fallback to botId if ownerId is not set
+    
+    const botData = botDoc.data();
+    const ownerId = botData?.ownerUid || botData?.ownerId || botId;
+    
+    console.log(`[SubscriptionService] Bot: ${botId} | Owner: ${ownerId}`);
     
     const userSub = await this.getUserSubscription(ownerId);
+    console.log(`[SubscriptionService] UserSub for ${ownerId}:`, JSON.stringify(userSub));
+    
     const plan = await this.getPlanInfo(userSub.planId);
+    console.log(`[SubscriptionService] Resolved Plan for ${ownerId}: ${plan.name} (${plan.id})`);
     
     return { userSub, plan, ownerId };
   }

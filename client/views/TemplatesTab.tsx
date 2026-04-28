@@ -102,11 +102,12 @@ function parseDate(val: any): Date | null {
 interface Props {
   botNumber: string;
   getHeaders: () => Promise<Record<string, string>>;
+  canUseTemplates?: boolean; // undefined = optimistic (show button); false = locked
 }
 
 type SendStep = 'recipients' | 'schedule';
 
-export default function TemplatesTab({ botNumber, getHeaders }: Props) {
+export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = true }: Props) {
   const { fire } = useGlassAlert();
 
   // ── Templates state
@@ -397,12 +398,20 @@ export default function TemplatesTab({ botNumber, getHeaders }: Props) {
             </h2>
             <p className="text-xs text-gray-500 mt-0.5">Crea mensajes reutilizables para envíos masivos</p>
           </div>
-          <button
-            onClick={openCreate}
-            className="flex items-center gap-2 bg-[#25d366]/10 hover:bg-[#25d366]/20 text-[#25d366] border border-[#25d366]/20 px-3 py-2 rounded-xl text-sm font-medium transition-all"
-          >
-            <Plus className="h-4 w-4" /> Nueva plantilla
-          </button>
+          {canUseTemplates ? (
+            <button
+              onClick={openCreate}
+              className="flex items-center gap-2 bg-[#25d366]/10 hover:bg-[#25d366]/20 text-[#25d366] border border-[#25d366]/20 px-3 py-2 rounded-xl text-sm font-medium transition-all"
+            >
+              <Plus className="h-4 w-4" /> Nueva plantilla
+            </button>
+          ) : (
+            <div className="flex items-center gap-2 bg-gray-500/10 border border-gray-500/20 text-gray-500 px-3 py-2 rounded-xl text-sm font-medium cursor-not-allowed" title="Actualiza tu plan para crear plantillas">
+              <Plus className="h-4 w-4" />
+              <span>Nueva plantilla</span>
+              <span className="text-[10px] bg-gray-500/20 px-1.5 py-0.5 rounded-full ml-1">Plan Pro+</span>
+            </div>
+          )}
         </div>
 
         {loadingTemplates ? (
@@ -413,10 +422,18 @@ export default function TemplatesTab({ botNumber, getHeaders }: Props) {
           <div className="bg-[#12121a] border border-white/5 border-dashed rounded-2xl p-10 text-center text-gray-500">
             <FileText className="h-10 w-10 mx-auto mb-3 opacity-30" />
             <p className="font-medium">No hay plantillas aún</p>
-            <p className="text-xs mt-1">Crea tu primera plantilla para empezar a enviar mensajes masivos</p>
-            <button onClick={openCreate} className="mt-4 text-sm text-[#25d366] hover:underline">
-              Crear plantilla →
-            </button>
+            {canUseTemplates ? (
+              <>
+                <p className="text-xs mt-1">Crea tu primera plantilla para empezar a enviar mensajes masivos</p>
+                <button onClick={openCreate} className="mt-4 text-sm text-[#25d366] hover:underline">
+                  Crear plantilla →
+                </button>
+              </>
+            ) : (
+              <p className="text-xs mt-1 text-amber-400/70">
+                Tu plan actual (Basic) no incluye plantillas. <a href="/saas/subscription" className="underline hover:text-amber-400">Actualiza al plan Pro o Premium →</a>
+              </p>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
