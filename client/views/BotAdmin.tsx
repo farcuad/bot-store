@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Activity, MessageSquare, Database, AlertCircle, RefreshCw, Edit2, Trash2, Download, Upload, RotateCcw, ScrollText, FileText, Code, BookOpen, Copy } from 'lucide-react';
+import { Activity, MessageSquare, Database, AlertCircle, RefreshCw, Edit2, Trash2, Download, Upload, RotateCcw, ScrollText, FileText, Code, BookOpen, Copy, Bell, Plus, X } from 'lucide-react';
 import axios from 'axios';
 import { useGlassAlert } from 'glass-alert-animation';
 import TemplatesTab from './TemplatesTab';
@@ -66,16 +66,17 @@ interface ApiLog {
   timestamp: any;
 }
 
-type Tab = 'stats' | 'respuestas' | 'conversaciones' | 'no_ent' | 'logs' | 'api_logs' | 'plantillas';
+type Tab = 'stats' | 'respuestas' | 'conversaciones' | 'no_ent' | 'logs' | 'api_logs' | 'plantillas' | 'notificaciones';
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
-  { id: 'stats',          label: 'Métricas',        icon: Activity },
-  { id: 'respuestas',     label: 'Base de Datos',   icon: Database },
-  { id: 'conversaciones', label: 'Conversaciones',  icon: MessageSquare },
-  { id: 'no_ent',         label: 'No Entendidos',   icon: AlertCircle },
-  { id: 'logs',           label: 'Logs Sistema',    icon: ScrollText },
-  { id: 'api_logs',       label: 'Envíos API',      icon: Activity },
-  { id: 'plantillas',     label: 'Plantillas',      icon: FileText },
+  { id: 'stats',           label: 'Métricas',        icon: Activity },
+  { id: 'respuestas',      label: 'Base de Datos',   icon: Database },
+  { id: 'conversaciones',  label: 'Conversaciones',  icon: MessageSquare },
+  { id: 'no_ent',          label: 'No Entendidos',   icon: AlertCircle },
+  { id: 'notificaciones',  label: 'Notificaciones',  icon: Bell },
+  { id: 'logs',            label: 'Logs Sistema',    icon: ScrollText },
+  { id: 'api_logs',        label: 'Envíos API',      icon: Activity },
+  { id: 'plantillas',      label: 'Plantillas',      icon: FileText },
 ];
 
 const API_URL = import.meta.env.VITE_API_URL || '';
@@ -125,6 +126,15 @@ export default function BotAdmin() {
   const [editNameValue, setEditNameValue] = useState('');
   const [botTimezone, setBotTimezone]   = useState<string>('America/Caracas');
 
+  // Plan / subscription state
+  const [canUseTemplates, setCanUseTemplates] = useState(true); // optimistic default
+
+  // Notification triggers state
+  const [motivos, setMotivos]             = useState<string[]>([]);
+  const [loadingMotivos, setLoadingMotivos] = useState(false);
+  const [savingMotivos, setSavingMotivos]   = useState(false);
+  const [nuevoMotivo, setNuevoMotivo]       = useState('');
+
   const loadBotInfo = async () => {
     try {
       const token = await user?.getIdToken();
@@ -165,6 +175,8 @@ export default function BotAdmin() {
           if (status !== 'active' || (expiresAt && expiresAt <= now)) {
             navigate('/saas/subscription');
           }
+          // Capture plan features for conditional UI
+          setCanUseTemplates(d.plan?.features?.whatsappTemplates === true);
         }
       } catch (e) {
         console.error(e);
@@ -244,11 +256,53 @@ export default function BotAdmin() {
       } else if (activeTab === 'api_logs') {
         const res = await axios.get<ApiResponse<ApiLog[]>>(`${API_URL}/api/saas/bots/${botNumber}/api-logs`, { headers });
         if (res.data.ok) setApiLogs(res.data.data);
+      } else if (activeTab === 'notificaciones') {
+        await loadMotivos();
       }
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ── Notification Triggers ──────────────────────────────────────────────────
+
+  const loadMotivos = useCallback(async () => {
+    if (!botId || !user) return;
+    setLoadingMotivos(true);
+    try {
+      const headers = await getHeaders();
+      const res = await axios.get<ApiResponse<string[]>>(`${API_URL}/api/saas/bots/${botNumber}/notificacion-motivos`, { headers });
+      if (res.data.ok) setMotivos(res.data.data);
+    } catch (e) {
+      console.error('Error cargando motivos:', e);
+    } finally {
+      setLoadingMotivos(false);
+    }
+  }, [botId, user, botNumber]);
+
+  const addMotivo = () => {
+    const trimmed = nuevoMotivo.trim();
+    if (!trimmed || motivos.includes(trimmed)) return;
+    setMotivos(prev => [...prev, trimmed]);
+    setNuevoMotivo('');
+  };
+
+  const removeMotivo = (index: number) => {
+    setMotivos(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const saveMotivos = async () => {
+    setSavingMotivos(true);
+    try {
+      const headers = await getHeaders();
+      await axios.put(`${API_URL}/api/saas/bots/${botNumber}/notificacion-motivos`, { motivos }, { headers });
+      fire({ title: '✅ Guardado', text: 'Motivos de notificación actualizados correctamente.', icon: 'success' });
+    } catch (e: any) {
+      fire({ title: 'Error', text: e.response?.data?.error || e.message, icon: 'error' });
+    } finally {
+      setSavingMotivos(false);
     }
   };
 
@@ -1156,7 +1210,7 @@ export default function BotAdmin() {
                       {apiLogs.map(log => {
                         const isGroup = log.to.includes("@g.us");
                         return (
-                          <tr key={log.id} className="hover:bg-white/[0.02] transition-colors">
+                          <tr key={log.id} className="hover:bg-white/2 transition-colors">
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span className="text-gray-300 text-sm">
                                 {log.timestamp ? new Date(log.timestamp._seconds ? log.timestamp._seconds * 1000 : log.timestamp).toLocaleString() : '-'}
@@ -1191,10 +1245,101 @@ export default function BotAdmin() {
             </div>
           )}
 
+          {/* NOTIFICACIONES */}
+          {activeTab === 'notificaciones' && (
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                    <Bell className="h-5 w-5 text-amber-400" />
+                    Motivos de Notificación al Dueño
+                  </h2>
+                  <p className="text-xs text-gray-500 mt-1 max-w-lg">
+                    Configura cuándo el bot debe avisar al dueño del negocio (enviándole un mensaje en WhatsApp). Agrega los escenarios concretos que apliquen a tu negocio. Si la lista está vacía, solo se notificará cuando el cliente pida hablar con un humano.
+                  </p>
+                </div>
+                <button
+                  onClick={saveMotivos}
+                  disabled={savingMotivos}
+                  className="shrink-0 flex items-center gap-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 px-4 py-2 rounded-xl text-sm font-medium transition-all disabled:opacity-50"
+                >
+                  {savingMotivos
+                    ? <RefreshCw className="h-4 w-4 animate-spin" />
+                    : <Bell className="h-4 w-4" />}
+                  Guardar cambios
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Lista de motivos */}
+                <div className="lg:col-span-2 space-y-3">
+                  {loadingMotivos ? (
+                    <div className="flex justify-center py-12">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-400" />
+                    </div>
+                  ) : motivos.length === 0 ? (
+                    <div className="bg-[#12121a] border border-white/5 border-dashed rounded-2xl p-10 text-center text-gray-500">
+                      <Bell className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                      <p className="font-medium">No hay motivos configurados</p>
+                      <p className="text-xs mt-1">El bot solo avisará cuando el cliente pida hablar con un humano.</p>
+                    </div>
+                  ) : (
+                    motivos.map((motivo, i) => (
+                      <div key={i} className="bg-[#12121a] border border-white/5 rounded-xl px-4 py-3 flex items-center gap-3 hover:border-white/10 transition-all group">
+                        <span className="shrink-0 w-6 h-6 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                        <p className="flex-1 text-sm text-gray-300">{motivo}</p>
+                        <button
+                          onClick={() => removeMotivo(i)}
+                          className="shrink-0 p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                          title="Eliminar motivo"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Panel de agregar */}
+                <div className="bg-[#12121a] border border-white/5 rounded-2xl p-6 h-fit sticky top-6">
+                  <h3 className="font-bold text-white mb-1">Agregar motivo</h3>
+                  <p className="text-xs text-gray-500 mb-4">Ejemplos: "Cuando el cliente quiera hacer un pedido", "Cuando pida una cotización especial"…</p>
+                  <textarea
+                    value={nuevoMotivo}
+                    onChange={e => setNuevoMotivo(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addMotivo(); } }}
+                    placeholder="Describe el motivo de notificación…"
+                    rows={4}
+                    className="w-full bg-black/30 border border-white/5 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all resize-none mb-3"
+                  />
+                  <button
+                    onClick={addMotivo}
+                    disabled={!nuevoMotivo.trim()}
+                    className="w-full flex items-center justify-center gap-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 px-4 py-2.5 rounded-xl text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Plus className="h-4 w-4" /> Agregar a la lista
+                  </button>
+                  <p className="text-[10px] text-gray-600 mt-3 text-center">Presiona Enter para agregar rápidamente</p>
+                </div>
+              </div>
+
+              {/* Info box */}
+              <div className="bg-amber-500/5 border border-amber-500/15 rounded-xl px-4 py-3 text-xs text-amber-400/80 flex gap-3 items-start">
+                <Bell className="h-4 w-4 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold mb-0.5">¿Cómo funciona?</p>
+                  <p>Cuando el bot detecte que el cliente expresa alguno de estos motivos, le responderá amablemente y te enviará un mensaje de aviso a tu WhatsApp (al número del dueño) para que puedas atenderlo.</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* PLANTILLAS */}
           {activeTab === 'plantillas' && (
-            <TemplatesTab botNumber={botNumber} getHeaders={getHeaders} />
+            <TemplatesTab botNumber={botNumber} getHeaders={getHeaders} canUseTemplates={canUseTemplates || isAdmin} />
           )}
+
         </div>
       )}
     </div>

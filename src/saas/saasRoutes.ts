@@ -750,6 +750,50 @@ router.delete("/bots/:id/logs", async (req: Request, res: Response) => {
 });
 
 
+// ── Motivos de Notificación al Dueño ─────────────────────────────────────────
+
+/**
+ * GET /api/saas/bots/:id/notificacion-motivos
+ * Returns the list of owner-notification triggers for the bot.
+ */
+router.get('/bots/:id/notificacion-motivos', async (req, res) => {
+  const id = req.params.id as string;
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, 'Bot not found');
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) return fail(res, 403, 'No autorizado');
+    const doc = await db.collection('bots').doc(id).get();
+    const motivos: string[] = Array.isArray(doc.data()?.motivosNotificacion)
+      ? (doc.data()!.motivosNotificacion as string[])
+      : [];
+    return ok(res, motivos);
+  } catch (e: any) { return fail(res, 500, e.message); }
+});
+
+/**
+ * PUT /api/saas/bots/:id/notificacion-motivos
+ * Replaces the full list of notification triggers.
+ * Body: { motivos: string[] }
+ */
+router.put('/bots/:id/notificacion-motivos', async (req, res) => {
+  const id = req.params.id as string;
+  const { motivos } = req.body as { motivos?: string[] };
+  if (!Array.isArray(motivos)) return fail(res, 400, 'motivos debe ser un arreglo de textos');
+  const cleaned = motivos.map((m: string) => String(m).trim()).filter(Boolean);
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, 'Bot not found');
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) return fail(res, 403, 'No autorizado');
+    await db.collection('bots').doc(id).set({ motivosNotificacion: cleaned }, { merge: true });
+    // Trigger immediate config reload so the running bot picks up the changes
+    const instance = botManager.getInstance(id);
+    if (instance) {
+      instance.reloadConfig().catch((e: any) => console.error(`Error recargando config de bot ${id}:`, e));
+    }
+    return ok(res, cleaned);
+  } catch (e: any) { return fail(res, 500, e.message); }
+});
+
 // ── Templates ─────────────────────────────────────────────────────────────────
 
 router.get('/bots/:id/templates', async (req, res) => {
@@ -772,10 +816,11 @@ router.post('/bots/:id/templates', async (req, res) => {
     if (!orig) return fail(res, 404, 'Bot not found');
     if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) return fail(res, 403, 'No autorizado');
     
-    // 🛑 Gate by Subscription Plan
-    const subContext = await subscriptionService.getBotSubscriptionContext(id);
-    if (!subContext.plan.features.whatsappTemplates) {
-      return fail(res, 403, `Tu plan actual (${subContext.plan.name}) no incluye el uso de Plantillas. Actualiza al plan Pro o Premium.`);
+    if (!req.isAdmin) {
+      const subContext = await subscriptionService.getBotSubscriptionContext(id);
+      if (!subContext.plan.features.whatsappTemplates) {
+        return fail(res, 403, `Tu plan actual (${subContext.plan.name}) no incluye el uso de Plantillas. Actualiza al plan Pro o Premium.`);
+      }
     }
 
     const ref = await db.collection('bots').doc(id).collection('templates').add({
@@ -883,9 +928,12 @@ router.post('/bots/:id/broadcasts', async (req, res) => {
     if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) return fail(res, 403, 'No autorizado');
 
     // 🛑 Gate by Subscription Plan
-    const subContext = await subscriptionService.getBotSubscriptionContext(id);
-    if (!subContext.plan.features.whatsappTemplates) {
-      return fail(res, 403, `Tu plan actual (${subContext.plan.name}) no incluye el envío de Campañas masivas. Actualiza al plan Pro o Premium.`);
+    if (!req.isAdmin) {
+      const subContext = await subscriptionService.getBotSubscriptionContext(id);
+      console.log(`[POST /broadcasts] Bot ${id} | Plan: ${subContext.plan.name} | whatsappTemplates: ${subContext.plan.features.whatsappTemplates}`);
+      if (!subContext.plan.features.whatsappTemplates) {
+        return fail(res, 403, `Tu plan actual (${subContext.plan.name}) no incluye el envío de Campañas masivas. Actualiza al plan Pro o Premium.`);
+      }
     }
     const ref = await db.collection('bots').doc(id).collection('broadcasts').add({
       botId: id, templateId: templateId || null, templateSnapshot,

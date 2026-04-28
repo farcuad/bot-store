@@ -524,13 +524,19 @@ export class BotInstance extends EventEmitter {
       const fullText = resolvedContents.join("\n");
       this.sessionMgr.appendToHistory(session, "user", fullText);
 
+      // Load per-bot notification triggers (configurable by owner)
+      const motivosNotificacion: string[] = Array.isArray((config as any).motivosNotificacion)
+        ? (config as any).motivosNotificacion
+        : [];
+
       let respuesta = await generarRespuestaBot(
         session.history,
         this.configSvc.getNombre(),
         config.respuestas_info,
         instruccionExtra,
         config.prompt_ia,
-        config.timezone
+        config.timezone,
+        motivosNotificacion
       );
 
       // 6. Verificar estado humano ANTES de finalizar (puede haber cambiado durante la generación IA)

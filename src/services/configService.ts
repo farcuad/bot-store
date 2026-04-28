@@ -35,6 +35,7 @@ export function createConfigService(botId: string) {
     isAutoResponseEnabled: boolean;
     prompt_ia?: string | undefined;
     timezone?: string | undefined;
+    motivosNotificacion?: string[] | undefined;
   }> {
     const doc = await botRef().get();
     const data = doc.data();
@@ -44,6 +45,9 @@ export function createConfigService(botId: string) {
       isAutoResponseEnabled: (data?.isAutoResponseEnabled as boolean) ?? true,
       prompt_ia: data?.prompt_ia as string | undefined,
       timezone: data?.timezone as string | undefined,
+      motivosNotificacion: Array.isArray(data?.motivosNotificacion)
+        ? (data!.motivosNotificacion as string[])
+        : undefined,
     };
   }
 
@@ -66,7 +70,7 @@ export function createConfigService(botId: string) {
   async function loadConfig(): Promise<void> {
     try {
       const [
-        { nombre, activo, isAutoResponseEnabled, prompt_ia, timezone },
+        { nombre, activo, isAutoResponseEnabled, prompt_ia, timezone, motivosNotificacion },
         respuestas_info,
       ] = await Promise.all([
         fetchNombreYActivo(),
@@ -80,11 +84,13 @@ export function createConfigService(botId: string) {
         isAutoResponseEnabled,
         prompt_ia,
         timezone: timezone || "America/Caracas",
-      };
+        motivosNotificacion: motivosNotificacion ?? [],
+      } as any;
       console.log(
         new Date().toLocaleString(),
         `[${botId}] 🔥 Config cargada — "${nombre}" | ` +
-          `${Object.keys(respuestas_info).length} informaciones.`,
+          `${Object.keys(respuestas_info).length} informaciones | ` +
+          `${(motivosNotificacion ?? []).length} motivos notificación.`,
       );
     } catch (error) {
       console.error(`[${botId}] ❌ Error al cargar configuración:`, error);
