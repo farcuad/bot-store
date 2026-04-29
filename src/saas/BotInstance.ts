@@ -362,15 +362,11 @@ export class BotInstance extends EventEmitter {
       });
     }
 
-    // Cancelar cualquier agregación pendiente si el humano respondió
     const pending = this.aggregationMap.get(remoteId);
     if (pending) {
       if (pending.timer) clearTimeout(pending.timer);
       this.aggregationMap.delete(remoteId);
-      this.logger.log(`🛑 Agregación cancelada en ${remoteId} por intervención humana.`);
     }
-
-    this.logger.log(`👤 Intervención humana detectada en ${remoteId}.`);
   }
 
   // ─── Incoming Message Handler (Aggregator) ──────────────────────────────
@@ -403,7 +399,6 @@ export class BotInstance extends EventEmitter {
           rawMessages: [msg],
         };
         this.aggregationMap.set(from, pending);
-        this.logger.log(`📥 Iniciando agregación para ${from}...`);
       } else {
         // Si ya se está procesando en la IA, no reiniciamos el timer de esa instancia,
         // pero acumulamos los mensajes para que se procesen después o se ignoren si ya terminó.
@@ -506,7 +501,6 @@ export class BotInstance extends EventEmitter {
             await firstMsg.reply(reactivacionMsg);
           }
         } else {
-          this.logger.log(`👤 Ignorando ráfaga en ${realFrom} (Estado Humano).`);
           return;
         }
       }
@@ -669,7 +663,7 @@ export class BotInstance extends EventEmitter {
     try {
       const media = await msg.downloadMedia();
       if (!media) return null;
-      fs.writeFileSync(tempFilePath, media.data, { encoding: "base64" });
+      await fs.promises.writeFile(tempFilePath, media.data, { encoding: "base64" });
       const openai = new OpenAI({ apiKey: openaiApiKey });
       const transcription = await openai.audio.transcriptions.create({
         file: fs.createReadStream(tempFilePath),
@@ -681,8 +675,11 @@ export class BotInstance extends EventEmitter {
       this.logger.error(`Error Whisper:`, error.message);
       return null;
     } finally {
-      if (fs.existsSync(tempFilePath)) {
-        try { fs.unlinkSync(tempFilePath); } catch (e) {}
+      try {
+        await fs.promises.access(tempFilePath);
+        await fs.promises.unlink(tempFilePath);
+      } catch (e) {
+        // Ignorar error si el archivo no existe o no se puede borrar
       }
     }
   }

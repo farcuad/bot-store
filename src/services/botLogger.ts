@@ -28,23 +28,28 @@ function formatTimestamp(): string {
   });
 }
 
-function ensureRotation(logPath: string): void {
-  try {
-    const stats = fs.statSync(logPath);
-    if (stats.size > MAX_LOG_BYTES) {
-      const content = fs.readFileSync(logPath, "utf8");
-      const lines = content.split("\n").filter(Boolean);
-      const trimmed = lines.slice(-TRUNCATE_TO_LINES).join("\n") + "\n";
-      fs.writeFileSync(logPath, trimmed, "utf8");
-    }
-  } catch {
-    // File may not exist yet — that's fine
-  }
-}
+let writeQueue: Promise<void> = Promise.resolve();
 
-function appendLine(logPath: string, line: string): void {
-  ensureRotation(logPath);
-  fs.appendFileSync(logPath, line + "\n", "utf8");
+async function appendLineAsync(logPath: string, line: string): Promise<void> {
+  writeQueue = writeQueue.then(async () => {
+    try {
+      try {
+        const stats = await fs.promises.stat(logPath);
+        if (stats.size > MAX_LOG_BYTES) {
+          const content = await fs.promises.readFile(logPath, "utf8");
+          const lines = content.split("\n").filter(Boolean);
+          const trimmed = lines.slice(-TRUNCATE_TO_LINES).join("\n") + "\n";
+          await fs.promises.writeFile(logPath, trimmed, "utf8");
+        }
+      } catch {
+        // Archivo no existe aún
+      }
+      await fs.promises.appendFile(logPath, line + "\n", "utf8");
+    } catch (e) {
+      // Evitar que el loop de logger colapse
+      console.error("Error asíncrono en botLogger:", e);
+    }
+  });
 }
 
 function serializeArgs(args: any[]): string {
@@ -81,12 +86,7 @@ export function createBotLogger(botId: string): BotLogger {
 
   return {
     logMessage(from: string, text: string): void {
-      const ts = formatTimestamp();
-      const fromClean = from.replace("@c.us", "").replace(/\D/g, "");
-      const line = `[${ts}] 📩 MENSAJE de +${fromClean}: ${text}`;
-      // Also emit to stdout for process-level visibility
-      console.log(`[BOT:${botId}]`, line);
-      appendLine(logPath, line);
+      // Intencionalmente vacío para reducir uso de CPU y logs
     },
 
     log(...args: any[]): void {
@@ -94,7 +94,7 @@ export function createBotLogger(botId: string): BotLogger {
       const msg = serializeArgs(args);
       const line = `[${ts}] ${msg}`;
       console.log(`[BOT:${botId}]`, msg);
-      appendLine(logPath, line);
+      appendLineAsync(logPath, line);
     },
 
     error(...args: any[]): void {
@@ -102,7 +102,7 @@ export function createBotLogger(botId: string): BotLogger {
       const msg = serializeArgs(args);
       const line = `[${ts}] ❌ ERROR: ${msg}`;
       console.error(`[BOT:${botId}]`, msg);
-      appendLine(logPath, line);
+      appendLineAsync(logPath, line);
     },
 
     readLogs(lines = 500): string[] {

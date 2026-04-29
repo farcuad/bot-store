@@ -327,7 +327,6 @@ class BotManager {
     // For testing you might want to make this faster, but 1 hour is standard for SaaS.
     setInterval(async () => {
       try {
-        console.log("🕒 BotManager: Ejecutando revisión periódica de facturación...");
         const instancesList = Array.from(this.instances.entries());
         
         for (const [botId, instance] of instancesList) {
