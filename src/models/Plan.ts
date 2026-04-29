@@ -16,4 +16,5 @@ export interface UserSubscription {
   planId: string;
   status: 'active' | 'past_due' | 'canceled';
   expiresAt: number;
+  isTrial?: boolean;
 }

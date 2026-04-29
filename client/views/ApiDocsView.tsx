@@ -1,4 +1,4 @@
-import { Book, Shield, Send, Terminal, Copy, Info, CheckCircle2, AlertTriangle, Layers } from 'lucide-react';
+import { Book, Shield, Send, Terminal, Copy, Info, CheckCircle2, AlertTriangle, Layers, Zap } from 'lucide-react';
 import { useGlassAlert } from 'glass-alert-animation';
 
 export default function ApiDocsView() {
@@ -34,6 +34,7 @@ export default function ApiDocsView() {
           <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-4">Contenido</p>
           <a href="#autenticacion" className="block text-sm text-gray-400 hover:text-white px-3 py-2 rounded-lg hover:bg-white/5 transition-all">Autenticación</a>
           <a href="#envio-mensajes" className="block text-sm text-gray-400 hover:text-white px-3 py-2 rounded-lg hover:bg-white/5 transition-all">Envío de Mensajes</a>
+          <a href="#envio-estados" className="block text-sm text-gray-400 hover:text-white px-3 py-2 rounded-lg hover:bg-white/5 transition-all">Envío de Estados</a>
           <a href="#grupos" className="block text-sm text-gray-400 hover:text-white px-3 py-2 rounded-lg hover:bg-white/5 transition-all">Gestión de Grupos</a>
           <a href="#ejemplos" className="block text-sm text-gray-400 hover:text-white px-3 py-2 rounded-lg hover:bg-white/5 transition-all">Ejemplos de Código</a>
           <a href="#consideraciones" className="block text-sm text-gray-400 hover:text-white px-3 py-2 rounded-lg hover:bg-white/5 transition-all">Consideraciones</a>
@@ -163,12 +164,61 @@ export default function ApiDocsView() {
               </div>
             </div>
           </section>
+          
+          {/* Section: Send Status */}
+          <section id="envio-estados" className="space-y-6">
+            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+              <Zap className="h-6 w-6 text-amber-400" />
+              3. Envío de Estados (Stories)
+            </h2>
+            
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <span className="bg-emerald-600 text-[10px] font-black px-2 py-1 rounded">POST</span>
+                <code className="text-lg font-bold text-gray-200">/api/send-status</code>
+              </div>
+              <p className="text-gray-400 text-sm">
+                Actualiza el estado de WhatsApp (Historias) del bot con texto, imagen o ambos.
+              </p>
+            </div>
+
+            <div className="bg-[#12121a] border border-white/5 rounded-2xl p-6 space-y-6">
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Cuerpo de la Petición (JSON)</h4>
+                <div className="relative group">
+                  <pre className="bg-black/40 rounded-xl p-5 text-amber-300 font-mono text-sm overflow-x-auto">
+{`{
+  "message": "¡Mira nuestra nueva oferta! 🚀",
+  "mediaUrl": "https://tusitio.com/promo.jpg" // Opcional si hay mensaje
+}`}
+                  </pre>
+                  <button 
+                    onClick={() => copyToClipboard('{\n  "message": "¡Mira nuestra nueva oferta! 🚀",\n  "mediaUrl": "https://tusitio.com/promo.jpg"\n}')}
+                    className="absolute top-4 right-4 p-2 bg-white/5 hover:bg-white/10 rounded-lg text-gray-400 opacity-0 group-hover:opacity-100 transition-all"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div className="bg-white/5 p-4 rounded-xl space-y-1">
+                  <span className="font-bold text-amber-400">message</span>
+                  <p className="text-gray-400">Texto del estado. Actúa como caption si hay mediaUrl.</p>
+                </div>
+                <div className="bg-white/5 p-4 rounded-xl space-y-1">
+                  <span className="font-bold text-amber-400">mediaUrl</span>
+                  <p className="text-gray-400">URL directa a una imagen (.jpg, .png) para el estado.</p>
+                </div>
+              </div>
+            </div>
+          </section>
 
           {/* Section: Groups */}
           <section id="grupos" className="space-y-6">
             <h2 className="text-2xl font-bold text-white flex items-center gap-3">
               <Layers className="h-6 w-6 text-purple-400" />
-              3. Gestión de Grupos
+              4. Gestión de Grupos
             </h2>
             
             <div className="space-y-8">
@@ -200,7 +250,7 @@ export default function ApiDocsView() {
           <section id="ejemplos" className="space-y-6">
             <h2 className="text-2xl font-bold text-white flex items-center gap-3">
               <Terminal className="h-6 w-6 text-gray-400" />
-              4. Ejemplos de Código
+              5. Ejemplos de Código
             </h2>
 
             <div className="bg-[#12121a] border border-white/5 rounded-3xl overflow-hidden">

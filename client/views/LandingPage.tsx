@@ -1,4 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import {
+  Utensils, Hotel, ShoppingBag, Wrench, Home, Plane,
+  Sparkles, GraduationCap, Car, Dumbbell, Stethoscope, Building, ShieldCheck, Zap, Globe
+} from "lucide-react";
+import gsap from "gsap";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -222,13 +227,14 @@ function Hero() {
               Automatización con IA para WhatsApp
             </div>
 
-            <h1 className="text-5xl lg:text-6xl xl:text-7xl font-bold leading-[1.07] tracking-tight mb-6 text-white">
-              Vende más mientras{" "}
-              <span className="relative">
-                <span className="relative z-10 bg-linear-to-r from-[#25d366] to-teal-400 bg-clip-text text-transparent">
+            <h1 className="text-6xl lg:text-7xl xl:text-8xl font-black leading-[0.95] tracking-tighter mb-8 text-white">
+              Vende más <br />
+              mientras{" "}
+              <span className="relative inline-block">
+                <span className="relative z-10 bg-linear-to-r from-[#25d366] via-emerald-400 to-blue-500 bg-clip-text text-transparent">
                   duermes
                 </span>
-                <span className="absolute -bottom-1 left-0 w-full h-px bg-linear-to-r from-[#25d366] to-teal-400 opacity-50" />
+                <span className="absolute -bottom-2 left-0 w-full h-1.5 bg-linear-to-r from-[#25d366] via-emerald-400 to-blue-500 opacity-30 blur-sm" />
               </span>
             </h1>
 
@@ -355,37 +361,40 @@ function Hero() {
 
 function Features() {
   return (
-    <section id="funciones" className="py-24 px-6 relative">
+    <section id="funciones" className="py-32 px-6 relative">
       <div className="absolute inset-0 -z-10">
-        <div className="absolute left-0 top-1/2 w-64 h-64 bg-violet-600/5 rounded-full blur-[100px]" />
+        <div className="absolute left-0 top-1/2 w-96 h-96 bg-blue-600/5 rounded-full blur-[120px]" />
+        <div className="absolute right-0 bottom-0 w-80 h-80 bg-[#25d366]/5 rounded-full blur-[100px]" />
       </div>
 
       <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-16">
-          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 text-slate-400 text-xs font-semibold px-4 py-1.5 rounded-full mb-6">
-            Funcionalidades
+        <div className="text-center mb-20">
+          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 text-slate-400 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full mb-6">
+            Poder Sin Límites
           </div>
-          <h2 className="text-4xl lg:text-5xl font-bold text-white mb-4 tracking-tight">
-            Todo lo que necesitas para{" "}
-            <br className="hidden lg:block" />
-            <span className="text-slate-400">automatizar tu WhatsApp con IA</span>
+          <h2 className="text-5xl lg:text-6xl font-black text-white mb-6 tracking-tight">
+            Diseñado para <br className="hidden lg:block" />
+            <span className="text-slate-500">dominar tu mercado</span>
           </h2>
-          <p className="text-slate-500 max-w-2xl mx-auto text-lg leading-relaxed">
-            Desde IA conversacional hasta analíticas avanzadas. Whaibot tiene todo lo que necesitas para transformar tu WhatsApp en un canal de ventas automatizado.
+          <p className="text-slate-400 max-w-2xl mx-auto text-lg leading-relaxed">
+            Desde IA de última generación hasta analíticas en tiempo real. WhaiBot es la infraestructura definitiva para tu automatización.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {features.map((f) => (
             <div
               key={f.title}
-              className={`group relative p-6 rounded-2xl bg-linear-to-br ${f.color} border backdrop-blur-sm hover:scale-[1.02] transition-all duration-300 cursor-default`}
+              className={`group relative p-8 rounded-[32px] bg-[#0d0d1a]/40 border border-white/5 backdrop-blur-md hover:border-white/10 hover:bg-white/5 transition-all duration-500 cursor-default overflow-hidden`}
             >
-              <div className={`w-12 h-12 rounded-xl bg-linear-to-br ${f.color} border flex items-center justify-center mb-5`}>
+              {/* Decorative gradient blur on hover */}
+              <div className="absolute -top-24 -right-24 w-48 h-48 bg-blue-600/10 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+              <div className={`w-14 h-14 rounded-2xl bg-linear-to-br ${f.color} border flex items-center justify-center mb-8 shadow-lg group-hover:scale-110 transition-transform duration-500`}>
                 {f.icon}
               </div>
-              <h3 className="text-lg font-bold text-white mb-2">{f.title}</h3>
-              <p className="text-slate-400 text-sm leading-relaxed">{f.description}</p>
+              <h3 className="text-xl font-bold text-white mb-3 tracking-tight">{f.title}</h3>
+              <p className="text-slate-400 text-sm leading-relaxed font-medium">{f.description}</p>
             </div>
           ))}
         </div>
@@ -454,65 +463,161 @@ function HowItWorks() {
 }
 
 function UseCases() {
-  const industries = [
-    { icon: "🍔", name: "Restaurantes" },
-    { icon: "🏨", name: "Hoteles" },
-    { icon: "🛍️", name: "Tiendas" },
-    { icon: "🛠️", name: "Servicios" },
-    { icon: "🏠", name: "Inmobiliarias" },
-    { icon: "✈️", name: "Viajes" },
-    { icon: "💅", name: "Belleza" },
-    { icon: "📚", name: "Educación" },
-    { icon: "🚗", name: "Automotriz" },
-    { icon: "🏋️", name: "Fitness" },
-    { icon: "🏥", name: "Salud" },
-    { icon: "🏢", name: "Empresas" },
+  const tickerRef1 = useRef<HTMLDivElement>(null);
+  const tickerRef2 = useRef<HTMLDivElement>(null);
+
+  const row1 = [
+    { icon: <Utensils size={24} />, name: "Restaurantes", color: "from-orange-500/20 to-amber-500/10" },
+    { icon: <Hotel size={24} />, name: "Hoteles", color: "from-blue-500/20 to-cyan-500/10" },
+    { icon: <ShoppingBag size={24} />, name: "Tiendas", color: "from-pink-500/20 to-rose-500/10" },
+    { icon: <Wrench size={24} />, name: "Servicios", color: "from-slate-500/20 to-gray-500/10" },
+    { icon: <Home size={24} />, name: "Inmobiliarias", color: "from-emerald-500/20 to-teal-500/10" },
+    { icon: <Plane size={24} />, name: "Viajes", color: "from-sky-500/20 to-indigo-500/10" },
   ];
 
-  return (
-    <section id="casos" className="py-24 px-6 relative bg-[#05050A]">
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-16">
-          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 text-slate-400 text-xs font-semibold px-4 py-1.5 rounded-full mb-6">
-            Casos de Uso
-          </div>
-          <h2 className="text-5xl lg:text-7xl font-black text-white tracking-tighter mb-6 leading-none">
-            UN CHATBOT PARA <br className="hidden md:block" />
-            <span className="text-transparent bg-clip-text bg-linear-to-r from-[#3B82F6] to-[#60A5FA]">
-              CADA INDUSTRIA
-            </span>
-          </h2>
-          <p className="text-slate-400 text-xl md:text-2xl max-w-3xl mx-auto leading-relaxed font-light">
-            whaibot se adapta a las necesidades específicas de tu negocio, sin importar el sector.
-          </p>
-        </div>
+  const row2 = [
+    { icon: <Sparkles size={24} />, name: "Belleza", color: "from-purple-500/20 to-fuchsia-500/10" },
+    { icon: <GraduationCap size={24} />, name: "Educación", color: "from-indigo-500/20 to-blue-500/10" },
+    { icon: <Car size={24} />, name: "Automotriz", color: "from-red-500/20 to-orange-500/10" },
+    { icon: <Dumbbell size={24} />, name: "Fitness", color: "from-lime-500/20 to-green-500/10" },
+    { icon: <Stethoscope size={24} />, name: "Salud", color: "from-teal-500/20 to-cyan-500/10" },
+    { icon: <Building size={24} />, name: "Empresas", color: "from-zinc-500/20 to-slate-500/10" },
+  ];
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-20">
-          {industries.map((ind) => (
+  useEffect(() => {
+    const setupTicker = (ref: React.RefObject<HTMLDivElement | null>, direction: number) => {
+      if (!ref.current) return;
+
+      const el = ref.current;
+      const content = el.querySelector(".ticker-content");
+      if (!content) return;
+
+      // Duplicate content for seamless loop
+      const clone = content.cloneNode(true);
+      el.appendChild(clone);
+
+      const totalWidth = content.clientWidth;
+
+      gsap.to(el, {
+        x: direction * totalWidth,
+        duration: 30,
+        ease: "none",
+        repeat: -1,
+        modifiers: {
+          x: gsap.utils.unitize(x => parseFloat(x) % totalWidth)
+        }
+      });
+    };
+
+    setupTicker(tickerRef1, -1);
+    setupTicker(tickerRef2, 1);
+
+    return () => {
+      gsap.killTweensOf(tickerRef1.current);
+      gsap.killTweensOf(tickerRef2.current);
+    };
+  }, []);
+
+  const TickerRow = ({ items, innerRef }: { items: any[], innerRef: React.RefObject<HTMLDivElement | null> }) => (
+    <div className="overflow-hidden whitespace-nowrap py-4">
+      <div ref={innerRef} className="inline-block">
+        <div className="ticker-content inline-flex gap-6 px-3">
+          {items.map((ind, i) => (
             <div
-              key={ind.name}
-              className="group bg-[#0D0D1A] border border-white/5 p-6 rounded-3xl hover:bg-[#3B82F6]/5 hover:border-[#3B82F6]/30 transition-all duration-300 flex flex-col items-center justify-center gap-4 cursor-pointer"
+              key={i}
+              className={`flex items-center gap-4 bg-[#0d0d1a]/60 border border-white/5 backdrop-blur-xl px-8 py-5 rounded-3xl group hover:border-[#3B82F6]/30 transition-all duration-300 cursor-pointer`}
             >
-              <div className="text-4xl group-hover:scale-110 transition-transform duration-300">{ind.icon}</div>
-              <span className="text-white font-semibold tracking-tight">{ind.name}</span>
+              <div className={`w-12 h-12 rounded-2xl bg-linear-to-br ${ind.color} flex items-center justify-center text-white group-hover:scale-110 transition-transform duration-300 shadow-lg`}>
+                {ind.icon}
+              </div>
+              <span className="text-lg font-bold text-white tracking-tight">{ind.name}</span>
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
 
-        <div className="bg-linear-to-br from-[#0D0D1A] to-[#0A0A12] border border-[#3B82F6]/20 p-10 md:p-14 rounded-[40px] flex flex-col md:flex-row items-center gap-10 overflow-hidden relative">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-[#3B82F6]/10 blur-[100px] rounded-full pointer-events-none" />
+  return (
+    <section id="casos" className="py-32 px-6 relative bg-[#05050A] overflow-hidden">
+      {/* Dynamic background lights */}
+      <div className="absolute top-0 left-0 w-full h-full pointer-events-none -z-10">
+        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-blue-600/5 rounded-full blur-[120px]" />
+        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-purple-600/5 rounded-full blur-[120px]" />
+      </div>
 
-          <div className="w-16 h-16 bg-[#3B82F6]/20 rounded-2xl flex items-center justify-center shrink-0 border border-[#3B82F6]/30">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#60A5FA" strokeWidth="2" className="w-8 h-8">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-            </svg>
+      <div className="max-w-7xl mx-auto">
+        <div className="text-center mb-20">
+          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 text-slate-400 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full mb-8">
+            Versatilidad Absoluta
           </div>
+          <h2 className="text-6xl lg:text-8xl font-black text-white tracking-tighter mb-8 leading-none">
+            UN BOT PARA <br className="hidden md:block" />
+            <span className="text-transparent bg-clip-text bg-linear-to-r from-[#3B82F6] via-blue-400 to-[#60A5FA]">
+              CADA DESAFÍO
+            </span>
+          </h2>
+          <p className="text-slate-400 text-xl md:text-2xl max-w-3xl mx-auto leading-relaxed font-light mb-12">
+            Whaibot se entrena con los datos de tu industria para ofrecer respuestas expertas y naturales.
+          </p>
+        </div>
 
-          <div>
-            <h3 className="text-2xl md:text-3xl font-bold text-white mb-3">Entrenamiento Específico</h3>
-            <p className="text-slate-400 text-lg leading-relaxed">
-              Cada bot conoce la terminología y mejores prácticas de tu industria. No es solo un bot genérico, es un experto virtual en tu área de negocio capaz de entender y resolver las dudas de tus clientes.
-            </p>
+        {/* Dynamic Tickers */}
+        <div className="relative mb-24">
+          {/* Faded edges for the ticker */}
+          <div className="absolute inset-y-0 left-0 w-40 bg-linear-to-r from-[#05050A] to-transparent z-10 pointer-events-none" />
+          <div className="absolute inset-y-0 right-0 w-40 bg-linear-to-l from-[#05050A] to-transparent z-10 pointer-events-none" />
+
+          <TickerRow items={row1} innerRef={tickerRef1} />
+          <TickerRow items={row2} innerRef={tickerRef2} />
+        </div>
+
+        {/* Feature Highlight Card */}
+        <div className="group relative bg-linear-to-br from-[#0D0D1A] to-[#080810] border border-white/5 p-12 md:p-16 rounded-[48px] overflow-hidden">
+          {/* Animated glow */}
+          <div className="absolute -top-24 -right-24 w-96 h-96 bg-[#3B82F6]/10 blur-[120px] rounded-full group-hover:bg-[#3B82F6]/20 transition-colors duration-700" />
+
+          <div className="relative z-10 flex flex-col lg:flex-row items-center gap-16">
+            <div className="flex-1 text-center lg:text-left">
+              <div className="inline-flex items-center gap-2 text-blue-400 font-bold text-sm uppercase tracking-widest mb-6">
+                <Zap size={18} className="fill-current" />
+                Inteligencia Contextual
+              </div>
+              <h3 className="text-4xl md:text-5xl font-black text-white mb-6 leading-tight">
+                Entrenamiento experto <br /> en tiempo récord.
+              </h3>
+              <p className="text-slate-400 text-lg leading-relaxed mb-8 max-w-xl">
+                Nuestro sistema no solo responde, comprende. Inyectamos la base de conocimiento de tu sector para que cada interacción sea indistinguible de la de un humano experto.
+              </p>
+
+              <div className="flex flex-wrap justify-center lg:justify-start gap-6">
+                {[
+                  { label: "Terminología técnica", icon: <ShieldCheck size={20} /> },
+                  { label: "Métricas de industria", icon: <Globe size={20} /> }
+                ].map((tag, i) => (
+                  <div key={i} className="flex items-center gap-3 text-slate-300 font-medium">
+                    <div className="text-blue-500">{tag.icon}</div>
+                    {tag.label}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex-1 relative flex justify-center">
+              <div className="w-full max-w-md aspect-square bg-linear-to-br from-[#3B82F6]/20 to-purple-600/10 border border-white/10 rounded-full flex items-center justify-center relative overflow-hidden group-hover:scale-105 transition-transform duration-700">
+                {/* Visual representation of "Expertise" */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-4/5 h-4/5 border border-white/5 rounded-full animate-spin-slow" />
+                  <div className="absolute w-3/5 h-3/5 border border-white/10 rounded-full animate-reverse-spin-slow" />
+                </div>
+                <Building size={120} className="text-white/20" />
+                <div className="absolute inset-0 bg-linear-to-t from-[#080810] to-transparent opacity-60" />
+                <div className="absolute bottom-10 flex flex-col items-center">
+                  <span className="text-5xl font-black text-white">99%</span>
+                  <span className="text-blue-400 font-bold text-xs uppercase tracking-widest">Precisión del Sector</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -520,101 +625,165 @@ function UseCases() {
   );
 }
 
-function Pricing() {
-  const [plans, setPlans] = useState<any[]>([]);
 
-  useEffect(() => {
-    fetch("/api/plans")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.ok && data.plans && data.plans.length > 0) {
-          setPlans(data.plans);
-        }
-      })
-      .catch((err) => console.error("Error fetching plans:", err));
-  }, []);
+function Pricing() {
+  const plans = [
+    {
+      name: "Basic",
+      price: "15",
+      description: "Ideal para emprendedores que inician su automatización.",
+      features: [
+        "1 Bot de WhatsApp",
+        "IA Conversacional Básica",
+        "Base de Conocimiento",
+        "Estadísticas de Uso",
+        "Soporte por Ticket"
+      ],
+      popular: false,
+      buttonText: "Empezar ahora",
+      color: "from-blue-500/20 to-indigo-500/10 border-blue-500/20",
+      accent: "bg-blue-500"
+    },
+    {
+      name: "Pro",
+      price: "29",
+      description: "La solución completa para negocios en crecimiento.",
+      features: [
+        "1 Bot de WhatsApp",
+        "IA con Memoria Contextual",
+        "Transcripción de Audios",
+        "Campañas (Broadcasts)",
+        "Acceso a API Externa",
+        "Soporte Prioritario"
+      ],
+      popular: true,
+      buttonText: "Elegir Plan Pro",
+      color: "from-[#25d366]/20 to-emerald-500/10 border-[#25d366]/30",
+      accent: "bg-[#25d366]"
+    },
+    {
+      name: "Premium",
+      price: "39",
+      description: "Para empresas que necesitan máxima potencia y escala.",
+      features: [
+        "Hasta 2 Bots de WhatsApp",
+        "IA de Alta Capacidad",
+        "Transcripción de Audios",
+        "Campañas Ilimitadas",
+        "API Pro (Webhooks)",
+        "Gestión de Grupos",
+        "Soporte 24/7 Dedicado"
+      ],
+      popular: false,
+      buttonText: "Obtener Premium",
+      color: "from-purple-500/20 to-pink-500/10 border-purple-500/20",
+      accent: "bg-purple-500"
+    }
+  ];
 
   return (
-    <section id="precios" className="py-24 px-6 relative overflow-hidden">
+    <section id="precios" className="py-32 px-6 relative overflow-hidden">
       {/* Background decoration */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-[#25d366]/5 rounded-full blur-[120px] -z-10" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[1000px] bg-blue-600/5 rounded-full blur-[160px] -z-10" />
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-purple-600/5 rounded-full blur-[140px] -z-10" />
 
       <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-16">
-          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 text-slate-400 text-xs font-semibold px-4 py-1.5 rounded-full mb-6">
-            Planes
+        <div className="text-center mb-20">
+          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 text-slate-400 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full mb-6">
+            Inversión Inteligente
           </div>
-          <h2 className="text-4xl lg:text-5xl font-bold text-white mb-4 tracking-tight">
-            Elige el plan perfecto para <span className="text-[#25d366]">tu negocio</span> con IA
+          <h2 className="text-5xl lg:text-6xl font-black text-white mb-6 tracking-tight leading-tight">
+            Planes diseñados para <br />
+            <span className="text-transparent bg-clip-text bg-linear-to-r from-[#25d366] to-blue-400">
+              impulsar tus ventas
+            </span>
           </h2>
-          <p className="text-slate-500 text-lg max-w-2xl mx-auto">
-            Sin costos ocultos. Escalabilidad total para acompañar el crecimiento de tu empresa.
+          <p className="text-slate-400 text-lg max-w-2xl mx-auto leading-relaxed">
+            Sin complicaciones. Escoge el nivel de potencia que tu negocio necesita hoy y escala sin límites mañana.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-8">
-          {plans.map((plan: any) => (
+        <div className="grid lg:grid-cols-3 gap-8 items-start">
+          {plans.map((plan) => (
             <div
               key={plan.name}
-              className={`relative flex flex-col p-8 rounded-3xl bg-[#0d0d1a] border transition-all duration-500 hover:translate-y-[-8px] ${plan.popular ? "border-[#25d366]/50 shadow-2xl shadow-[#25d366]/10 scale-105 z-10" : "border-white/5"
+              className={`group relative flex flex-col p-10 rounded-[40px] border transition-all duration-500 hover:scale-[1.02] ${plan.popular
+                  ? "bg-linear-to-b from-[#0f172a] to-[#080810] border-[#25d366]/40 shadow-[0_0_50px_-12px_rgba(37,211,102,0.15)] ring-1 ring-[#25d366]/20"
+                  : "bg-[#0d0d1a]/50 backdrop-blur-xl border-white/5"
                 }`}
             >
               {plan.popular && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-[#25d366] text-black text-[10px] font-black uppercase tracking-widest px-4 py-1 rounded-full shadow-lg shadow-[#25d366]/20">
-                  Más Popular
+                <div className="absolute -top-5 left-1/2 -translate-x-1/2 bg-linear-to-r from-[#25d366] to-emerald-500 text-black text-[10px] font-black uppercase tracking-[0.2em] px-6 py-2 rounded-full shadow-lg shadow-[#25d366]/20 z-20">
+                  Recomendado
                 </div>
               )}
 
-              <div className="mb-8">
-                <h3 className="text-xl font-bold text-white mb-2">{plan.name}</h3>
-                <p className="text-slate-500 text-sm leading-relaxed">{plan.description}</p>
+              <div className="mb-10 text-center lg:text-left">
+                <h3 className="text-2xl font-bold text-white mb-3 flex items-center justify-center lg:justify-start gap-3">
+                  {plan.name}
+                  {plan.popular && <span className="w-2 h-2 bg-[#25d366] rounded-full animate-pulse" />}
+                </h3>
+                <p className="text-slate-500 text-sm leading-relaxed h-10">{plan.description}</p>
               </div>
 
-              <div className="mb-8 flex items-baseline gap-1">
-                <span className="text-4xl font-bold text-white">{plan.price}</span>
-                {plan.price !== "Consultar" && <span className="text-slate-500 text-sm">/mes</span>}
+              <div className="mb-10 flex items-baseline justify-center lg:justify-start gap-2">
+                <span className="text-6xl font-black text-white tracking-tighter">${plan.price}</span>
+                <div className="flex flex-col">
+                  <span className="text-slate-400 text-lg font-medium leading-none">USD</span>
+                  <span className="text-slate-600 text-xs mt-1">/mes</span>
+                </div>
               </div>
 
-              <div className="space-y-4 mb-10 flex-grow">
-                {(() => {
-                  const f = plan.features;
-                  const list = Array.isArray(f) ? f : [
-                    f.maxBots ? `Hasta ${f.maxBots} Bot${f.maxBots > 1 ? 's' : ''}` : null,
-                    f.audioTranscription ? "Transcripción de Audios" : null,
-                    f.whatsappTemplates ? "Campañas (Broadcasts)" : null,
-                    f.apiAccess ? "Acceso a API externa" : null
-                  ].filter(Boolean);
-
-                  return list.map((feature: string, i: number) => (
-                    <div key={i} className="flex items-start gap-3">
-                      <div className={`mt-1 shrink-0 ${plan.popular ? "text-[#25d366]" : "text-slate-400"}`}>
-                        <CheckIcon />
-                      </div>
-                      <span className="text-slate-400 text-sm leading-tight">{feature}</span>
+              <div className="space-y-5 mb-12 flex-grow">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Qué incluye:</p>
+                {plan.features.map((feature, i) => (
+                  <div key={i} className="flex items-start gap-4 group/item">
+                    <div className={`mt-0.5 shrink-0 w-5 h-5 rounded-full flex items-center justify-center border ${plan.popular ? "bg-[#25d366]/10 border-[#25d366]/20 text-[#25d366]" : "bg-white/5 border-white/10 text-slate-400"
+                      }`}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="w-3 h-3">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                      </svg>
                     </div>
-                  ));
-                })()}
+                    <span className="text-slate-300 text-sm font-medium transition-colors group-hover/item:text-white">{feature}</span>
+                  </div>
+                ))}
               </div>
 
               <a
                 href="https://wa.me/584127575904"
                 target="_blank"
                 rel="noopener noreferrer"
-                className={`w-full py-4 px-6 rounded-xl font-bold text-center transition-all duration-200 border ${plan.buttonColor}`}
+                className={`group/btn relative overflow-hidden w-full py-5 px-8 rounded-2xl font-black text-sm uppercase tracking-widest text-center transition-all duration-300 ${plan.popular
+                    ? "bg-[#25d366] text-black hover:shadow-[0_0_30px_rgba(37,211,102,0.4)]"
+                    : "bg-white/5 text-white border border-white/10 hover:bg-white/10"
+                  }`}
               >
-                {plan.name === "Premium" ? "Contactar Ventas" : "Empezar ahora"}
+                <span className="relative z-10">{plan.buttonText}</span>
+                {plan.popular && (
+                  <div className="absolute inset-0 bg-linear-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover/btn:animate-shimmer" />
+                )}
               </a>
             </div>
           ))}
         </div>
 
-        <p className="text-center text-slate-600 text-sm mt-12">
-          ¿Necesitas un plan personalizado? <a href="https://wa.me/584127575904" className="text-[#25d366] hover:underline">Habla con nosotros</a>
-        </p>
+        <div className="mt-20 p-8 rounded-[32px] bg-linear-to-r from-blue-600/10 to-purple-600/10 border border-white/5 backdrop-blur-sm flex flex-col md:flex-row items-center justify-between gap-8 text-center md:text-left">
+          <div>
+            <h4 className="text-xl font-bold text-white mb-1">¿Necesitas algo a gran escala?</h4>
+            <p className="text-slate-400 text-sm">Ofrecemos soluciones personalizadas para agencias y grandes empresas con +10 bots.</p>
+          </div>
+          <a
+            href="https://wa.me/584127575904"
+            className="whitespace-nowrap px-8 py-4 bg-white text-black font-bold rounded-xl hover:bg-blue-50 transition-all shadow-lg shadow-white/5"
+          >
+            Hablar con un experto
+          </a>
+        </div>
       </div>
     </section>
   );
 }
+
 
 function FaqAccordion() {
   const [openIndex, setOpenIndex] = useState<number | null>(null);

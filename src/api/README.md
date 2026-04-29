@@ -7,6 +7,7 @@ WhaiBot expone una API REST para interactuar con los bots de WhatsApp de forma p
 | Prefijo | Autenticación | Descripción |
 |---|---|---|
 | `POST /api/send-message` | `x-client-key`, `x-client-botid` | Envío de mensajes a contactos individuales |
+| `POST /api/send-status` | `x-client-key`, `x-client-botid` | Actualización de Estado (Stories) |
 | `GET/POST /api/groupsBots` | `x-client-key`, `x-client-botid` | Envío a grupos de WhatsApp |
 | `/api/saas/*` | Firebase ID Token (`Bearer`) | Gestión de bots, configuración, sesiones, KB, templates, broadcasts |
 | `/api/auth/*` | Ninguna / Firebase Token | Registro y perfil de usuario |
@@ -102,6 +103,45 @@ Envía un mensaje de texto (o texto + imagen) a un número de WhatsApp.
 | `404` | El bot no existe o no ha iniciado |
 | `409` | El bot no está en estado `ready` |
 | `500` | Error interno al enviar |
+
+---
+
+### `POST /api/send-status` — Actualizar Estado de WhatsApp (Stories) 🆕
+
+Envía un mensaje de texto (o texto + imagen) al estado (historias) de WhatsApp del bot.
+
+**Headers:**
+
+| Header | Valor |
+|---|---|
+| `Content-Type` | `application/json` |
+| `x-client-key` | Tu `clientKey` |
+| `x-client-botid` | ID del bot |
+
+**Body JSON:**
+
+```json
+{
+  "message": "¡Mira nuestra nueva oferta! 🚀",
+  "mediaUrl": "https://whaibot.com/assets/promo.jpg"
+}
+```
+
+| Campo | Tipo | Requerido | Descripción |
+|---|---|---|---|
+| `message` | `string` | ❌* | Texto del estado. Si `mediaUrl` está presente, se usa como caption |
+| `mediaUrl` | `string` | ❌* | URL pública de imagen para el estado |
+
+> \* Se requiere al menos uno de los dos: `message` o `mediaUrl`.
+
+**Respuesta exitosa `200`:**
+
+```json
+{
+  "success": true,
+  "message": "Estado de WhatsApp actualizado"
+}
+```
 
 ---
 

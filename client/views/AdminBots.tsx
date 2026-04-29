@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useGlassAlert } from 'glass-alert-animation';
+import LoadingScreen from '../components/LoadingScreen';
 import { ArrowLeft, RefreshCw, Trash2, Play, Square, RotateCcw } from 'lucide-react';
 
 interface Bot {
@@ -140,10 +141,7 @@ export default function AdminBots() {
       )}
 
       {loading ? (
-        <div className="text-center py-20 text-gray-500">
-          <div className="animate-spin text-4xl mb-4">⚕️</div>
-          <p>Cargando bots...</p>
-        </div>
+        <LoadingScreen message="Cargando lista maestra de bots..." />
       ) : (
         <div className="bg-[#12121a] border border-white/5 rounded-2xl overflow-hidden shadow-xl">
           <div className="overflow-x-auto">

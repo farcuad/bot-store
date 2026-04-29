@@ -21,6 +21,11 @@ interface GroupMessageBody {
   fromMe?: string;
 }
 
+interface StatusMessageBody {
+  message?: string;
+  mediaUrl?: string;
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // Helpers
 // ══════════════════════════════════════════════════════════════════════════════
@@ -28,7 +33,7 @@ interface GroupMessageBody {
 /**
  * Validates that the bot instance exists, belongs to the authenticated user,
  * and has an active WhatsApp connection (status = "ready").
- * 
+ *
  * NOTE: A bot with `isAutoResponseEnabled = false` (paused) still has status "ready"
  * and a live WhatsApp client, so the API will work normally in that state.
  * This helper ONLY blocks when the bot is truly stopped (idle/disconnected/error).
@@ -116,13 +121,17 @@ export const sendContactMessageController = async (
   res: Response,
 ) => {
   try {
-    const botId = (req.headers["x-client-botid"] || req.params.botId || req.body.botId) as string;
+    const botId = (req.headers["x-client-botid"] ||
+      req.params.botId ||
+      req.body.botId) as string;
     const { to, message, fromMe, mediaUrl } = req.body as ContactMessageBody;
 
     if (!botId) {
       return res
         .status(400)
-        .json({ error: "botId es requerido (x-client-botid header o parámetro)" });
+        .json({
+          error: "botId es requerido (x-client-botid header o parámetro)",
+        });
     }
 
     if (!to || !message || !fromMe) {
@@ -134,11 +143,9 @@ export const sendContactMessageController = async (
     // Validate that the recipient is an individual contact
     const chatId = to.includes("@c.us") ? to : `${to.replace(/\D/g, "")}@c.us`;
     if (!chatId.endsWith("@c.us")) {
-      return res
-        .status(400)
-        .json({
-          error: "El destinatario debe ser un contacto individual (@c.us)",
-        });
+      return res.status(400).json({
+        error: "El destinatario debe ser un contacto individual (@c.us)",
+      });
     }
 
     const instance = await getReadyInstance(botId, req, res);
@@ -161,12 +168,69 @@ export const sendContactMessageController = async (
       .json({ success: true, message: `Mensaje enviado a ${chatId}` });
   } catch (error) {
     console.error("Error al enviar mensaje a contacto:", error);
-    res.status(500).json({ error: "Error al enviar mensaje" });
+    res.status(500).json({ error: "Error al enviar mensaje " + error });
   }
 };
 
 // Keep the legacy export name for backward compatibility
 export const seendMessageController = sendContactMessageController;
+
+/**
+ * Updates the WhatsApp status (stories) for the given bot.
+ */
+export const sendStatusController = async (req: Request, res: Response) => {
+  try {
+    const botId = (req.headers["x-client-botid"] ||
+      req.params.botId ||
+      req.body.botId) as string;
+    const { message, mediaUrl } = req.body as StatusMessageBody;
+
+    if (!botId) {
+      return res
+        .status(400)
+        .json({
+          error: "botId es requerido (x-client-botid header o parámetro)",
+        });
+    }
+
+    if (!message && !mediaUrl) {
+      return res
+        .status(400)
+        .json({ error: "Se requiere 'message' o 'mediaUrl' para el estado" });
+    }
+
+    const instance = await getReadyInstance(botId, req, res);
+    if (!instance) return;
+
+    const chatId = "status@broadcast";
+
+    // Send with or without media to the status broadcast
+    if (mediaUrl) {
+      await instance.sendMediaToChat(chatId, mediaUrl, message || "");
+    } else {
+      await instance.sendMessageToChat(chatId, message || "");
+    }
+
+    // Audit log
+    const client = instance.getClient();
+    const botNumber = client?.info?.wid?.user || "unknown";
+    await recordAuditLog(
+      botId,
+      botNumber,
+      chatId,
+      message || "",
+      "true",
+      !!mediaUrl,
+    );
+
+    res
+      .status(200)
+      .json({ success: true, message: "Estado de WhatsApp actualizado" });
+  } catch (error) {
+    console.error("Error al actualizar estado:", error);
+    res.status(500).json({ error: "Error al actualizar estado " + error });
+  }
+};
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Group Controllers
@@ -183,7 +247,9 @@ export const getGroupsController = async (req: Request, res: Response) => {
     if (!botId) {
       return res
         .status(400)
-        .json({ error: "botId es requerido (x-client-botid header o parámetro)" });
+        .json({
+          error: "botId es requerido (x-client-botid header o parámetro)",
+        });
     }
 
     const instance = await getReadyInstance(botId, req, res);
@@ -232,13 +298,17 @@ export const sendGroupMessageController = async (
   res: Response,
 ) => {
   try {
-    const botId = (req.headers["x-client-botid"] || req.params.botId || req.body.botId) as string;
+    const botId = (req.headers["x-client-botid"] ||
+      req.params.botId ||
+      req.body.botId) as string;
     const { to, message, mediaUrl, fromMe } = req.body as GroupMessageBody;
 
     if (!botId) {
       return res
         .status(400)
-        .json({ error: "botId es requerido (x-client-botid header o parámetro)" });
+        .json({
+          error: "botId es requerido (x-client-botid header o parámetro)",
+        });
     }
 
     if (!to || !message || !fromMe) {

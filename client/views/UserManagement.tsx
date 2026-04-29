@@ -12,11 +12,18 @@ interface UserProfile {
   uid: string;
   email: string;
   displayName?: string;
+  // Existing plan field kept for backward compatibility
   plan: string;
   status: string;
   role: string;
   maxBots: number;
   createdAt: string;
+  // New subscription object containing optional fields for incremental updates
+  subscription?: {
+    planId?: string;
+    status?: string;
+    expiresAt?: number;
+  };
 }
 
 export default function UserManagement() {
@@ -40,6 +47,42 @@ export default function UserManagement() {
     return {
       'Authorization': `Bearer ${token}`,
     };
+  };
+
+  // Helper to update subscription plan
+  const updatePlan = async (uid: string, planId: string) => {
+    try {
+      const headers = await getHeaders();
+      await axios.patch(`${API_URL}/api/admin/users/${uid}/plan`, { planId }, { headers });
+      // Optimistically update UI
+      setUsers(prev =>
+        prev.map(u => (u.uid === uid ? { ...u, subscription: { ...(u.subscription || {}), planId } } : u))
+      );
+    } catch (e: any) {
+      fire({ title: 'Error', text: e.response?.data?.error || e.message, icon: 'error' });
+    }
+  };
+
+  // Helper to update subscription expiration (days from now)
+  const updateExpiration = async (uid: string, days: number) => {
+    if (isNaN(days) || days < 0) return;
+    const expiresAt = Math.floor(Date.now() / 1000) + days * 24 * 60 * 60;
+    try {
+      const headers = await getHeaders();
+      await axios.patch(`${API_URL}/api/admin/users/${uid}/plan`, { expiresAt }, { headers });
+      setUsers(prev =>
+        prev.map(u =>
+          u.uid === uid
+            ? {
+                ...u,
+                subscription: { ...(u.subscription || {}), expiresAt },
+              }
+            : u
+        )
+      );
+    } catch (e: any) {
+      fire({ title: 'Error', text: e.response?.data?.error || e.message, icon: 'error' });
+    }
   };
 
   const loadUsers = async () => {
@@ -155,8 +198,9 @@ export default function UserManagement() {
                   </td>
                   <td className="p-4 text-gray-300 text-sm">{u.email}</td>
                   <td className="p-4">
+                    {/* Show subscription plan if available, fallback to legacy plan field */}
                     <span className="bg-blue-500/10 text-blue-400 px-2 py-1 rounded text-xs font-medium border border-blue-500/20">
-                      {u.plan?.toUpperCase() || 'FREE'}
+                      {u.subscription?.planId?.toUpperCase() || u.plan?.toUpperCase() || 'FREE'}
                     </span>
                   </td>
                   <td className="p-4">
@@ -203,7 +247,36 @@ export default function UserManagement() {
                         </button>
                       </div>
                     )}
-                    {u.status !== 'pending' && (
+                    {/* Admin plan management – visible only for admins */}
+                    {role === 'admin' && u.subscription && (
+                      <div className="flex flex-col gap-1 mt-2">
+                        {/* Plan selector */}
+                        <select
+                          value={u.subscription?.planId || ''}
+                          onChange={e => updatePlan(u.uid, e.target.value)}
+                          className="text-sm bg-black/30 text-white rounded px-2 py-1"
+                        >
+                          <option value="basic">Basic</option>
+                          <option value="pro">Pro</option>
+                          <option value="premium">Premium</option>
+                        </select>
+                        {/* Days remaining input */}
+                        <input
+                          type="number"
+                          min={0}
+                          defaultValue={
+                            Math.max(
+                              0,
+                              Math.ceil(((u.subscription?.expiresAt ?? 0) * 1000 - Date.now()) / (1000 * 60 * 60 * 24))
+                            )
+                          }
+                          onBlur={e => updateExpiration(u.uid, parseInt(e.target.value, 10))}
+                          className="w-16 bg-black/40 border border-white/10 text-white text-sm text-center rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                        <span className="text-xs text-gray-400">días</span>
+                      </div>
+                    )}
+                    {u.status !== 'pending' && !u.subscription && (
                       <span className="text-gray-600 text-sm">Gestionado</span>
                     )}
                   </td>

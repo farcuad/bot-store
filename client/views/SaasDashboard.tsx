@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGlassAlert } from 'glass-alert-animation';
 import { useAuth } from '../context/AuthContext';
+import LoadingScreen from '../components/LoadingScreen';
 
 interface Bot {
   botId: string;
@@ -352,6 +353,36 @@ const SaasDashboard: React.FC = () => {
           <span>＋</span> Nuevo Bot
         </button>
       </div>
+      
+      {!isAdmin && billingData?.subscription && (
+        <div 
+          onClick={() => navigate('/saas/subscription')}
+          className={`mb-6 p-4 rounded-2xl border cursor-pointer transition-all hover:brightness-110 flex items-center justify-between gap-4 ${
+            billingData.subscription.isTrial 
+              ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' 
+              : 'bg-[#25d366]/5 border-[#25d366]/10 text-gray-300'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+               billingData.subscription.isTrial ? 'bg-blue-500/20' : 'bg-[#25d366]/20'
+            }`}>
+              {billingData.subscription.isTrial ? '🎁' : '💎'}
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider opacity-60">
+                {billingData.subscription.isTrial ? 'Periodo de Prueba Activo' : 'Suscripción Activa'}
+              </p>
+              <h4 className="text-sm font-bold text-white">
+                Plan {billingData.plan?.name} — {Math.ceil((billingData.subscription.expiresAt * 1000 - Date.now()) / (1000 * 60 * 60 * 24))} días restantes
+              </h4>
+            </div>
+          </div>
+          <button className="text-xs font-bold px-3 py-1.5 bg-white/5 rounded-lg border border-white/5 hover:bg-white/10 transition-colors">
+            Gestionar
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-xl mb-6 flex items-center gap-3">
@@ -360,10 +391,7 @@ const SaasDashboard: React.FC = () => {
       )}
 
       {loading ? (
-        <div className="text-center py-20 text-gray-500">
-          <div className="animate-spin text-4xl mb-4">⚕️</div>
-          <p>Cargando bots...</p>
-        </div>
+        <LoadingScreen message="Cargando tus bots..." />
       ) : bots.length === 0 ? (
         <div className="bg-[#12121a] border border-white/5 rounded-2xl p-12 text-center text-gray-400">
           <div className="text-6xl mb-4">🤖</div>

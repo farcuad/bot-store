@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { Activity, MessageSquare, Database, AlertCircle, RefreshCw, Edit2, Trash2, Download, Upload, RotateCcw, ScrollText, FileText, Code, BookOpen, Copy, Bell, Plus, X } from 'lucide-react';
 import axios from 'axios';
 import { useGlassAlert } from 'glass-alert-animation';
+import LoadingScreen from '../components/LoadingScreen';
 import TemplatesTab from './TemplatesTab';
 import { getAppStorage } from '../firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -128,6 +129,8 @@ export default function BotAdmin() {
 
   // Plan / subscription state
   const [canUseTemplates, setCanUseTemplates] = useState(true); // optimistic default
+  const [canUseApi, setCanUseApi]             = useState(true); 
+  const [userPlanName, setUserPlanName]     = useState('Basic');
 
   // Notification triggers state
   const [motivos, setMotivos]             = useState<string[]>([]);
@@ -177,6 +180,8 @@ export default function BotAdmin() {
           }
           // Capture plan features for conditional UI
           setCanUseTemplates(d.plan?.features?.whatsappTemplates === true);
+          setCanUseApi(d.plan?.features?.apiAccess === true);
+          setUserPlanName(d.plan?.name || 'Basic');
         }
       } catch (e) {
         console.error(e);
@@ -790,9 +795,7 @@ export default function BotAdmin() {
 
       {/* ── Content ──────────────────────────────────────────────────── */}
       {loading ? (
-        <div className="flex justify-center py-24">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#25d366]" />
-        </div>
+        <LoadingScreen message="Cargando configuración del bot..." />
       ) : (
         <div>
           {/* MÉTRICAS */}
@@ -1142,55 +1145,72 @@ export default function BotAdmin() {
                   Actualizar
                 </button>
               </div>
-
-              {/* API Credentials Card */}
-              <div className="bg-[#1a1a2e]/50 border border-white/10 rounded-3xl p-8 backdrop-blur-sm shadow-2xl mb-8">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                  <div className="space-y-2">
-                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                      <Code className="h-5 w-5 text-indigo-400" />
-                      Credenciales de API
-                    </h3>
-                    <p className="text-sm text-gray-400">
-                      Usa estas credenciales para enviar mensajes desde sistemas externos.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => navigate('/saas/api-docs')}
-                    className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/20"
+              {(!canUseApi && !isAdmin) && (
+                <div className="bg-indigo-500/5 border border-indigo-500/20 rounded-2xl p-6 text-center">
+                  <Code className="h-10 w-10 text-indigo-400 mx-auto mb-3 opacity-50" />
+                  <h4 className="text-white font-bold mb-1">Registro de envíos API</h4>
+                  <p className="text-sm text-gray-400 mb-4">
+                    Tu plan actual ({userPlanName}) no incluye este servicio. Actualiza al plan Pro o Premium →
+                  </p>
+                  <button 
+                    onClick={() => navigate('/saas/subscription')}
+                    className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/20"
                   >
-                    <BookOpen className="h-4 w-4" />
-                    Ver Documentación
+                    Mejorar mi plan
                   </button>
                 </div>
+              )}
 
-                <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-black/40 border border-white/5 rounded-2xl p-4 flex flex-col gap-1">
-                    <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">x-client-botid</span>
-                    <div className="flex items-center justify-between">
-                      <code className="text-indigo-400 font-mono text-sm">{botNumber}</code>
-                      <button 
-                        onClick={() => { navigator.clipboard.writeText(botNumber); fire({ title: 'Copiado', toast: true, position: 'top-end', timer: 2000, icon: 'success' }); }}
-                        className="p-2 hover:bg-white/5 rounded-lg transition-all text-gray-500 hover:text-white"
-                      >
-                        <Copy className="h-4 w-4" />
-                      </button>
+              {/* API Credentials Card */}
+              {(canUseApi || isAdmin) && (
+                <div className="bg-[#1a1a2e]/50 border border-white/10 rounded-3xl p-8 backdrop-blur-sm shadow-2xl mb-8">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div className="space-y-2">
+                      <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                        <Code className="h-5 w-5 text-indigo-400" />
+                        Credenciales de API
+                      </h3>
+                      <p className="text-sm text-gray-400">
+                        Usa estas credenciales para enviar mensajes desde sistemas externos.
+                      </p>
                     </div>
+                    <button
+                      onClick={() => navigate('/saas/api-docs')}
+                      className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/20"
+                    >
+                      <BookOpen className="h-4 w-4" />
+                      Ver Documentación
+                    </button>
                   </div>
-                  <div className="bg-black/40 border border-white/5 rounded-2xl p-4 flex flex-col gap-1">
-                    <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">x-client-key</span>
-                    <div className="flex items-center justify-between">
-                      <code className="text-indigo-400 font-mono text-sm">{apiKey || 'Cargando...'}</code>
-                      <button 
-                        onClick={() => { navigator.clipboard.writeText(apiKey); fire({ title: 'Copiado', toast: true, position: 'top-end', timer: 2000, icon: 'success' }); }}
-                        className="p-2 hover:bg-white/5 rounded-lg transition-all text-gray-500 hover:text-white"
-                      >
-                        <Copy className="h-4 w-4" />
-                      </button>
+
+                  <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-black/40 border border-white/5 rounded-2xl p-4 flex flex-col gap-1">
+                      <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">x-client-botid</span>
+                      <div className="flex items-center justify-between">
+                        <code className="text-indigo-400 font-mono text-sm">{botNumber}</code>
+                        <button 
+                          onClick={() => { navigator.clipboard.writeText(botNumber); fire({ title: 'Copiado', toast: true, position: 'top-end', timer: 2000, icon: 'success' }); }}
+                          className="p-2 hover:bg-white/5 rounded-lg transition-all text-gray-500 hover:text-white"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="bg-black/40 border border-white/5 rounded-2xl p-4 flex flex-col gap-1">
+                      <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">x-client-key</span>
+                      <div className="flex items-center justify-between">
+                        <code className="text-indigo-400 font-mono text-sm">{apiKey || 'Cargando...'}</code>
+                        <button 
+                          onClick={() => { navigator.clipboard.writeText(apiKey); fire({ title: 'Copiado', toast: true, position: 'top-end', timer: 2000, icon: 'success' }); }}
+                          className="p-2 hover:bg-white/5 rounded-lg transition-all text-gray-500 hover:text-white"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {apiLogs.length === 0 ? (
                 <Empty icon={Activity} text="No hay envíos API registrados." />

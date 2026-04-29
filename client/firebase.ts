@@ -5,6 +5,7 @@ import { getFirestore } from 'firebase/firestore';
 
 let firebaseApp: any = null;
 export let db: any = null;
+let _storageBucket: string | null = null;
 
 export async function initFirebase(): Promise<any> {
   if (getApps().length > 0) {
@@ -23,6 +24,8 @@ export async function initFirebase(): Promise<any> {
     
     firebaseApp = initializeApp(cfg);
     db = getFirestore(firebaseApp);
+    // Guardar el bucket para usarlo explícitamente en getAppStorage()
+    _storageBucket = cfg.storageBucket || null;
     return getAuth(firebaseApp);
   } catch (error) {
     console.error("Error initializing Firebase:", error);
@@ -32,5 +35,10 @@ export async function initFirebase(): Promise<any> {
 
 export function getAppStorage() {
   if (!firebaseApp) return null;
+  // Pasar el bucket explícitamente para evitar que Firebase use el bucket
+  // por defecto del proyecto (whaibot) cuando el env no está configurado.
+  if (_storageBucket) {
+    return getStorage(firebaseApp, `gs://${_storageBucket}`);
+  }
   return getStorage(firebaseApp);
 }
