@@ -36,18 +36,26 @@ export function createStatsManager(botId: string) {
         usuarios_unicos: parsed.usuarios_unicos ?? 0,
         ultima_actualizacion: parsed.ultima_actualizacion ?? new Date().toISOString(),
       };
-      console.log(`[${botId}] 📊 Estadísticas cargadas desde disco.`);
     } catch {
       console.log(`[${botId}] 📊 stats.json no encontrado. Iniciando en cero.`);
     }
   }
 
+  let saveTimeout: NodeJS.Timeout | null = null;
+
   async function saveStats(): Promise<void> {
-    stats.ultima_actualizacion = new Date().toISOString();
-    await fs.writeFile(STATS_PATH, JSON.stringify(stats, null, 2), "utf-8");
-    statsRef()
-      .set(stats, { merge: true })
-      .catch((e) => console.error(`[${botId}] ⚠️ No se pudo sincronizar stats:`, e));
+    if (!saveTimeout) {
+      saveTimeout = setTimeout(async () => {
+        saveTimeout = null;
+        stats.ultima_actualizacion = new Date().toISOString();
+        try {
+          await fs.writeFile(STATS_PATH, JSON.stringify(stats, null, 2), "utf-8");
+          await statsRef().set(stats, { merge: true });
+        } catch (e) {
+          console.error(`[${botId}] ⚠️ No se pudo sincronizar stats:`, e);
+        }
+      }, 30000);
+    }
   }
 
   function incrementarMensajesRespondidos(): void {
