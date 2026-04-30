@@ -33,7 +33,7 @@ interface ContactSession {
 interface BroadcastRecord {
   id: string;
   templateSnapshot: { text: string; imageUrl?: string };
-  recipients: { contactIds: string[]; groupIds: string[] };
+  recipients: { contactIds: string[]; groupIds: string[]; status?: boolean };
   schedule: Schedule;
   status: 'pending' | 'sending' | 'done' | 'error' | 'scheduled';
   createdAt?: any;
@@ -132,7 +132,7 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
   // ── Send modal state
   const [sendModal, setSendModal] = useState<Template | null>(null);
   const [sendStep, setSendStep] = useState<SendStep>('recipients');
-  const [recipientTab, setRecipientTab] = useState<'contacts' | 'groups'>('contacts');
+  const [recipientTab, setRecipientTab] = useState<'contacts' | 'groups' | 'status'>('contacts');
   const [contacts, setContacts] = useState<ContactSession[]>([]);
   const [groups, setGroups] = useState<WaGroup[]>([]);
   const [loadingRecipients, setLoadingRecipients] = useState(false);
@@ -140,6 +140,7 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
   const [schedule, setSchedule] = useState<Schedule>({ type: 'now' });
   const [sending, setSending] = useState(false);
+  const [sendToStatus, setSendToStatus] = useState(false);
   const [groupsError, setGroupsError] = useState('');
 
   // ── Load data
@@ -275,6 +276,7 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
     setSelectedContacts(new Set());
     setSelectedGroups(new Set());
     setSchedule({ type: 'now' });
+    setSendToStatus(false);
     setGroupsError('');
     setLoadingRecipients(true);
     try {
@@ -310,7 +312,7 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
     else setSelected(new Set(items.map(getId)));
   };
 
-  const totalSelected = selectedContacts.size + selectedGroups.size;
+  const totalSelected = selectedContacts.size + selectedGroups.size + (sendToStatus ? 1 : 0);
 
   // ── Send broadcast
   const sendBroadcast = async () => {
@@ -324,6 +326,7 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
         recipients: {
           contactIds: Array.from(selectedContacts),
           groupIds: Array.from(selectedGroups),
+          status: sendToStatus,
         },
         schedule,
       };
@@ -511,7 +514,8 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
                   </div>
                   <p className="text-sm text-gray-300 truncate">"{b.templateSnapshot?.text?.slice(0, 80)}{(b.templateSnapshot?.text?.length ?? 0) > 80 ? '…' : ''}"</p>
                   <div className="flex items-center gap-3 text-xs text-gray-600">
-                    <span><Users className="h-3 w-3 inline mr-1" />{(b.recipients?.contactIds?.length ?? 0) + (b.recipients?.groupIds?.length ?? 0)} dest.</span>
+                    <span><Users className="h-3 w-3 inline mr-1" />{(b.recipients?.contactIds?.length ?? 0) + (b.recipients?.groupIds?.length ?? 0) + (b.recipients?.status ? 1 : 0)} dest.</span>
+                    {b.recipients?.status && <span className="bg-[#25d366]/10 text-[#25d366] px-1.5 py-0.5 rounded text-[10px]">Estado</span>}
                     {b.nextRun && parseDate(b.nextRun) && <span><Clock className="h-3 w-3 inline mr-1" />Próximo: {parseDate(b.nextRun)!.toLocaleString('es', { dateStyle: 'short', timeStyle: 'short' })}</span>}
                     {b.lastRun && parseDate(b.lastRun) && <span>Último: {parseDate(b.lastRun)!.toLocaleString('es', { dateStyle: 'short', timeStyle: 'short' })}</span>}
                   </div>
@@ -650,14 +654,14 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
 
                   {/* Recipient tabs */}
                   <div className="flex gap-1 bg-black/30 rounded-xl p-1">
-                    {(['contacts', 'groups'] as const).map(tab => (
+                    {(['contacts', 'groups', 'status'] as const).map(tab => (
                       <button
                         key={tab}
                         onClick={() => setRecipientTab(tab)}
                         className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${recipientTab === tab ? 'bg-[#25d366]/10 text-[#25d366]' : 'text-gray-500 hover:text-white'}`}
                       >
-                        {tab === 'contacts' ? <Users className="h-4 w-4" /> : <span className="text-base">👥</span>}
-                        {tab === 'contacts' ? `Contactos (${contacts.length})` : `Grupos (${groups.length})`}
+                        {tab === 'contacts' ? <Users className="h-4 w-4" /> : tab === 'groups' ? <span className="text-base">👥</span> : <span className="text-base">📱</span>}
+                        {tab === 'contacts' ? `Contactos (${contacts.length})` : tab === 'groups' ? `Grupos (${groups.length})` : `Estados`}
                       </button>
                     ))}
                   </div>
@@ -697,7 +701,7 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
                         </>
                       )}
                     </div>
-                  ) : (
+                  ) : recipientTab === 'groups' ? (
                     <div className="space-y-2">
                       {groupsError ? (
                         <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 text-xs text-yellow-400">{groupsError}</div>
@@ -729,6 +733,34 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
                           </div>
                         </>
                       )}
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="bg-blue-500/5 border border-blue-500/10 rounded-xl p-4">
+                        <div className="flex gap-3">
+                          <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
+                            <span className="text-lg">✨</span>
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-bold text-white mb-1">WhatsApp Status</h4>
+                            <p className="text-xs text-gray-500 leading-relaxed">
+                              Tu mensaje se publicará como una actualización de estado en tu cuenta de WhatsApp. 
+                              Tus contactos podrán verlo durante 24 horas.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <button
+                        onClick={() => setSendToStatus(!sendToStatus)}
+                        className={`w-full flex items-center gap-3 px-4 py-4 rounded-xl text-left transition-all ${sendToStatus ? 'bg-[#25d366]/10 border border-[#25d366]/20' : 'bg-black/20 border border-white/5 hover:border-white/10'}`}
+                      >
+                        {sendToStatus ? <CheckSquare className="h-5 w-5 text-[#25d366] shrink-0" /> : <Square className="h-5 w-5 text-gray-600 shrink-0" />}
+                        <div className="flex-1">
+                          <div className="text-sm text-white font-bold">Publicar en mi Estado</div>
+                          <div className="text-xs text-gray-500 mt-0.5">Visibilidad: Todos tus contactos</div>
+                        </div>
+                      </button>
                     </div>
                   )}
 

@@ -26,6 +26,7 @@ export interface BroadcastSchedule {
 export interface BroadcastRecipients {
   contactIds: string[];  // e.g. "5491112345678@c.us"
   groupIds: string[];    // e.g. "120363000000000000@g.us"
+  status?: boolean;      // send to "status@broadcast"
 }
 
 export interface BroadcastDoc {
@@ -193,6 +194,9 @@ class BroadcastScheduler {
       ...broadcast.recipients.contactIds,
       ...broadcast.recipients.groupIds,
     ];
+    if (broadcast.recipients.status) {
+      allRecipients.push("status@broadcast");
+    }
 
     let sent = 0;
     let errors = 0;

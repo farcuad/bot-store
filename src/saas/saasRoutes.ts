@@ -919,7 +919,7 @@ router.post('/bots/:id/broadcasts', async (req, res) => {
   const id = req.params.id as string;
   const { templateId, templateSnapshot, recipients, schedule } = req.body;
   if (!templateSnapshot?.text) return fail(res, 400, 'templateSnapshot.text es requerido');
-  if (!recipients || (!recipients.contactIds?.length && !recipients.groupIds?.length))
+  if (!recipients || (!recipients.contactIds?.length && !recipients.groupIds?.length && !recipients.status))
     return fail(res, 400, 'Debes seleccionar al menos un destinatario');
   if (!schedule?.type) return fail(res, 400, 'schedule.type es requerido');
   try {
@@ -937,7 +937,11 @@ router.post('/bots/:id/broadcasts', async (req, res) => {
     }
     const ref = await db.collection('bots').doc(id).collection('broadcasts').add({
       botId: id, templateId: templateId || null, templateSnapshot,
-      recipients: { contactIds: recipients.contactIds ?? [], groupIds: recipients.groupIds ?? [] },
+      recipients: { 
+        contactIds: recipients.contactIds ?? [], 
+        groupIds: recipients.groupIds ?? [],
+        status: recipients.status ?? false
+      },
       schedule, status: 'pending', createdAt: new Date(),
     });
     const doc = { id: ref.id, botId: id, templateId, templateSnapshot, recipients, schedule, status: 'pending' as const, createdAt: { toMillis: () => Date.now() } as any };

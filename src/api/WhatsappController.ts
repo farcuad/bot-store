@@ -2,6 +2,7 @@ import type { Response, Request } from "express";
 import { botManager } from "../saas/BotManager.js";
 import { db } from "../config/firebase.js";
 import admin from "firebase-admin";
+import { subscriptionService } from "../services/subscriptionService.js";
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Types
@@ -151,6 +152,18 @@ export const sendContactMessageController = async (
     const instance = await getReadyInstance(botId, req, res);
     if (!instance) return;
 
+    // 🛑 Gate by Subscription Plan (API Access)
+    try {
+      const subContext = await subscriptionService.getBotSubscriptionContext(botId);
+      if (!subContext.plan.features.apiAccess) {
+        return res.status(403).json({ 
+          error: `Tu plan actual (${subContext.plan.name}) no incluye acceso a la API de envío de mensajes. Actualiza al plan Pro o Premium.` 
+        });
+      }
+    } catch (e: any) {
+      return res.status(500).json({ error: "Error verificando suscripción: " + e.message });
+    }
+
     // Send with or without media
     if (mediaUrl) {
       await instance.sendMediaToChat(chatId, mediaUrl, message);
@@ -201,6 +214,18 @@ export const sendStatusController = async (req: Request, res: Response) => {
 
     const instance = await getReadyInstance(botId, req, res);
     if (!instance) return;
+
+    // 🛑 Gate by Subscription Plan (API Access)
+    try {
+      const subContext = await subscriptionService.getBotSubscriptionContext(botId);
+      if (!subContext.plan.features.apiAccess) {
+        return res.status(403).json({ 
+          error: `Tu plan actual (${subContext.plan.name}) no incluye el envío de estados vía API. Actualiza al plan Pro o Premium.` 
+        });
+      }
+    } catch (e: any) {
+      return res.status(500).json({ error: "Error verificando suscripción: " + e.message });
+    }
 
     const chatId = "status@broadcast";
 
@@ -326,6 +351,18 @@ export const sendGroupMessageController = async (
 
     const instance = await getReadyInstance(botId, req, res);
     if (!instance) return;
+
+    // 🛑 Gate by Subscription Plan (API Access)
+    try {
+      const subContext = await subscriptionService.getBotSubscriptionContext(botId);
+      if (!subContext.plan.features.apiAccess) {
+        return res.status(403).json({ 
+          error: `Tu plan actual (${subContext.plan.name}) no incluye acceso a la API de envío de mensajes a grupos. Actualiza al plan Pro o Premium.` 
+        });
+      }
+    } catch (e: any) {
+      return res.status(500).json({ error: "Error verificando suscripción: " + e.message });
+    }
 
     // Send with or without media
     if (mediaUrl) {
