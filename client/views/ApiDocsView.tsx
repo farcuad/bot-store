@@ -33,6 +33,7 @@ export default function ApiDocsView() {
         <aside className="lg:col-span-1 space-y-2 sticky top-24 h-fit">
           <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-4">Contenido</p>
           <a href="#autenticacion" className="block text-sm text-gray-400 hover:text-white px-3 py-2 rounded-lg hover:bg-white/5 transition-all">Autenticación</a>
+          <a href="#health-check" className="block text-sm text-gray-400 hover:text-white px-3 py-2 rounded-lg hover:bg-white/5 transition-all">Estado del Bot (Health)</a>
           <a href="#envio-mensajes" className="block text-sm text-gray-400 hover:text-white px-3 py-2 rounded-lg hover:bg-white/5 transition-all">Envío de Mensajes</a>
           <a href="#envio-estados" className="block text-sm text-gray-400 hover:text-white px-3 py-2 rounded-lg hover:bg-white/5 transition-all">Envío de Estados</a>
           <a href="#grupos" className="block text-sm text-gray-400 hover:text-white px-3 py-2 rounded-lg hover:bg-white/5 transition-all">Gestión de Grupos</a>
@@ -105,12 +106,42 @@ export default function ApiDocsView() {
               </div>
             </div>
           </section>
+          
+          {/* Section: Health Check */}
+          <section id="health-check" className="space-y-6">
+            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+              <CheckCircle2 className="h-6 w-6 text-indigo-400" />
+              2. Estado del Bot (Health Check) 🆕
+            </h2>
+            
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <span className="bg-blue-600 text-[10px] font-black px-2 py-1 rounded">GET</span>
+                <code className="text-lg font-bold text-gray-200">/api/health</code>
+              </div>
+              <p className="text-gray-400 text-sm">
+                Verifica si el bot está activo y listo para procesar mensajes sin realizar un envío real. Requiere los mismos headers de autenticación.
+              </p>
+            </div>
+
+            <div className="bg-[#12121a] border border-white/5 rounded-2xl p-6 space-y-4">
+              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Respuesta Exitosa (200 OK)</h4>
+              <pre className="bg-black/40 rounded-xl p-5 text-indigo-300 font-mono text-sm overflow-x-auto">
+{`{
+  "success": true,
+  "botId": "bot_123456",
+  "status": "ready",
+  "message": "El bot está conectado y listo"
+}`}
+              </pre>
+            </div>
+          </section>
 
           {/* Section: Send Message */}
           <section id="envio-mensajes" className="space-y-6">
             <h2 className="text-2xl font-bold text-white flex items-center gap-3">
               <Send className="h-6 w-6 text-blue-400" />
-              2. Envío de Mensajes
+              3. Envío de Mensajes
             </h2>
             
             <div className="space-y-4">
@@ -169,7 +200,7 @@ export default function ApiDocsView() {
           <section id="envio-estados" className="space-y-6">
             <h2 className="text-2xl font-bold text-white flex items-center gap-3">
               <Zap className="h-6 w-6 text-amber-400" />
-              3. Envío de Estados (Stories)
+              4. Envío de Estados (Stories)
             </h2>
             
             <div className="space-y-4">
@@ -218,7 +249,7 @@ export default function ApiDocsView() {
           <section id="grupos" className="space-y-6">
             <h2 className="text-2xl font-bold text-white flex items-center gap-3">
               <Layers className="h-6 w-6 text-purple-400" />
-              4. Gestión de Grupos
+              5. Gestión de Grupos
             </h2>
             
             <div className="space-y-8">
@@ -250,7 +281,7 @@ export default function ApiDocsView() {
           <section id="ejemplos" className="space-y-6">
             <h2 className="text-2xl font-bold text-white flex items-center gap-3">
               <Terminal className="h-6 w-6 text-gray-400" />
-              5. Ejemplos de Código
+              6. Ejemplos de Código
             </h2>
 
             <div className="bg-[#12121a] border border-white/5 rounded-3xl overflow-hidden">

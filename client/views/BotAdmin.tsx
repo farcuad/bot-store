@@ -126,6 +126,8 @@ export default function BotAdmin() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
   const [botTimezone, setBotTimezone]   = useState<string>('America/Caracas');
+  const [autoResponseEnabled, setAutoResponseEnabled] = useState(true);
+  const [togglingAutoResponse, setTogglingAutoResponse] = useState(false);
 
   // Plan / subscription state
   const [canUseTemplates, setCanUseTemplates] = useState(true); // optimistic default
@@ -141,7 +143,7 @@ export default function BotAdmin() {
   const loadBotInfo = async () => {
     try {
       const token = await user?.getIdToken();
-      const res = await axios.get<ApiResponse<{ nombre: string; timezone?: string; clientKey?: string }>>(`${API_URL}/api/saas/bots/${botNumber}`, {
+      const res = await axios.get<ApiResponse<{ nombre: string; timezone?: string; clientKey?: string; isAutoResponseEnabled?: boolean }>>(`${API_URL}/api/saas/bots/${botNumber}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.data.ok) {
@@ -153,9 +155,39 @@ export default function BotAdmin() {
         if (res.data.data.clientKey) {
           setApiKey(res.data.data.clientKey);
         }
+        setAutoResponseEnabled(res.data.data.isAutoResponseEnabled !== false);
       }
     } catch (e) {
       console.error("Error loading bot meta:", e);
+    }
+  };
+
+  const toggleAutoResponse = async () => {
+    setTogglingAutoResponse(true);
+    try {
+      const token = await user?.getIdToken();
+      const nextValue = !autoResponseEnabled;
+      const res = await axios.patch<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/auto-response`, 
+        { enabled: nextValue },
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      if (res.data.ok) {
+        setAutoResponseEnabled(nextValue);
+        fire({
+          title: nextValue ? 'Bot Activado' : 'Bot Silenciado',
+          text: nextValue ? 'El bot ahora responderá automáticamente.' : 'El bot ya no responderá automáticamente, pero seguirá recibiendo mensajes y permitiendo envíos vía API.',
+          icon: 'success',
+          timer: 3000
+        });
+      }
+    } catch (e: any) {
+      fire({
+        title: 'Error',
+        text: "Error al cambiar estado de auto-respuesta: " + (e.response?.data?.error || e.message),
+        icon: 'error'
+      });
+    } finally {
+      setTogglingAutoResponse(false);
     }
   };
 
@@ -739,6 +771,30 @@ export default function BotAdmin() {
         </div>
         {/* Action buttons: scrollable row on mobile */}
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
+          <button
+            onClick={toggleAutoResponse}
+            disabled={togglingAutoResponse}
+            className={`shrink-0 flex items-center gap-2 text-sm border px-3 py-2 rounded-xl transition-all ${
+              autoResponseEnabled 
+                ? 'text-[#25d366] bg-[#25d366]/10 border-[#25d366]/20 hover:bg-[#25d366]/20' 
+                : 'text-gray-400 bg-white/5 border-white/10 hover:bg-white/10'
+            }`}
+            title={autoResponseEnabled ? 'Desactivar auto-respuesta (modo silencio)' : 'Activar auto-respuesta'}
+          >
+            {togglingAutoResponse ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : autoResponseEnabled ? (
+              <>
+                <MessageSquare className="h-4 w-4" />
+                <span className="whitespace-nowrap">Auto-Respuesta: ON</span>
+              </>
+            ) : (
+              <>
+                <X className="h-4 w-4" />
+                <span className="whitespace-nowrap">Auto-Respuesta: OFF</span>
+              </>
+            )}
+          </button>
           <button
             onClick={() => { loadBotInfo(); loadData(); }}
             className="shrink-0 flex items-center gap-2 text-sm text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 px-3 py-2 rounded-xl transition-all"

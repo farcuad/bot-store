@@ -241,8 +241,8 @@ export class BotInstance extends EventEmitter {
    * Send a text message to any pre-normalized chatId (@c.us or @g.us).
    */
   async sendMessageToChat(chatId: string, message: string): Promise<void> {
-    if (!this.client || this.state.status !== "ready") {
-      throw new Error(`Bot ${this.botId} is not ready.`);
+    if (!this.client) {
+      throw new Error(`Bot ${this.botId} is not connected.`);
     }
     await this.client.sendMessage(chatId, message);
   }
@@ -250,9 +250,13 @@ export class BotInstance extends EventEmitter {
   /**
    * Send a media message (from URL or file path) to any pre-normalized chatId.
    */
-  async sendMediaToChat(chatId: string, source: string, caption?: string): Promise<void> {
-    if (!this.client || this.state.status !== "ready") {
-      throw new Error(`Bot ${this.botId} is not ready.`);
+  async sendMediaToChat(
+    chatId: string,
+    source: string,
+    caption?: string,
+  ): Promise<void> {
+    if (!this.client) {
+      throw new Error(`Bot ${this.botId} is not connected.`);
     }
     let media: pkg.MessageMedia;
     if (source.startsWith("http")) {

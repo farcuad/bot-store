@@ -31,6 +31,7 @@ export interface BotPublicState {
   clientKey?: string | undefined;
   hasSession?: boolean | undefined;
   timezone?: string | undefined;
+  isAutoResponseEnabled?: boolean;
 }
 
 class BotManager {
@@ -253,6 +254,11 @@ class BotManager {
       const instance = this.instances.get(record.botId);
       const liveState = instance?.getState();
       const sessionExists = instance ? await instance.hasSession() : false;
+      
+      // Fetch auto-response status from the bot's config doc
+      const botDoc = await db.collection("bots").doc(record.botId).get();
+      const isAutoResponseEnabled = botDoc.data()?.isAutoResponseEnabled ?? true;
+
       const state: BotPublicState = {
         botId: doc.id,
         nombre: record.nombre,
@@ -263,6 +269,7 @@ class BotManager {
         lastError: liveState?.lastError ?? null,
         hasSession: sessionExists,
         timezone: record.timezone,
+        isAutoResponseEnabled,
       };
       if (record.clientKey !== undefined) {
         state.clientKey = record.clientKey;
@@ -279,6 +286,11 @@ class BotManager {
     const instance = this.instances.get(botId);
     const liveState = instance?.getState();
     const sessionExists = instance ? await instance.hasSession() : false;
+    
+    // Fetch auto-response status from the bot's config doc
+    const botDoc = await db.collection("bots").doc(botId).get();
+    const isAutoResponseEnabled = botDoc.data()?.isAutoResponseEnabled ?? true;
+
     const state: BotPublicState = {
       botId: record.botId,
       nombre: record.nombre,
@@ -289,6 +301,7 @@ class BotManager {
       lastError: liveState?.lastError ?? null,
       hasSession: sessionExists,
       timezone: record.timezone,
+      isAutoResponseEnabled,
     };
     if (record.clientKey !== undefined) {
       state.clientKey = record.clientKey;
