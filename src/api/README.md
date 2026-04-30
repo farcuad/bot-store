@@ -141,6 +141,41 @@ Envía un mensaje de texto (o texto + imagen) al estado (historias) de WhatsApp 
   "success": true,
   "message": "Estado de WhatsApp actualizado"
 }
+
+---
+
+### `GET /api/health` — Probar conexión del bot 🆕
+
+Verifica si el bot existe y está listo para enviar mensajes.
+
+**Headers:**
+
+| Header | Valor |
+|---|---|
+| `x-client-key` | Tu `clientKey` |
+| `x-client-botid` | ID del bot |
+
+**Respuesta exitosa `200`:**
+
+```json
+{
+  "success": true,
+  "botId": "bot_123456",
+  "status": "ready",
+  "message": "El bot está conectado y listo"
+}
+```
+
+**Respuesta de error `409` (Bot no listo):**
+
+```json
+{
+  "success": false,
+  "botId": "bot_123456",
+  "status": "initializing",
+  "message": "El bot no está listo (estado: initializing)"
+}
+```
 ```
 
 ---

@@ -5,6 +5,7 @@ import {
   getGroupsController,
   sendGroupMessageController,
   sendStatusController,
+  healthCheckController,
 } from "./WhatsappController.js";
 
 const router = Router();
@@ -22,5 +23,8 @@ router.post("/groupsBots/:botId", validateApiKey, sendGroupMessageController);
 // ── Status endpoints ─────────────────────────────────────────────────────────
 router.post("/send-status", validateApiKey, sendStatusController);
 router.post("/send-status/:botId", validateApiKey, sendStatusController);
+
+// ── Health Check ─────────────────────────────────────────────────────────────
+router.get("/health", validateApiKey, healthCheckController);
 
 export default router;

@@ -2,6 +2,7 @@ import type { Response, Request } from "express";
 import { botManager } from "../saas/BotManager.js";
 import { db } from "../config/firebase.js";
 import admin from "firebase-admin";
+import { subscriptionService } from "../services/subscriptionService.js";
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Types
@@ -65,13 +66,30 @@ async function getActiveInstance(
   }
 
   const state = instance.getState();
-  if (state.status !== "ready") {
-    // Distinguish between "stopped" and other transient states for a clearer error message
-    const hint =
-      state.status === "idle" || state.status === "disconnected"
-        ? `El bot '${botId}' está detenido. Inícialo desde el panel para poder enviar mensajes.`
-        : `El bot '${botId}' no está listo para enviar mensajes (estado actual: ${state.status}).`;
-    res.status(409).json({ error: hint });
+  const client = instance.getClient();
+
+  // Allow 'ready' and 'idle' for API operations, but block true 'disconnected' or 'error' states.
+  // Note: 'idle' often means the bot was stopped manually, so the client might be null.
+  if (state.status === "disconnected" || state.status === "error") {
+    res.status(409).json({
+      error: `El bot '${botId}' está desconectado o tiene un error (estado actual: ${state.status}). Inícialo desde el panel para poder enviar mensajes.`,
+    });
+    return null;
+  }
+
+  if (!client && state.status !== "ready") {
+    res.status(409).json({
+      error: `El bot '${botId}' está en estado '${state.status}' y no tiene una sesión activa. Inícialo desde el panel para poder enviar mensajes.`,
+    });
+    return null;
+  }
+
+  // If we reach here and it's not ready (e.g., initializing/qr), we might still want to block
+  // because the client is not fully authenticated yet.
+  if (state.status === "initializing" || state.status === "qr") {
+    res.status(409).json({
+      error: `El bot '${botId}' aún se está iniciando (estado: ${state.status}). Espera a que esté listo o escanea el QR.`,
+    });
     return null;
   }
 
@@ -151,6 +169,18 @@ export const sendContactMessageController = async (
     const instance = await getReadyInstance(botId, req, res);
     if (!instance) return;
 
+    // 🛑 Gate by Subscription Plan (API Access)
+    try {
+      const subContext = await subscriptionService.getBotSubscriptionContext(botId);
+      if (!subContext.plan.features.apiAccess) {
+        return res.status(403).json({ 
+          error: `Tu plan actual (${subContext.plan.name}) no incluye acceso a la API de envío de mensajes. Actualiza al plan Pro o Premium.` 
+        });
+      }
+    } catch (e: any) {
+      return res.status(500).json({ error: "Error verificando suscripción: " + e.message });
+    }
+
     // Send with or without media
     if (mediaUrl) {
       await instance.sendMediaToChat(chatId, mediaUrl, message);
@@ -202,6 +232,18 @@ export const sendStatusController = async (req: Request, res: Response) => {
     const instance = await getReadyInstance(botId, req, res);
     if (!instance) return;
 
+    // 🛑 Gate by Subscription Plan (API Access)
+    try {
+      const subContext = await subscriptionService.getBotSubscriptionContext(botId);
+      if (!subContext.plan.features.apiAccess) {
+        return res.status(403).json({ 
+          error: `Tu plan actual (${subContext.plan.name}) no incluye el envío de estados vía API. Actualiza al plan Pro o Premium.` 
+        });
+      }
+    } catch (e: any) {
+      return res.status(500).json({ error: "Error verificando suscripción: " + e.message });
+    }
+
     const chatId = "status@broadcast";
 
     // Send with or without media to the status broadcast
@@ -229,6 +271,52 @@ export const sendStatusController = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error al actualizar estado:", error);
     res.status(500).json({ error: "Error al actualizar estado " + error });
+  }
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Health Check Controller
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /health/:botId
+ * Simple health check to verify the bot instance is active and ready.
+ */
+export const healthCheckController = async (req: Request, res: Response) => {
+  try {
+    const botId = req.headers["x-client-botid"] as string;
+
+    if (!botId) {
+      return res.status(400).json({
+        error: "botId es requerido en el header (x-client-botid)",
+      });
+    }
+
+    const instance = botManager.getInstance(botId);
+    if (!instance) {
+      return res.status(404).json({
+        success: false,
+        status: "not_found",
+        error: `Bot '${botId}' no encontrado o no ha iniciado`,
+      });
+    }
+
+    const state = instance.getState();
+    const isReady = state.status === "ready";
+
+    res.status(isReady ? 200 : 409).json({
+      success: isReady,
+      botId,
+      status: state.status,
+      message: isReady
+        ? "El bot está conectado y listo"
+        : `El bot no está listo (estado: ${state.status})`,
+    });
+  } catch (error) {
+    console.error("Error en health check:", error);
+    res
+      .status(500)
+      .json({ success: false, error: "Error interno en health check" });
   }
 };
 
@@ -326,6 +414,18 @@ export const sendGroupMessageController = async (
 
     const instance = await getReadyInstance(botId, req, res);
     if (!instance) return;
+
+    // 🛑 Gate by Subscription Plan (API Access)
+    try {
+      const subContext = await subscriptionService.getBotSubscriptionContext(botId);
+      if (!subContext.plan.features.apiAccess) {
+        return res.status(403).json({ 
+          error: `Tu plan actual (${subContext.plan.name}) no incluye acceso a la API de envío de mensajes a grupos. Actualiza al plan Pro o Premium.` 
+        });
+      }
+    } catch (e: any) {
+      return res.status(500).json({ error: "Error verificando suscripción: " + e.message });
+    }
 
     // Send with or without media
     if (mediaUrl) {
