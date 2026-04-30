@@ -95,6 +95,9 @@ export const llamarDeepseek = async (messages: any[], retries = 2): Promise<any>
         err.code === "ECONNRESET" ||
         err.code === "ECONNABORTED" ||
         err.code === "ETIMEDOUT" ||
+        err.code === "ENOTFOUND" ||
+        err.code === "EAI_AGAIN" ||
+        err.code === "ERR_NETWORK" ||
         err.message === "aborted";
 
       if (isTransient && attempt < retries) {

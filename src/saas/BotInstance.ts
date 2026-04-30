@@ -216,7 +216,8 @@ export class BotInstance extends EventEmitter {
     if (!this.client || this.state.status !== "ready") {
       throw new Error(`Bot ${this.botId} is not ready.`);
     }
-    const chatId = to.includes("@c.us") ? to : `${to.replace(/\D/g, "")}@c.us`;
+    const chatId = to.includes("@") ? to : `${to.replace(/\D/g, "")}@c.us`;
+    this.addRecentSent(message.trim());
     await this.client.sendMessage(chatId, message);
   }
 
@@ -224,7 +225,9 @@ export class BotInstance extends EventEmitter {
     if (!this.client || this.state.status !== "ready") {
       throw new Error(`Bot ${this.botId} is not ready.`);
     }
-    const chatId = to.includes("@c.us") ? to : `${to.replace(/\D/g, "")}@c.us`;
+    const chatId = to.includes("@") ? to : `${to.replace(/\D/g, "")}@c.us`;
+    this.addRecentMediaSent(chatId);
+    if (caption) this.addRecentSent(caption.trim());
     let media: pkg.MessageMedia;
     if (source.startsWith("http")) {
       media = await pkg.MessageMedia.fromUrl(source);
@@ -244,6 +247,7 @@ export class BotInstance extends EventEmitter {
     if (!this.client) {
       throw new Error(`Bot ${this.botId} is not connected.`);
     }
+    this.addRecentSent(message.trim());
     await this.client.sendMessage(chatId, message);
   }
 
@@ -258,6 +262,8 @@ export class BotInstance extends EventEmitter {
     if (!this.client) {
       throw new Error(`Bot ${this.botId} is not connected.`);
     }
+    this.addRecentMediaSent(chatId);
+    if (caption) this.addRecentSent(caption.trim());
     let media: pkg.MessageMedia;
     if (source.startsWith("http")) {
       media = await pkg.MessageMedia.fromUrl(source);
@@ -285,11 +291,29 @@ export class BotInstance extends EventEmitter {
   private normalizeToContactId(id: string): string {
     // Remove device suffix (:1, :2, etc)
     const withoutDevice = id.split(":")[0];
-
     if (!withoutDevice) return id;
-    // Remove domain part (@c.us, @lid, etc)
+
+    // Preserve LID domain if present
+    if (withoutDevice.includes("@lid")) {
+      return withoutDevice;
+    }
+
+    // Default to @c.us for phone numbers
     const number = withoutDevice.split("@")[0];
     return `${number}@c.us`;
+  }
+
+  private async getCanonicalId(msg: any): Promise<string> {
+    const rawRemote = typeof msg.id.remote === "string" ? msg.id.remote : msg.id.remote._serialized;
+    try {
+      // Resolve the actual contact (phone number) from the chat ID (LID or Phone)
+      const contact = await this.client?.getContactById(rawRemote);
+      if (!contact) throw new Error(`Contact ${rawRemote} not found.`);
+      return this.normalizeToContactId(contact.id._serialized);
+    } catch (e) {
+      // Fallback to chat ID if contact resolution fails
+      return this.normalizeToContactId(rawRemote);
+    }
   }
 
   private static readonly IGNORED_MSG_TYPES = new Set([
@@ -304,8 +328,8 @@ export class BotInstance extends EventEmitter {
   // ─── Outgoing Message Handler (Human Intervention Detection) ──────────────
 
   private async _handleOutgoingMessage(msg: any): Promise<void> {
-    const rawTo = typeof msg.to === "string" ? msg.to : msg.to._serialized;
-    const remoteId = rawTo.split(':')[0].split('@')[0] + "@c.us";
+    const remoteId = await this.getCanonicalId(msg);
+    // this.logger.log(`DEBUG: Saliente (Canónico) - remoteId: ${remoteId}`);
 
     const config = this.configSvc.getConfig();
     const nowInSeconds = Math.floor(Date.now() / 1000);
@@ -324,29 +348,23 @@ export class BotInstance extends EventEmitter {
       );
     })();
 
-    const botTexts = [
-      ...Object.values(config.respuestas_info).map((r) => r.texto),
-      "📢 Contéstale al usuario",
-    ];
-
     const isRecentMatch = this.recentlySentMessages.has(msg.body.trim());
-    const isConfigMatch = botTexts.some((texto) => {
-      if (!texto) return false;
-      return msg.body.includes(texto.trim().slice(0, 25));
-    });
-
+    
     // Si es un mensaje con media (imagen, doc, audio) y recientemente le enviamos un media al mismo chat
     if (msg.hasMedia && this.recentlySentMediaTo.has(remoteId)) {
       this.recentlySentMediaTo.delete(remoteId);
       return;
     }
 
-    if (isHistoryMatch || isConfigMatch || isRecentMatch) {
+    // Si coincide con algo enviado recientemente o con el historial, lo ignoramos (es el bot)
+    if (isHistoryMatch || isRecentMatch) {
       this.recentlySentMessages.delete(msg.body.trim());
+      // this.logger.log(`🤖 Mensaje saliente identificado como bot en ${remoteId} — omitiendo cambio a humano.`);
       return;
     }
 
     // Es un mensaje humano real. Actualizar o crear la sesión con estado "human".
+    this.logger.log(`👤 Intervención humana detectada en ${remoteId}. Cambiando estado a 'human'.`);
     if (remoteSession) {
       await this.sessionMgr.saveSession(remoteId, {
         ...remoteSession,
@@ -368,6 +386,7 @@ export class BotInstance extends EventEmitter {
 
     const pending = this.aggregationMap.get(remoteId);
     if (pending) {
+      this.logger.log(`🛑 Cancelando respuesta programada para ${remoteId} por intervención humana.`);
       if (pending.timer) clearTimeout(pending.timer);
       this.aggregationMap.delete(remoteId);
     }
@@ -375,13 +394,14 @@ export class BotInstance extends EventEmitter {
 
   // ─── Incoming Message Handler (Aggregator) ──────────────────────────────
 
-  private _handleMessage(msg: any): void {
+  private async _handleMessage(msg: any): Promise<void> {
     try {
       if (msg.timestamp * 1000 < this.bootTime) return;
       if (msg.type && BotInstance.IGNORED_MSG_TYPES.has(msg.type)) return;
       if (msg.from === "status@broadcast" || msg.from.includes("@g.us")) return;
 
-      const from = typeof msg.from === "string" ? msg.from : msg.from._serialized;
+      const from = await this.getCanonicalId(msg);
+      // if (!msg.fromMe) this.logger.log(`DEBUG: Entrante (Canónico) - from: ${from}`);
       const msgId = msg.id?._serialized || msg.id?.id;
 
       if (this.processedMsgIds.has(msgId)) return;
@@ -389,7 +409,7 @@ export class BotInstance extends EventEmitter {
       setTimeout(() => this.processedMsgIds.delete(msgId), 30000);
 
       if (msg.fromMe) {
-        this._handleOutgoingMessage(msg).catch(() => {});
+        await this._handleOutgoingMessage(msg);
         return;
       }
 
@@ -443,17 +463,12 @@ export class BotInstance extends EventEmitter {
       
       // Obtener contacto con fallback seguro si getContact() falla (ej: IDs @lid inestables)
       let contact: any;
-      let realFrom: string;
+      let realFrom = from;
       try {
         contact = await firstMsg.getContact();
-        realFrom = contact.id._serialized;
-        // Siempre normalizar a @c.us para garantizar compatibilidad con sendMessage
-        realFrom = this.normalizeToContactId(realFrom);
       } catch (contactErr) {
-        // Fallback: usar el `from` original normalizado a @c.us
         this.logger.error(`Error obteniendo contacto para ${from}, usando fallback:`, contactErr);
         contact = null;
-        realFrom = this.normalizeToContactId(from);
       }
 
       // Log del mensaje entrante
@@ -627,14 +642,22 @@ export class BotInstance extends EventEmitter {
     this.statsMgr.incrementarMensajesRespondidos();
     this.sessionMgr.appendToHistory(session, "assistant", respuesta);
     
-    // Solo guardamos si el estado sigue siendo bot para no sobreescribir intervenciones humanas
-    const currentStatus = await this.sessionMgr.getStatusFromFirestore(from);
-    if (currentStatus === "bot") {
-      await this.sessionMgr.saveSession(from, session);
-    } else {
-      this.logger.log(`👤 No se sobreescribe estado humano en ${from}.`);
+    // 6. Verificar estado humano FINAL antes de enviar (crucial para evitar race conditions)
+    // Recargamos la sesión completa para no sobreescribir con datos viejos de memoria
+    const latestSession = await this.sessionMgr.getSession(from);
+    if (!latestSession || latestSession.status === "human") {
+      this.logger.log(`👤 Abortando envío final en ${from} (Intervención humana confirmada tras recarga).`);
+      return;
     }
 
+    // Actualizamos solo el historial en la sesión fresca
+    latestSession.history = session.history;
+    latestSession.last_interaction = Math.floor(Date.now() / 1000);
+    
+    // Guardamos la sesión actualizada (status sigue siendo bot)
+    await this.sessionMgr.saveSession(from, latestSession);
+
+    // 7. Enviar la respuesta física
     // Extract and parse [URL_IMAGEN: ...] tags
     const imageMatches = [...respuesta.matchAll(/\[URL_IMAGEN:\s*"?\s*(https?:\/\/[^\]"\s]+)\s*"?\s*\]/gi)];
     const imageUrls = imageMatches.map(m => m[1] as string);
@@ -644,7 +667,6 @@ export class BotInstance extends EventEmitter {
 
     if (respuesta) {
       this.addRecentSent(respuesta);
-      // Normalizar siempre el destino a @c.us para evitar errores con IDs @lid
       const safeFrom = this.normalizeToContactId(from);
       await this.client?.sendMessage(safeFrom, respuesta);
     }

@@ -139,6 +139,7 @@ export default function BotAdmin() {
   const [loadingMotivos, setLoadingMotivos] = useState(false);
   const [savingMotivos, setSavingMotivos]   = useState(false);
   const [nuevoMotivo, setNuevoMotivo]       = useState('');
+  const [editingMotivoIdx, setEditingMotivoIdx] = useState<number | null>(null);
 
   const loadBotInfo = async () => {
     try {
@@ -319,28 +320,45 @@ export default function BotAdmin() {
     }
   }, [botId, user, botNumber]);
 
-  const addMotivo = () => {
-    const trimmed = nuevoMotivo.trim();
-    if (!trimmed || motivos.includes(trimmed)) return;
-    setMotivos(prev => [...prev, trimmed]);
-    setNuevoMotivo('');
-  };
-
-  const removeMotivo = (index: number) => {
-    setMotivos(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const saveMotivos = async () => {
+  const saveMotivosList = async (newList: string[]) => {
     setSavingMotivos(true);
     try {
       const headers = await getHeaders();
-      await axios.put(`${API_URL}/api/saas/bots/${botNumber}/notificacion-motivos`, { motivos }, { headers });
-      fire({ title: '✅ Guardado', text: 'Motivos de notificación actualizados correctamente.', icon: 'success' });
+      await axios.put(`${API_URL}/api/saas/bots/${botNumber}/notificacion-motivos`, { motivos: newList }, { headers });
+      setMotivos(newList);
     } catch (e: any) {
       fire({ title: 'Error', text: e.response?.data?.error || e.message, icon: 'error' });
     } finally {
       setSavingMotivos(false);
     }
+  };
+
+  const addMotivo = async () => {
+    const trimmed = nuevoMotivo.trim();
+    if (!trimmed) return;
+    
+    let newList: string[];
+    if (editingMotivoIdx !== null) {
+      newList = [...motivos];
+      newList[editingMotivoIdx] = trimmed;
+      setEditingMotivoIdx(null);
+    } else {
+      if (motivos.includes(trimmed)) return;
+      newList = [...motivos, trimmed];
+    }
+    
+    await saveMotivosList(newList);
+    setNuevoMotivo('');
+  };
+
+  const removeMotivo = async (index: number) => {
+    const newList = motivos.filter((_, i) => i !== index);
+    await saveMotivosList(newList);
+  };
+
+  const saveMotivos = async () => {
+    await saveMotivosList(motivos);
+    fire({ title: '✅ Guardado', text: 'Motivos de notificación actualizados correctamente.', icon: 'success' });
   };
 
   // ── Logs ──────────────────────────────────────────────────────────────────
@@ -1365,13 +1383,22 @@ export default function BotAdmin() {
                       <div key={i} className="bg-[#12121a] border border-white/5 rounded-xl px-4 py-3 flex items-center gap-3 hover:border-white/10 transition-all group">
                         <span className="shrink-0 w-6 h-6 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold flex items-center justify-center">{i + 1}</span>
                         <p className="flex-1 text-sm text-gray-300">{motivo}</p>
-                        <button
-                          onClick={() => removeMotivo(i)}
-                          className="shrink-0 p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                          title="Eliminar motivo"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => { setEditingMotivoIdx(i); setNuevoMotivo(motivo); }}
+                            className="p-1.5 text-gray-600 hover:text-amber-400 hover:bg-amber-400/10 rounded-lg transition-colors"
+                            title="Editar motivo"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => removeMotivo(i)}
+                            className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                            title="Eliminar motivo"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                     ))
                   )}
@@ -1379,7 +1406,7 @@ export default function BotAdmin() {
 
                 {/* Panel de agregar */}
                 <div className="bg-[#12121a] border border-white/5 rounded-2xl p-6 h-fit sticky top-6">
-                  <h3 className="font-bold text-white mb-1">Agregar motivo</h3>
+                  <h3 className="font-bold text-white mb-1">{editingMotivoIdx !== null ? 'Editar motivo' : 'Agregar motivo'}</h3>
                   <p className="text-xs text-gray-500 mb-4">Ejemplos: "Cuando el cliente quiera hacer un pedido", "Cuando pida una cotización especial"…</p>
                   <textarea
                     value={nuevoMotivo}
@@ -1389,13 +1416,24 @@ export default function BotAdmin() {
                     rows={4}
                     className="w-full bg-black/30 border border-white/5 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all resize-none mb-3"
                   />
-                  <button
-                    onClick={addMotivo}
-                    disabled={!nuevoMotivo.trim()}
-                    className="w-full flex items-center justify-center gap-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 px-4 py-2.5 rounded-xl text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <Plus className="h-4 w-4" /> Agregar a la lista
-                  </button>
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={addMotivo}
+                      disabled={!nuevoMotivo.trim() || savingMotivos}
+                      className="w-full flex items-center justify-center gap-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 px-4 py-2.5 rounded-xl text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {savingMotivos ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                      {editingMotivoIdx !== null ? 'Actualizar motivo' : 'Agregar a la lista'}
+                    </button>
+                    {editingMotivoIdx !== null && (
+                      <button
+                        onClick={() => { setEditingMotivoIdx(null); setNuevoMotivo(''); }}
+                        className="w-full py-2 text-xs text-gray-500 hover:text-white transition-colors"
+                      >
+                        Cancelar edición
+                      </button>
+                    )}
+                  </div>
                   <p className="text-[10px] text-gray-600 mt-3 text-center">Presiona Enter para agregar rápidamente</p>
                 </div>
               </div>
