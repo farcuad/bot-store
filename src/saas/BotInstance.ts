@@ -64,11 +64,14 @@ export class BotInstance extends EventEmitter {
   }
 
   // ── Aggregation state ──────────────────────────────────────────────────────
-  private aggregationMap = new Map<string, {
-    timer: NodeJS.Timeout;
-    rawMessages: any[];
-    isProcessing?: boolean;
-  }>();
+  private aggregationMap = new Map<
+    string,
+    {
+      timer: NodeJS.Timeout;
+      rawMessages: any[];
+      isProcessing?: boolean;
+    }
+  >();
   private readonly DEBOUNCE_MS = 5000;
   private processedMsgIds = new Set<string>();
 
@@ -131,7 +134,9 @@ export class BotInstance extends EventEmitter {
       this.state.status === "qr" ||
       this.state.status === "ready"
     ) {
-      this.logger.log(`Ya en ejecución (${this.state.status}) — omitiendo inicio duplicado.`);
+      this.logger.log(
+        `Ya en ejecución (${this.state.status}) — omitiendo inicio duplicado.`,
+      );
       return;
     }
 
@@ -304,7 +309,10 @@ export class BotInstance extends EventEmitter {
   }
 
   private async getCanonicalId(msg: any): Promise<string> {
-    const rawRemote = typeof msg.id.remote === "string" ? msg.id.remote : msg.id.remote._serialized;
+    const rawRemote =
+      typeof msg.id.remote === "string"
+        ? msg.id.remote
+        : msg.id.remote._serialized;
     try {
       // Resolve the actual contact (phone number) from the chat ID (LID or Phone)
       const contact = await this.client?.getContactById(rawRemote);
@@ -349,7 +357,7 @@ export class BotInstance extends EventEmitter {
     })();
 
     const isRecentMatch = this.recentlySentMessages.has(msg.body.trim());
-    
+
     // Si es un mensaje con media (imagen, doc, audio) y recientemente le enviamos un media al mismo chat
     if (msg.hasMedia && this.recentlySentMediaTo.has(remoteId)) {
       this.recentlySentMediaTo.delete(remoteId);
@@ -364,7 +372,7 @@ export class BotInstance extends EventEmitter {
     }
 
     // Es un mensaje humano real. Actualizar o crear la sesión con estado "human".
-    this.logger.log(`👤 Intervención humana detectada en ${remoteId}. Cambiando estado a 'human'.`);
+    //this.logger.log(`👤 Intervención humana detectada en ${remoteId}. Cambiando estado a 'human'.`);
     if (remoteSession) {
       await this.sessionMgr.saveSession(remoteId, {
         ...remoteSession,
@@ -386,7 +394,7 @@ export class BotInstance extends EventEmitter {
 
     const pending = this.aggregationMap.get(remoteId);
     if (pending) {
-      this.logger.log(`🛑 Cancelando respuesta programada para ${remoteId} por intervención humana.`);
+      //this.logger.log(`🛑 Cancelando respuesta programada para ${remoteId} por intervención humana.`);
       if (pending.timer) clearTimeout(pending.timer);
       this.aggregationMap.delete(remoteId);
     }
@@ -419,7 +427,10 @@ export class BotInstance extends EventEmitter {
       let pending = this.aggregationMap.get(from);
       if (!pending) {
         pending = {
-          timer: setTimeout(() => this._triggerAggregation(from), this.DEBOUNCE_MS),
+          timer: setTimeout(
+            () => this._triggerAggregation(from),
+            this.DEBOUNCE_MS,
+          ),
           rawMessages: [msg],
         };
         this.aggregationMap.set(from, pending);
@@ -431,7 +442,10 @@ export class BotInstance extends EventEmitter {
         // Solo reiniciamos el timer si NO se está procesando actualmente en la IA
         if (!pending.isProcessing) {
           clearTimeout(pending.timer);
-          pending.timer = setTimeout(() => this._triggerAggregation(from), this.DEBOUNCE_MS);
+          pending.timer = setTimeout(
+            () => this._triggerAggregation(from),
+            this.DEBOUNCE_MS,
+          );
         }
       }
     } catch (err) {
@@ -451,7 +465,8 @@ export class BotInstance extends EventEmitter {
       const config = this.configSvc.getConfig();
       // sys: reads named system messages stored in respuestas_info with key prefix "sys_"
       // (kept as a helper for backward compatibility; returns empty string if not found)
-      const sys = (key: string): string => (config.respuestas_info as any)[`sys_${key}`]?.texto ?? "";
+      const sys = (key: string): string =>
+        (config.respuestas_info as any)[`sys_${key}`]?.texto ?? "";
 
       // 1. Obtener datos de sesión y contacto de forma segura
       // IMPORTANTE: Limpiamos rawMessages ANTES del primer await para evitar que
@@ -460,22 +475,19 @@ export class BotInstance extends EventEmitter {
       pending.rawMessages = [];
 
       const firstMsg = snapshotMessages[0];
-      
+
       // Obtener contacto con fallback seguro si getContact() falla (ej: IDs @lid inestables)
       let contact: any;
       let realFrom = from;
       try {
         contact = await firstMsg.getContact();
       } catch (contactErr) {
-        this.logger.error(`Error obteniendo contacto para ${from}, usando fallback:`, contactErr);
+        this.logger.error(
+          `Error obteniendo contacto para ${from}, usando fallback:`,
+          contactErr,
+        );
         contact = null;
       }
-
-      // Log del mensaje entrante
-      const incomingText = snapshotMessages
-        .map((m: any) => m.body || `[${m.type}]`)
-        .join(" | ");
-      this.logger.logMessage(realFrom, incomingText);
 
       let session = await this.sessionMgr.getSession(realFrom);
       const nombre = contact?.pushname || "amigo";
@@ -494,7 +506,10 @@ export class BotInstance extends EventEmitter {
         if (welcomeTemplate) {
           instruccionExtra = `Saluda cálidamente a ${nombre} usando: "${welcomeTemplate.replace(/\{name\}/g, nombre)}".`;
         }
-      } else if (nowInSeconds - session.last_interaction > this.sessionMgr.TWENTY_FOUR_HOURS) {
+      } else if (
+        nowInSeconds - session.last_interaction >
+        this.sessionMgr.TWENTY_FOUR_HOURS
+      ) {
         // El usuario regresa después de 24h: resetear historial y estado
         // IMPORTANTE: Guardar en Firestore aquí para que human_since quede limpio
         // y no afecte a este ciclo si el bot se reiniciara durante el proceso.
@@ -511,7 +526,10 @@ export class BotInstance extends EventEmitter {
       // 3. Respetar Estado de Intervención Humana
       if (session.status === "human") {
         const humanSince = session.human_since || 0;
-        if (nowInSeconds - humanSince >= this.sessionMgr.AUTO_REACTIVATE_SECONDS) {
+        if (
+          nowInSeconds - humanSince >=
+          this.sessionMgr.AUTO_REACTIVATE_SECONDS
+        ) {
           session.status = "bot";
           await this.sessionMgr.saveSession(realFrom, session);
           const reactivacionMsg = sys("botReactivado");
@@ -538,7 +556,9 @@ export class BotInstance extends EventEmitter {
       this.sessionMgr.appendToHistory(session, "user", fullText);
 
       // Load per-bot notification triggers (configurable by owner)
-      const motivosNotificacion: string[] = Array.isArray((config as any).motivosNotificacion)
+      const motivosNotificacion: string[] = Array.isArray(
+        (config as any).motivosNotificacion,
+      )
         ? (config as any).motivosNotificacion
         : [];
 
@@ -549,40 +569,61 @@ export class BotInstance extends EventEmitter {
         instruccionExtra,
         config.prompt_ia,
         config.timezone,
-        motivosNotificacion
+        motivosNotificacion,
       );
 
       // 6. Verificar estado humano ANTES de finalizar (puede haber cambiado durante la generación IA)
-      const currentStatus = await this.sessionMgr.getStatusFromFirestore(realFrom);
+      const currentStatus =
+        await this.sessionMgr.getStatusFromFirestore(realFrom);
       if (currentStatus === "human") {
-        this.logger.log(`👤 Abortando respuesta IA en ${realFrom} (Intervención humana detectada durante generación).`);
+        //this.logger.log(`👤 Abortando respuesta IA en ${realFrom} (Intervención humana detectada durante generación).`);
         // Limpiar el mensaje del usuario del historial para no contaminar la siguiente consulta IA
-        if (session.history.length > 0 && session.history[session.history.length - 1]?.role === "user") {
+        if (
+          session.history.length > 0 &&
+          session.history[session.history.length - 1]?.role === "user"
+        ) {
           session.history.pop();
         }
         return;
       }
 
-      await this._finalizeResponse(realFrom, nombre, session, respuesta, fullText, config);
+      await this._finalizeResponse(
+        realFrom,
+        nombre,
+        session,
+        respuesta,
+        fullText,
+        config,
+      );
       await this.statsMgr.saveStats();
-
     } catch (err) {
       this.logger.error(`Error en agregación (${from}):`, err);
     } finally {
       pending.isProcessing = false;
-      
+
       // Si llegaron nuevos mensajes mientras procesábamos, re-enviamos la agregación
       if (pending.rawMessages.length > 0) {
-        this.logger.log(`🔄 Re-programando agregación para ${from} (nuevos mensajes durante proceso).`);
-        pending.timer = setTimeout(() => this._triggerAggregation(from), this.DEBOUNCE_MS);
+        //this.logger.log(`🔄 Re-programando agregación para ${from} (nuevos mensajes durante proceso).`);
+        pending.timer = setTimeout(
+          () => this._triggerAggregation(from),
+          this.DEBOUNCE_MS,
+        );
       } else {
         this.aggregationMap.delete(from);
       }
     }
   }
 
-  private async _resolveMessageContent(msg: any, session: any, sys: (k: string) => string): Promise<string | null> {
-    const isMedia = msg.hasMedia || ["image", "video", "audio", "ptt", "sticker", "document", "gif"].includes(msg.type);
+  private async _resolveMessageContent(
+    msg: any,
+    session: any,
+    sys: (k: string) => string,
+  ): Promise<string | null> {
+    const isMedia =
+      msg.hasMedia ||
+      ["image", "video", "audio", "ptt", "sticker", "document", "gif"].includes(
+        msg.type,
+      );
 
     if (isMedia && (msg.type === "audio" || msg.type === "ptt")) {
       // ⚠️ IMPORTANTE: Validar status BOT antes de proceder con respuestas automáticas de media
@@ -591,12 +632,16 @@ export class BotInstance extends EventEmitter {
       const botDoc = await db.collection("bots").doc(this.botId).get();
       const botData = botDoc.data() ?? {};
       const openaiApiKey = (botData.openaiApiKey as string) || "";
-      if (!botData.audioAnalysisEnabled || !openaiApiKey) return "[Envió audio]";
+      if (!botData.audioAnalysisEnabled || !openaiApiKey)
+        return "[Envió audio]";
 
       // 🛑 Gate by Subscription Plan
-      const subContext = await subscriptionService.getBotSubscriptionContext(this.botId);
+      const subContext = await subscriptionService.getBotSubscriptionContext(
+        this.botId,
+      );
       if (!subContext.plan.features.audioTranscription) {
-        const warning = "Mi administrador no me tiene permitido escuchar audios de voz en este momento. Por favor, escríbeme por texto. 📝";
+        const warning =
+          "Mi administrador no me tiene permitido escuchar audios de voz en este momento. Por favor, escríbeme por texto. 📝";
         this.addRecentSent(warning);
         await msg.reply(warning);
         return "[Envió audio (Bloqueado por suscripción)]";
@@ -611,16 +656,28 @@ export class BotInstance extends EventEmitter {
     }
 
     if (isMedia) {
-      const labels: any = { image: "imagen", sticker: "sticker", video: "video" };
+      const labels: any = {
+        image: "imagen",
+        sticker: "sticker",
+        video: "video",
+      };
       return `[Envió ${labels[msg.type] || msg.type}]`;
     }
 
     return msg.body || "";
   }
 
-  private async _finalizeResponse(from: string, nombre: string, session: any, respuesta: string, fullText: string, config: any) {
+  private async _finalizeResponse(
+    from: string,
+    nombre: string,
+    session: any,
+    respuesta: string,
+    fullText: string,
+    config: any,
+  ) {
     const nowInSeconds = Math.floor(Date.now() / 1000);
-    const sys = (key: string): string => (config.respuestas_info as any)[`sys_${key}`]?.texto ?? "";
+    const sys = (key: string): string =>
+      (config.respuestas_info as any)[`sys_${key}`]?.texto ?? "";
     const { MessageMedia } = await import("whatsapp-web.js");
 
     if (respuesta.includes("[NO_ENTENDI]")) {
@@ -629,39 +686,46 @@ export class BotInstance extends EventEmitter {
     }
 
     if (respuesta.includes("[HABLAR_CON_HUMANO]")) {
-      this.logger.log(`🚨 Intervención humana detectada por IA para ${nombre}. Respuesta IA: "${respuesta}"`);
+      //this.logger.log(`🚨 Intervención humana detectada por IA para ${nombre}. Respuesta IA: "${respuesta}"`);
       respuesta = respuesta.replace("[HABLAR_CON_HUMANO]", "").trim();
       respuesta = `${respuesta}\n\n${sys("agenteAviso")}`;
       session.status = "human";
       session.human_since = nowInSeconds;
       await this.sessionMgr.saveSession(from, session);
       const phoneNumber = from.replace(/\D/g, "").slice(0, 12);
-      await this.client?.sendMessage(this.client.info.wid._serialized, `📢 Un humano debe intervenir con ${nombre} (${phoneNumber})!`);
+      await this.client?.sendMessage(
+        this.client.info.wid._serialized,
+        `📢 Un humano debe intervenir con ${nombre} (${phoneNumber})!`,
+      );
     }
 
     this.statsMgr.incrementarMensajesRespondidos();
     this.sessionMgr.appendToHistory(session, "assistant", respuesta);
-    
+
     // 6. Verificar estado humano FINAL antes de enviar (crucial para evitar race conditions)
     // Recargamos la sesión completa para no sobreescribir con datos viejos de memoria
     const latestSession = await this.sessionMgr.getSession(from);
     if (!latestSession || latestSession.status === "human") {
-      this.logger.log(`👤 Abortando envío final en ${from} (Intervención humana confirmada tras recarga).`);
+      //this.logger.log(`👤 Abortando envío final en ${from} (Intervención humana confirmada tras recarga).`);
       return;
     }
 
     // Actualizamos solo el historial en la sesión fresca
     latestSession.history = session.history;
     latestSession.last_interaction = Math.floor(Date.now() / 1000);
-    
+
     // Guardamos la sesión actualizada (status sigue siendo bot)
     await this.sessionMgr.saveSession(from, latestSession);
 
     // 7. Enviar la respuesta física
     // Extract and parse [URL_IMAGEN: ...] tags
-    const imageMatches = [...respuesta.matchAll(/\[URL_IMAGEN:\s*"?\s*(https?:\/\/[^\]"\s]+)\s*"?\s*\]/gi)];
-    const imageUrls = imageMatches.map(m => m[1] as string);
-    
+    const imageMatches = [
+      ...respuesta.matchAll(
+        /\[URL_IMAGEN:\s*"?\s*(https?:\/\/[^\]"\s]+)\s*"?\s*\]/gi,
+      ),
+    ];
+    const imageUrls = imageMatches.map((m) => m[1] as string);
+
     // Remove the tags from the final text
     respuesta = respuesta.replace(/\[URL_IMAGEN:[^\]]+\]/gi, "").trim();
 
@@ -684,12 +748,20 @@ export class BotInstance extends EventEmitter {
     }
   }
 
-  private async _transcribeAudio(msg: any, openaiApiKey: string): Promise<string | null> {
-    const tempFilePath = path.join(TEMP_AUDIO_DIR, `temp_${this.botId}_${Date.now()}.ogg`);
+  private async _transcribeAudio(
+    msg: any,
+    openaiApiKey: string,
+  ): Promise<string | null> {
+    const tempFilePath = path.join(
+      TEMP_AUDIO_DIR,
+      `temp_${this.botId}_${Date.now()}.ogg`,
+    );
     try {
       const media = await msg.downloadMedia();
       if (!media) return null;
-      await fs.promises.writeFile(tempFilePath, media.data, { encoding: "base64" });
+      await fs.promises.writeFile(tempFilePath, media.data, {
+        encoding: "base64",
+      });
       const openai = new OpenAI({ apiKey: openaiApiKey });
       const transcription = await openai.audio.transcriptions.create({
         file: fs.createReadStream(tempFilePath),
