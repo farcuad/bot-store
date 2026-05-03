@@ -83,12 +83,14 @@ function RequestModal({
   onSuccess,
   token,
   plans,
+  isTrial,
 }: {
   currentPlanId: string;
   onClose: () => void;
   onSuccess: () => void;
   token: string;
   plans: PricingPlan[];
+  isTrial?: boolean;
 }) {
   const [step, setStep] = useState(1);
   const [selectedPlan, setSelectedPlan] = useState<string>(currentPlanId);
@@ -160,7 +162,7 @@ function RequestModal({
 
   const getPlanLevel = (pid: string) => pid === 'basic' ? 1 : pid === 'pro' ? 2 : pid === 'premium' ? 3 : 0;
   const currentLevel = getPlanLevel(currentPlanId);
-  const availablePlans = plans.filter(p => p.id !== 'basic' && getPlanLevel(p.id) >= currentLevel);
+  const availablePlans = plans.filter(p => getPlanLevel(p.id) >= currentLevel);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
@@ -191,7 +193,7 @@ function RequestModal({
             {error && <p className="text-sm text-red-400 mb-4">{error}</p>}
             <div className="flex justify-end gap-3">
               <button onClick={onClose} className="px-5 py-2.5 rounded-xl border border-white/10 text-gray-400 hover:text-white transition-colors text-sm font-medium">Cancelar</button>
-              <button onClick={() => setStep(2)} disabled={selectedPlan === currentPlanId && currentLevel > 1 ? false : (selectedPlan === currentPlanId || selectedPlan === 'basic')} className="px-5 py-2.5 rounded-xl bg-[#25d366] text-black font-bold text-sm transition-colors disabled:opacity-50">Siguiente</button>
+              <button onClick={() => setStep(2)} disabled={selectedPlan === currentPlanId && !isTrial && selectedPlan === 'basic'} className="px-5 py-2.5 rounded-xl bg-[#25d366] text-black font-bold text-sm transition-colors disabled:opacity-50">Siguiente</button>
             </div>
           </>
         ) : (
@@ -425,6 +427,7 @@ const SubscriptionView: React.FC = () => {
           currentPlanId={currentPlan?.id || 'basic'}
           user={user}
           plans={plans}
+          isTrial={sub?.isTrial}
           onClose={() => setShowRequestModal(false)}
           onSuccess={fetchData}
         />
@@ -434,10 +437,11 @@ const SubscriptionView: React.FC = () => {
 };
 
 // Workaround: get the token async and pass it to the modal
-function TokenInjector({ currentPlanId, user, plans, onClose, onSuccess }: {
+function TokenInjector({ currentPlanId, user, plans, isTrial, onClose, onSuccess }: {
   currentPlanId: string;
   user: any;
   plans: PricingPlan[];
+  isTrial?: boolean;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -449,7 +453,7 @@ function TokenInjector({ currentPlanId, user, plans, onClose, onSuccess }: {
 
   if (!token) return null;
 
-  return <RequestModal currentPlanId={currentPlanId} token={token} plans={plans} onClose={onClose} onSuccess={onSuccess} />;
+  return <RequestModal currentPlanId={currentPlanId} token={token} plans={plans} isTrial={isTrial} onClose={onClose} onSuccess={onSuccess} />;
 }
 
 export default SubscriptionView;
