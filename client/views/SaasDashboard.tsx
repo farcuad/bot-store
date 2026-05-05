@@ -1,8 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGlassAlert } from 'glass-alert-animation';
 import { useAuth } from '../context/AuthContext';
 import LoadingScreen from '../components/LoadingScreen';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../firebase';
+import { SubscriptionRequestModal } from '../components/SubscriptionRequestModal';
+import type { PricingPlan} from '../components/SubscriptionRequestModal';
 
 interface Bot {
   botId: string;
@@ -28,6 +32,8 @@ const SaasDashboard: React.FC = () => {
   const [newBotTimezone, setNewBotTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Caracas');
   
   const [billingData, setBillingData] = useState<any>(null);
+  const [plans, setPlans] = useState<PricingPlan[]>([]);
+  const [showRequestModal, setShowRequestModal] = useState(false);
   
   const [qrModalBot, setQrModalBot] = useState<string | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
@@ -42,6 +48,17 @@ const SaasDashboard: React.FC = () => {
   const [audioLoading, setAudioLoading] = useState(false);
   const [audioMessage, setAudioMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
+
+  const fetchPlans = useCallback(async () => {
+    try {
+      const snap = await getDocs(collection(db, 'plans'));
+      const plansList = snap.docs.map(d => ({ id: d.id, ...d.data() } as PricingPlan));
+      plansList.sort((a, b) => a.price - b.price);
+      setPlans(plansList);
+    } catch (e) {
+      console.error('Error fetching plans:', e);
+    }
+  }, []);
 
   const fetchBots = async () => {
     try {
@@ -67,13 +84,6 @@ const SaasDashboard: React.FC = () => {
       
       if (bData.ok) {
         setBillingData(bData);
-        // Check expiration
-        const subStatus = bData.subscription?.status;
-        const expiresAt = bData.subscription?.expiresAt;
-        const now = Math.floor(Date.now() / 1000);
-        if (!isAdmin && (subStatus !== 'active' || (expiresAt && expiresAt <= now))) {
-          navigate('/saas/subscription');
-        }
       }
     } catch (e: any) {
       setError(e.message);
@@ -84,9 +94,10 @@ const SaasDashboard: React.FC = () => {
 
   useEffect(() => {
     fetchBots();
+    fetchPlans();
     const interval = setInterval(fetchBots, 10000);
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user, fetchPlans]);
 
   // Handle QR polling
   useEffect(() => {
@@ -354,35 +365,54 @@ const SaasDashboard: React.FC = () => {
         </button>
       </div>
       
-      {!isAdmin && billingData?.subscription && (
-        <div 
-          onClick={() => navigate('/saas/subscription')}
-          className={`mb-6 p-4 rounded-2xl border cursor-pointer transition-all hover:brightness-110 flex items-center justify-between gap-4 ${
-            billingData.subscription.isTrial 
-              ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' 
-              : 'bg-[#25d366]/5 border-[#25d366]/10 text-gray-300'
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-               billingData.subscription.isTrial ? 'bg-blue-500/20' : 'bg-[#25d366]/20'
-            }`}>
-              {billingData.subscription.isTrial ? '🎁' : '💎'}
+      {!isAdmin && billingData?.subscription && (() => {
+        const expiresAt = billingData.subscription.expiresAt;
+        const ms = expiresAt > 9999999999 ? expiresAt : expiresAt * 1000;
+        const daysLeft = Math.max(0, Math.ceil((ms - Date.now()) / (1000 * 60 * 60 * 24)));
+        const isExpired = daysLeft <= 0;
+
+        return (
+          <div 
+            onClick={() => !isExpired && navigate('/saas/subscription')}
+            className={`mb-6 p-4 rounded-2xl border transition-all flex flex-col sm:flex-row items-center justify-between gap-4 ${
+              isExpired
+                ? 'bg-red-500/10 border-red-500/20 text-red-400'
+                : billingData.subscription.isTrial 
+                  ? 'bg-blue-500/10 border-blue-500/20 text-blue-400 cursor-pointer hover:brightness-110' 
+                  : 'bg-[#25d366]/5 border-[#25d366]/10 text-gray-300 cursor-pointer hover:brightness-110'
+            }`}
+          >
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                isExpired ? 'bg-red-500/20' : billingData.subscription.isTrial ? 'bg-blue-500/20' : 'bg-[#25d366]/20'
+              }`}>
+                {isExpired ? '⚠️' : billingData.subscription.isTrial ? '🎁' : '💎'}
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider opacity-60">
+                  {isExpired ? 'Suscripción Vencida' : billingData.subscription.isTrial ? 'Periodo de Prueba Activo' : 'Suscripción Activa'}
+                </p>
+                <h4 className="text-sm font-bold text-white">
+                  Plan {billingData.plan?.name} — {isExpired ? '¡Vencido!' : `${daysLeft} días restantes`}
+                </h4>
+              </div>
             </div>
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wider opacity-60">
-                {billingData.subscription.isTrial ? 'Periodo de Prueba Activo' : 'Suscripción Activa'}
-              </p>
-              <h4 className="text-sm font-bold text-white">
-                Plan {billingData.plan?.name} — {Math.ceil((billingData.subscription.expiresAt * 1000 - Date.now()) / (1000 * 60 * 60 * 24))} días restantes
-              </h4>
-            </div>
+            
+            {isExpired ? (
+              <button 
+                onClick={(e) => { e.stopPropagation(); setShowRequestModal(true); }}
+                className="w-full sm:w-auto text-xs font-bold px-5 py-2.5 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20"
+              >
+                Pagar plan actual (Basic)
+              </button>
+            ) : (
+              <button className="w-full sm:w-auto text-xs font-bold px-3 py-1.5 bg-white/5 rounded-lg border border-white/5 hover:bg-white/10 transition-colors">
+                Gestionar
+              </button>
+            )}
           </div>
-          <button className="text-xs font-bold px-3 py-1.5 bg-white/5 rounded-lg border border-white/5 hover:bg-white/10 transition-colors">
-            Gestionar
-          </button>
-        </div>
-      )}
+        );
+      })()}
 
       {error && (
         <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-xl mb-6 flex items-center gap-3">
@@ -426,7 +456,7 @@ const SaasDashboard: React.FC = () => {
                   {!isAdmin && !canRun && (
                     <div className="mb-4 text-xs font-semibold px-3 py-2 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg flex justify-between items-center">
                       <span>No tienes plan activo</span>
-                      <button onClick={() => navigate('/saas/subscription')} className="underline">Suscribir</button>
+                      <button onClick={() => setShowRequestModal(true)} className="underline font-bold">Pagar Plan</button>
                     </div>
                   )}
                 </div>
@@ -728,6 +758,25 @@ const SaasDashboard: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+      {/* Subscription Request Modal */}
+      {showRequestModal && (
+        <SubscriptionRequestModal
+          currentPlanId={billingData?.subscription?.planId || 'basic'}
+          user={user}
+          plans={plans}
+          isTrial={billingData?.subscription?.isTrial}
+          forcePlanId="basic"
+          onClose={() => setShowRequestModal(false)}
+          onSuccess={() => {
+            fetchBots();
+            fire({
+              title: 'Solicitud enviada',
+              text: 'Tu comprobante ha sido enviado. El administrador activará tu plan pronto.',
+              icon: 'success'
+            });
+          }}
+        />
       )}
     </div>
   );

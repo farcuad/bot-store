@@ -1,13 +1,41 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Activity, MessageSquare, Database, AlertCircle, RefreshCw, Edit2, Trash2, Download, Upload, RotateCcw, ScrollText, FileText, Code, BookOpen, Copy, Bell, Plus, X } from 'lucide-react';
+import { Activity, MessageSquare, Database, AlertCircle, RefreshCw, Edit2, Trash2, Download, Upload, RotateCcw, ScrollText, FileText, Code, BookOpen, Copy, Bell, Plus, X, Search } from 'lucide-react';
 import axios from 'axios';
 import { useGlassAlert } from 'glass-alert-animation';
 import LoadingScreen from '../components/LoadingScreen';
 import TemplatesTab from './TemplatesTab';
 import { getAppStorage } from '../firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+
+/* ── Helper components ─────────────────────────────────────────────────────── */
+
+function StatCard({ label, value, isText = false, accent = 'green' }: {
+  label: string;
+  value: string | number;
+  isText?: boolean;
+  accent?: 'green' | 'red';
+}) {
+  const color = accent === 'red' ? 'text-red-400' : 'text-[#25d366]';
+  return (
+    <div className="bg-[#12121a] border border-white/5 rounded-2xl p-6 hover:border-white/10 transition-all">
+      <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-3">{label}</p>
+      <div className={`font-bold ${isText ? 'text-lg text-gray-300' : `text-3xl ${color}`}`}>{value}</div>
+    </div>
+  );
+}
+
+function Empty({ icon: Icon, text }: { icon: React.ElementType; text: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 text-gray-500">
+      <div className="bg-white/5 rounded-full p-5 mb-4">
+        <Icon className="h-8 w-8 text-gray-600" />
+      </div>
+      <p className="text-sm">{text}</p>
+    </div>
+  );
+}
 
 interface BotStats {
   mensajes_recibidos?: number;
@@ -107,6 +135,8 @@ export default function BotAdmin() {
 
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editSessionName, setEditSessionName] = useState('');
+  const [sessionSearch, setSessionSearch] = useState('');
+  const [clearingSessions, setClearingSessions] = useState(false);
 
   const importInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
@@ -128,6 +158,8 @@ export default function BotAdmin() {
   const [botTimezone, setBotTimezone]   = useState<string>('America/Caracas');
   const [autoResponseEnabled, setAutoResponseEnabled] = useState(true);
   const [togglingAutoResponse, setTogglingAutoResponse] = useState(false);
+  const [debugEnabled, setDebugEnabled] = useState(false);
+  const [togglingDebug, setTogglingDebug] = useState(false);
 
   // Plan / subscription state
   const [canUseTemplates, setCanUseTemplates] = useState(true); // optimistic default
@@ -144,7 +176,7 @@ export default function BotAdmin() {
   const loadBotInfo = async () => {
     try {
       const token = await user?.getIdToken();
-      const res = await axios.get<ApiResponse<{ nombre: string; timezone?: string; clientKey?: string; isAutoResponseEnabled?: boolean }>>(`${API_URL}/api/saas/bots/${botNumber}`, {
+      const res = await axios.get<ApiResponse<{ nombre: string; timezone?: string; clientKey?: string; isAutoResponseEnabled?: boolean; debugEnabled?: boolean }>>(`${API_URL}/api/saas/bots/${botNumber}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.data.ok) {
@@ -157,6 +189,7 @@ export default function BotAdmin() {
           setApiKey(res.data.data.clientKey);
         }
         setAutoResponseEnabled(res.data.data.isAutoResponseEnabled !== false);
+        setDebugEnabled(!!res.data.data.debugEnabled);
       }
     } catch (e) {
       console.error("Error loading bot meta:", e);
@@ -189,6 +222,35 @@ export default function BotAdmin() {
       });
     } finally {
       setTogglingAutoResponse(false);
+    }
+  };
+
+  const toggleDebug = async () => {
+    setTogglingDebug(true);
+    try {
+      const token = await user?.getIdToken();
+      const nextValue = !debugEnabled;
+      const res = await axios.patch<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/debug`, 
+        { enabled: nextValue },
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      if (res.data.ok) {
+        setDebugEnabled(nextValue);
+        fire({
+          title: nextValue ? 'Captura de logs activada' : 'Captura de logs desactivada',
+          text: nextValue ? 'Se registrarán todos los pasos detallados para troubleshooting.' : 'Se ha desactivado el registro detallado para ahorrar espacio.',
+          icon: 'success',
+          timer: 3000
+        });
+      }
+    } catch (e: any) {
+      fire({
+        title: 'Error',
+        text: "Error al cambiar estado de captura: " + (e.response?.data?.error || e.message),
+        icon: 'error'
+      });
+    } finally {
+      setTogglingDebug(false);
     }
   };
 
@@ -615,6 +677,39 @@ export default function BotAdmin() {
     }
   };
 
+  const handleClearAllSessions = async () => {
+    const result = await fire({
+      title: '¿Limpiar todas las conversaciones?',
+      text: 'Se eliminarán todos los registros de contactos y sus historiales. Los clientes volverán a ser saludados como nuevos contactos la próxima vez que escriban.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, limpiar todo',
+      cancelButtonText: 'Cancelar'
+    });
+    if (!result.isConfirmed) return;
+
+    setClearingSessions(true);
+    try {
+      const headers = await getHeaders();
+      await axios.delete<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/sessions`, { headers });
+      setSessions([]);
+      fire({
+        title: 'Conversaciones limpiadas',
+        text: 'Se han eliminado todos los registros de sesión exitosamente.',
+        icon: 'success',
+        timer: 3000
+      });
+    } catch (e: any) {
+      fire({
+        title: 'Error',
+        text: 'Error limpiando sesiones: ' + (e.response?.data?.error || e.message),
+        icon: 'error'
+      });
+    } finally {
+      setClearingSessions(false);
+    }
+  };
+
   const handleViewMessages = (phone: string) => {
     setLogPhoneFilter(phone);
     setActiveTab('logs');
@@ -814,6 +909,30 @@ export default function BotAdmin() {
             )}
           </button>
           <button
+            onClick={toggleDebug}
+            disabled={togglingDebug}
+            className={`shrink-0 flex items-center gap-2 text-sm border px-3 py-2 rounded-xl transition-all ${
+              debugEnabled 
+                ? 'text-amber-400 bg-amber-400/10 border-amber-400/20 hover:bg-amber-400/20' 
+                : 'text-gray-400 bg-white/5 border-white/10 hover:bg-white/10'
+            }`}
+            title={debugEnabled ? 'Desactivar captura de logs detallados' : 'Activar captura de logs detallados'}
+          >
+            {togglingDebug ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : debugEnabled ? (
+              <>
+                <Database className="h-4 w-4" />
+                <span className="whitespace-nowrap">Capturar Logs: ON</span>
+              </>
+            ) : (
+              <>
+                <Database className="h-4 w-4 opacity-50" />
+                <span className="whitespace-nowrap">Capturar Logs: OFF</span>
+              </>
+            )}
+          </button>
+          <button
             onClick={() => { loadBotInfo(); loadData(); }}
             className="shrink-0 flex items-center gap-2 text-sm text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 px-3 py-2 rounded-xl transition-all"
           >
@@ -1003,22 +1122,52 @@ export default function BotAdmin() {
 
           {/* CONVERSACIONES */}
           {activeTab === 'conversaciones' && (
-            sessions.length === 0
-              ? <Empty icon={MessageSquare} text="No hay sesiones activas." />
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#12121a] border border-white/5 rounded-2xl p-4">
+                <div className="relative w-full sm:max-w-md">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+                  <input
+                    type="text"
+                    value={sessionSearch}
+                    onChange={(e) => setSessionSearch(e.target.value)}
+                    placeholder="Buscar por nombre o teléfono..."
+                    className="w-full bg-black/40 border border-white/5 rounded-xl pl-10 pr-4 py-2 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-[#25d366] transition-all"
+                  />
+                </div>
+                <button
+                  onClick={handleClearAllSessions}
+                  disabled={clearingSessions || sessions.length === 0}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {clearingSessions ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  Limpiar todo
+                </button>
+              </div>
+
+              {sessions.filter(s => {
+                const search = sessionSearch.toLowerCase();
+                return s.phone.includes(search) || (s.contactName?.toLowerCase().includes(search) ?? false);
+              }).length === 0
+              ? <Empty icon={MessageSquare} text={sessionSearch ? "No se encontraron conversaciones que coincidan." : "No hay sesiones activas."} />
               : (
                 <div className="bg-[#12121a] border border-white/5 rounded-2xl overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full text-left min-w-[500px]">
                     <thead>
                       <tr className="bg-black/20 text-gray-400 text-sm">
-                        <th className="p-4 font-medium">Teléfono</th>
+                        <th className="p-4 font-medium">Contacto</th>
                         <th className="p-4 font-medium">Estado</th>
                         <th className="p-4 font-medium">Última interacción</th>
                         <th className="p-4 font-medium text-right">Acciones</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
-                      {sessions.map(s => (
+                      {sessions
+                        .filter(s => {
+                          const search = sessionSearch.toLowerCase();
+                          return s.phone.includes(search) || (s.contactName?.toLowerCase().includes(search) ?? false);
+                        })
+                        .map(s => (
                         <tr key={s.id} className="hover:bg-white/5 transition-colors">
                           <td className="p-4 font-mono text-sm text-gray-300">
                             {editingSessionId === s.id ? (
@@ -1089,6 +1238,7 @@ export default function BotAdmin() {
                   </div>
                 </div>
               )
+            }</div>
           )}
 
 
@@ -1460,30 +1610,4 @@ export default function BotAdmin() {
   );
 }
 
-/* ── Helper components ─────────────────────────────────────────────────────── */
-
-function StatCard({ label, value, isText = false, accent = 'green' }: {
-  label: string;
-  value: string | number;
-  isText?: boolean;
-  accent?: 'green' | 'red';
-}) {
-  const color = accent === 'red' ? 'text-red-400' : 'text-[#25d366]';
-  return (
-    <div className="bg-[#12121a] border border-white/5 rounded-2xl p-6 hover:border-white/10 transition-all">
-      <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-3">{label}</p>
-      <div className={`font-bold ${isText ? 'text-lg text-gray-300' : `text-3xl ${color}`}`}>{value}</div>
-    </div>
-  );
-}
-
-function Empty({ icon: Icon, text }: { icon: React.ElementType; text: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 text-gray-500">
-      <div className="bg-white/5 rounded-full p-5 mb-4">
-        <Icon className="h-8 w-8 text-gray-600" />
-      </div>
-      <p className="text-sm">{text}</p>
-    </div>
-  );
-}
+/* ── End of file ── */

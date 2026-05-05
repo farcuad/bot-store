@@ -32,6 +32,7 @@ export interface BotPublicState {
   hasSession?: boolean | undefined;
   timezone?: string | undefined;
   isAutoResponseEnabled?: boolean;
+  debugEnabled?: boolean;
 }
 
 class BotManager {
@@ -125,7 +126,7 @@ class BotManager {
     // Also initialize the bot's config document in bots/{botId}
     const timezone = payload.timezone || "America/Caracas";
     await db.collection("bots").doc(botId).set(
-      { nombre: payload.nombre, activo: true, isAutoResponseEnabled: true, timezone },
+      { nombre: payload.nombre, activo: true, isAutoResponseEnabled: true, timezone, debugEnabled: false },
       { merge: true }
     );
 
@@ -257,7 +258,9 @@ class BotManager {
       
       // Fetch auto-response status from the bot's config doc
       const botDoc = await db.collection("bots").doc(record.botId).get();
-      const isAutoResponseEnabled = botDoc.data()?.isAutoResponseEnabled ?? true;
+      const botData = botDoc.data();
+      const isAutoResponseEnabled = botData?.isAutoResponseEnabled ?? true;
+      const debugEnabled = botData?.debugEnabled ?? false;
 
       const state: BotPublicState = {
         botId: doc.id,
@@ -270,6 +273,7 @@ class BotManager {
         hasSession: sessionExists,
         timezone: record.timezone,
         isAutoResponseEnabled,
+        debugEnabled,
       };
       if (record.clientKey !== undefined) {
         state.clientKey = record.clientKey;
@@ -289,7 +293,9 @@ class BotManager {
     
     // Fetch auto-response status from the bot's config doc
     const botDoc = await db.collection("bots").doc(botId).get();
-    const isAutoResponseEnabled = botDoc.data()?.isAutoResponseEnabled ?? true;
+    const botData = botDoc.data();
+    const isAutoResponseEnabled = botData?.isAutoResponseEnabled ?? true;
+    const debugEnabled = botData?.debugEnabled ?? false;
 
     const state: BotPublicState = {
       botId: record.botId,
@@ -302,6 +308,7 @@ class BotManager {
       hasSession: sessionExists,
       timezone: record.timezone,
       isAutoResponseEnabled,
+      debugEnabled,
     };
     if (record.clientKey !== undefined) {
       state.clientKey = record.clientKey;
