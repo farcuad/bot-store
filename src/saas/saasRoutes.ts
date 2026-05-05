@@ -521,6 +521,40 @@ router.delete("/bots/:id/sessions/:sessionId", async (req: Request, res: Respons
   }
 });
 
+/** DELETE /api/saas/bots/:id/sessions
+ *  Removes ALL contact sessions for a bot from Firestore.
+ */
+router.delete("/bots/:id/sessions", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, "Bot not found");
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) {
+      return fail(res, 403, "No autorizado");
+    }
+
+    const sessionsCol = db.collection("bots").doc(id).collection("sessions");
+    const snap = await sessionsCol.get();
+    
+    if (snap.empty) {
+      return ok(res, { cleared: true, count: 0 });
+    }
+
+    // Delete in batches of 500 (Firestore limit)
+    const docs = snap.docs;
+    for (let i = 0; i < docs.length; i += 500) {
+      const batch = db.batch();
+      const chunk = docs.slice(i, i + 500);
+      chunk.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+    }
+
+    return ok(res, { cleared: true, count: snap.size });
+  } catch (e: any) {
+    return fail(res, 500, e.message);
+  }
+});
+
 // ── Config ────────────────────────────────────────────────────────────────────
 
 /** GET /api/saas/bots/:id/config */
@@ -554,6 +588,30 @@ router.patch("/bots/:id/auto-response", async (req: Request, res: Response) => {
       await instance.reloadConfig();
     }
     return ok(res, { isAutoResponseEnabled: enabled });
+  } catch (e: any) {
+    return fail(res, 500, e.message);
+  }
+});
+
+/** PATCH /api/saas/bots/:id/debug */
+router.patch("/bots/:id/debug", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const { enabled } = req.body;
+  if (enabled === undefined) return fail(res, 400, "enabled es requerido");
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, "Bot not found");
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) {
+      return fail(res, 403, "No autorizado");
+    }
+
+    await db.collection("bots").doc(id).update({ debugEnabled: !!enabled });
+
+    const instance = botManager.getInstance(id);
+    if (instance) {
+      await instance.reloadConfig();
+    }
+    return ok(res, { debugEnabled: !!enabled });
   } catch (e: any) {
     return fail(res, 500, e.message);
   }

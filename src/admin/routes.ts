@@ -303,10 +303,13 @@ router.patch(
     try {
       const uid = req.params["uid"] as string;
       const { planId, expiresAt } = req.body as { planId?: string; expiresAt?: number };
-      if (!planId) {
-        return res.status(400).json({ ok: false, error: "planId requerido" });
+      if (!planId && expiresAt === undefined) {
+        return res.status(400).json({ ok: false, error: "planId o expiresAt requerido" });
       }
-      const update: any = { "subscription.planId": planId };
+      const update: any = {};
+      if (planId) {
+        update["subscription.planId"] = planId;
+      }
       if (typeof expiresAt === "number") {
         update["subscription.expiresAt"] = expiresAt;
       }

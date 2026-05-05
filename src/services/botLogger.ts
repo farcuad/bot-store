@@ -79,14 +79,20 @@ export interface BotLogger {
   size(): number;
   /** Vacía el archivo de log */
   clearLogs(): void;
+  /** Habilita o deshabilita el logging detallado */
+  setDebug(enabled: boolean): void;
 }
 
 export function createBotLogger(botId: string): BotLogger {
   const logPath = ensureLogFile(botId);
+  let debugEnabled = false;
 
   return {
     logMessage(from: string, text: string): void {
-      // Intencionalmente vacío para reducir uso de CPU y logs
+      if (!debugEnabled) return;
+      const ts = formatTimestamp();
+      const line = `[${ts}] 📩 MSG FROM ${from}: ${text}`;
+      appendLineAsync(logPath, line);
     },
 
     log(...args: any[]): void {
@@ -94,7 +100,10 @@ export function createBotLogger(botId: string): BotLogger {
       const msg = serializeArgs(args);
       const line = `[${ts}] ${msg}`;
       console.log(`[BOT:${botId}]`, msg);
-      appendLineAsync(logPath, line);
+      
+      if (debugEnabled) {
+        appendLineAsync(logPath, line);
+      }
     },
 
     error(...args: any[]): void {
@@ -130,5 +139,9 @@ export function createBotLogger(botId: string): BotLogger {
         // Ignore if file doesn't exist
       }
     },
+
+    setDebug(enabled: boolean): void {
+      debugEnabled = enabled;
+    }
   };
 }

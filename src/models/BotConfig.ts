@@ -50,4 +50,6 @@ export interface BotConfig {
   prompt_ia?: string | undefined;
   /** Zona horaria configurada para el bot */
   timezone?: string;
+  /** Si true, se guardan logs detallados de cada paso del bot. */
+  debugEnabled?: boolean;
 }

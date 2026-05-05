@@ -126,6 +126,8 @@ export class BotInstance extends EventEmitter {
 
   async reloadConfig(): Promise<void> {
     await this.configSvc.loadConfig();
+    const config = this.configSvc.getConfig();
+    this.logger.setDebug(!!config.debugEnabled);
   }
 
   async start(): Promise<void> {
@@ -172,6 +174,7 @@ export class BotInstance extends EventEmitter {
     this.bootTime = Date.now();
 
     await this.configSvc.loadConfig();
+    this.logger.setDebug(!!this.configSvc.getConfig().debugEnabled);
     this.configSvc.startConfigRefresh();
     await this.statsMgr.loadStats();
 
@@ -235,7 +238,7 @@ export class BotInstance extends EventEmitter {
     if (caption) this.addRecentSent(caption.trim());
     let media: pkg.MessageMedia;
     if (source.startsWith("http")) {
-      media = await pkg.MessageMedia.fromUrl(source);
+      media = await this._fetchMediaFromUrl(source);
     } else {
       media = pkg.MessageMedia.fromFilePath(source);
     }
@@ -271,7 +274,7 @@ export class BotInstance extends EventEmitter {
     if (caption) this.addRecentSent(caption.trim());
     let media: pkg.MessageMedia;
     if (source.startsWith("http")) {
-      media = await pkg.MessageMedia.fromUrl(source);
+      media = await this._fetchMediaFromUrl(source);
     } else {
       media = pkg.MessageMedia.fromFilePath(source);
     }
@@ -337,7 +340,7 @@ export class BotInstance extends EventEmitter {
 
   private async _handleOutgoingMessage(msg: any): Promise<void> {
     const remoteId = await this.getCanonicalId(msg);
-    // this.logger.log(`DEBUG: Saliente (Canónico) - remoteId: ${remoteId}`);
+    this.logger.log(`Saliente (Canónico) - remoteId: ${remoteId}`);
 
     const config = this.configSvc.getConfig();
     const nowInSeconds = Math.floor(Date.now() / 1000);
@@ -367,12 +370,12 @@ export class BotInstance extends EventEmitter {
     // Si coincide con algo enviado recientemente o con el historial, lo ignoramos (es el bot)
     if (isHistoryMatch || isRecentMatch) {
       this.recentlySentMessages.delete(msg.body.trim());
-      // this.logger.log(`🤖 Mensaje saliente identificado como bot en ${remoteId} — omitiendo cambio a humano.`);
+      this.logger.log(`🤖 Mensaje saliente identificado como bot en ${remoteId} — omitiendo cambio a humano.`);
       return;
     }
 
     // Es un mensaje humano real. Actualizar o crear la sesión con estado "human".
-    //this.logger.log(`👤 Intervención humana detectada en ${remoteId}. Cambiando estado a 'human'.`);
+    this.logger.log(`👤 Intervención humana detectada en ${remoteId}. Cambiando estado a 'human'.`);
     if (remoteSession) {
       await this.sessionMgr.saveSession(remoteId, {
         ...remoteSession,
@@ -394,7 +397,7 @@ export class BotInstance extends EventEmitter {
 
     const pending = this.aggregationMap.get(remoteId);
     if (pending) {
-      //this.logger.log(`🛑 Cancelando respuesta programada para ${remoteId} por intervención humana.`);
+      this.logger.log(`🛑 Cancelando respuesta programada para ${remoteId} por intervención humana.`);
       if (pending.timer) clearTimeout(pending.timer);
       this.aggregationMap.delete(remoteId);
     }
@@ -409,7 +412,10 @@ export class BotInstance extends EventEmitter {
       if (msg.from === "status@broadcast" || msg.from.includes("@g.us")) return;
 
       const from = await this.getCanonicalId(msg);
-      // if (!msg.fromMe) this.logger.log(`DEBUG: Entrante (Canónico) - from: ${from}`);
+      if (!msg.fromMe) {
+        this.logger.logMessage(from, msg.body || `[${msg.type}]`);
+        this.logger.log(`📥 Mensaje entrante de ${from}: ${msg.body || `[${msg.type}]`}`);
+      }
       const msgId = msg.id?._serialized || msg.id?.id;
 
       if (this.processedMsgIds.has(msgId)) return;
@@ -576,7 +582,7 @@ export class BotInstance extends EventEmitter {
       const currentStatus =
         await this.sessionMgr.getStatusFromFirestore(realFrom);
       if (currentStatus === "human") {
-        //this.logger.log(`👤 Abortando respuesta IA en ${realFrom} (Intervención humana detectada durante generación).`);
+        this.logger.log(`👤 Abortando respuesta IA en ${realFrom} (Intervención humana detectada durante generación).`);
         // Limpiar el mensaje del usuario del historial para no contaminar la siguiente consulta IA
         if (
           session.history.length > 0 &&
@@ -603,7 +609,7 @@ export class BotInstance extends EventEmitter {
 
       // Si llegaron nuevos mensajes mientras procesábamos, re-enviamos la agregación
       if (pending.rawMessages.length > 0) {
-        //this.logger.log(`🔄 Re-programando agregación para ${from} (nuevos mensajes durante proceso).`);
+        this.logger.log(`🔄 Re-programando agregación para ${from} (nuevos mensajes durante proceso).`);
         pending.timer = setTimeout(
           () => this._triggerAggregation(from),
           this.DEBOUNCE_MS,
@@ -681,12 +687,13 @@ export class BotInstance extends EventEmitter {
     const { MessageMedia } = await import("whatsapp-web.js");
 
     if (respuesta.includes("[NO_ENTENDI]")) {
+      this.logger.log(`❓ La IA no entendió el mensaje de ${from}. Registrando en No Entendidos.`);
       respuesta = respuesta.replace("[NO_ENTENDI]", "").trim();
       await this.configSvc.registrarNoEntendido(fullText, from, nombre);
     }
 
     if (respuesta.includes("[HABLAR_CON_HUMANO]")) {
-      //this.logger.log(`🚨 Intervención humana detectada por IA para ${nombre}. Respuesta IA: "${respuesta}"`);
+      this.logger.log(`🚨 Intervención humana detectada por IA para ${nombre}. Respuesta IA: "${respuesta}"`);
       respuesta = respuesta.replace("[HABLAR_CON_HUMANO]", "").trim();
       respuesta = `${respuesta}\n\n${sys("agenteAviso")}`;
       session.status = "human";
@@ -706,7 +713,7 @@ export class BotInstance extends EventEmitter {
     // Recargamos la sesión completa para no sobreescribir con datos viejos de memoria
     const latestSession = await this.sessionMgr.getSession(from);
     if (!latestSession || latestSession.status === "human") {
-      //this.logger.log(`👤 Abortando envío final en ${from} (Intervención humana confirmada tras recarga).`);
+      this.logger.log(`👤 Abortando envío final en ${from} (Intervención humana confirmada tras recarga).`);
       return;
     }
 
@@ -732,6 +739,7 @@ export class BotInstance extends EventEmitter {
     if (respuesta) {
       this.addRecentSent(respuesta);
       const safeFrom = this.normalizeToContactId(from);
+      this.logger.log(`📤 Enviando respuesta de texto a ${from}: ${respuesta}`);
       await this.client?.sendMessage(safeFrom, respuesta);
     }
 
@@ -740,12 +748,34 @@ export class BotInstance extends EventEmitter {
       try {
         const safeFrom = this.normalizeToContactId(from);
         this.addRecentMediaSent(safeFrom);
-        const media = await pkg.MessageMedia.fromUrl(url, { unsafeMime: true });
+        const media = await this._fetchMediaFromUrl(url);
         await this.client?.sendMessage(safeFrom, media);
       } catch (err) {
         this.logger.error(`Error enviando imagen extraída (${url}):`, err);
       }
     }
+  }
+
+  private async _fetchMediaFromUrl(url: string): Promise<pkg.MessageMedia> {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch media: ${response.status} ${response.statusText}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const base64 = buffer.toString("base64");
+    let mimetype = response.headers.get("content-type") || "image/jpeg";
+
+    if (mimetype.includes("application/octet-stream")) {
+      const ext = url.split(".").pop()?.split("?")[0]?.toLowerCase();
+      if (ext === "jpg" || ext === "jpeg") mimetype = "image/jpeg";
+      else if (ext === "png") mimetype = "image/png";
+      else if (ext === "mp4") mimetype = "video/mp4";
+      else if (ext === "pdf") mimetype = "application/pdf";
+    }
+
+    const filename = url.split("/").pop()?.split("?")[0] || "media_file";
+    return new pkg.MessageMedia(mimetype, base64, filename);
   }
 
   private async _transcribeAudio(

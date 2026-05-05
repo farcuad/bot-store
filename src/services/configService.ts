@@ -36,6 +36,7 @@ export function createConfigService(botId: string) {
     prompt_ia?: string | undefined;
     timezone?: string | undefined;
     motivosNotificacion?: string[] | undefined;
+    debugEnabled?: boolean;
   }> {
     const doc = await botRef().get();
     const data = doc.data();
@@ -48,6 +49,7 @@ export function createConfigService(botId: string) {
       motivosNotificacion: Array.isArray(data?.motivosNotificacion)
         ? (data!.motivosNotificacion as string[])
         : undefined,
+      debugEnabled: !!data?.debugEnabled,
     };
   }
 
@@ -70,7 +72,7 @@ export function createConfigService(botId: string) {
   async function loadConfig(): Promise<void> {
     try {
       const [
-        { nombre, activo, isAutoResponseEnabled, prompt_ia, timezone, motivosNotificacion },
+        { nombre, activo, isAutoResponseEnabled, prompt_ia, timezone, motivosNotificacion, debugEnabled },
         respuestas_info,
       ] = await Promise.all([
         fetchNombreYActivo(),
@@ -85,12 +87,14 @@ export function createConfigService(botId: string) {
         prompt_ia,
         timezone: timezone || "America/Caracas",
         motivosNotificacion: motivosNotificacion ?? [],
+        debugEnabled: debugEnabled ?? false,
       } as any;
       console.log(
         new Date().toLocaleString(),
         `[${botId}] 🔥 Config cargada — "${nombre}" | ` +
           `${Object.keys(respuestas_info).length} informaciones | ` +
-          `${(motivosNotificacion ?? []).length} motivos notificación.`,
+          `${(motivosNotificacion ?? []).length} motivos notificación | ` +
+          `Debug: ${debugEnabled ? "ACTIVADO" : "desactivado"}.`,
       );
     } catch (error) {
       console.error(`[${botId}] ❌ Error al cargar configuración:`, error);
