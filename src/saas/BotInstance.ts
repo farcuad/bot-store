@@ -149,8 +149,17 @@ export class BotInstance extends EventEmitter {
 
     const { promises: fsp } = await import("node:fs");
     const sessionDir = path.join(dataPath, `session-${this.botId}`);
-    // El archivo lock se deja para que el SO gestione la exclusión mutua
-    // y evitar que múltiples procesos accidentales usen la misma sesión.
+    
+    // Cleanup SingletonLock if it exists (prevents "Profile in use" error after crash)
+    try {
+      const lockPath = path.join(sessionDir, 'Default', 'SingletonLock');
+      if (fs.existsSync(lockPath)) {
+        this.logger.log(`⚠️ SingletonLock detectado. Eliminando para evitar bloqueo de instancia.`);
+        fs.unlinkSync(lockPath);
+      }
+    } catch (e) {
+      // Ignore errors during lock removal
+    }
 
     this.client = new pkg.Client({
       qrMaxRetries: 2,
