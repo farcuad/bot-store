@@ -73,6 +73,8 @@ export interface BotLogger {
   log(...args: any[]): void;
   /** Registra un error de proceso */
   error(...args: any[]): void;
+  /** Registra una advertencia */
+  warn(...args: any[]): void;
   /** Lee las últimas N líneas del log */
   readLogs(lines?: number): string[];
   /** Devuelve el tamaño actual del archivo en bytes */
@@ -111,6 +113,14 @@ export function createBotLogger(botId: string): BotLogger {
       const msg = serializeArgs(args);
       const line = `[${ts}] ❌ ERROR: ${msg}`;
       console.error(`[BOT:${botId}]`, msg);
+      appendLineAsync(logPath, line);
+    },
+    
+    warn(...args: any[]): void {
+      const ts = formatTimestamp();
+      const msg = serializeArgs(args);
+      const line = `[${ts}] ⚠️ WARN: ${msg}`;
+      console.warn(`[BOT:${botId}]`, msg);
       appendLineAsync(logPath, line);
     },
 

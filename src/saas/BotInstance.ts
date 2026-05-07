@@ -51,6 +51,7 @@ export class BotInstance extends EventEmitter {
   private logger: BotLogger;
   private recentlySentMessages = new Set<string>();
   private recentlySentMediaTo = new Set<string>();
+  private healthCheckInterval: NodeJS.Timeout | null = null;
 
   /** Auto-expire entries from recentlySentMessages after 60s to prevent unbounded growth */
   private addRecentSent(text: string): void {
@@ -192,9 +193,23 @@ export class BotInstance extends EventEmitter {
       this.emit("qr", qr);
     });
 
-    this.client.on("ready", () => {
+    this.client.on("ready", async () => {
       this.logger.log(`✅ Bot listo y operativo.`);
       this.setState({ status: "ready", qr: null, readySince: Date.now() });
+      
+      // Parche para error de estados (canCheckStatusRankingPosterGating)
+      try {
+        await (this.client as any).pupPage.evaluate(() => {
+          if ((window as any).Store && (window as any).Store.StatusUtils) {
+            if (!(window as any).Store.StatusUtils.canCheckStatusRankingPosterGating) {
+              (window as any).Store.StatusUtils.canCheckStatusRankingPosterGating = () => false;
+            }
+          }
+        });
+      } catch (e) {
+        this.logger.error("Error al aplicar parche de estados:", e);
+      }
+
       this.emit("ready");
     });
 
@@ -204,17 +219,34 @@ export class BotInstance extends EventEmitter {
     });
 
     this.client.on("auth_failure", (msg: string) => {
+      this.logger.error(`Error de autenticación: ${msg}`);
       this.setState({ status: "error", lastError: msg });
     });
 
     this.client.on("message_create", (msg: any) => {
-      this._handleMessage(msg);
+      this._handleMessage(msg).catch(err => {
+        this.logger.error(`Error no manejado en _handleMessage:`, err);
+      });
     });
 
-    this.client.initialize();
+    // Add error and change state listeners for better monitoring
+    this.client.on("error", (err: any) => {
+      this.logger.error(`Error crítico del cliente WhatsApp:`, err);
+      if (this.state.status === "ready") {
+        this.setState({ status: "error", lastError: err.message || "Unknown error" });
+      }
+    });
+
+    this.client.initialize().catch(err => {
+      this.logger.error(`Error al inicializar el cliente:`, err);
+      this.setState({ status: "error", lastError: err.message });
+    });
+
+    this.startHealthCheck();
   }
 
   async stop(): Promise<void> {
+    this.stopHealthCheck();
     if (!this.client) return;
     try {
       await this.client.destroy();
@@ -225,8 +257,41 @@ export class BotInstance extends EventEmitter {
   }
 
   async restart(): Promise<void> {
+    this.logger.log(`🔄 Reiniciando bot por inactividad o error...`);
     await this.stop();
     await this.start();
+  }
+
+  private startHealthCheck() {
+    this.stopHealthCheck();
+    this.healthCheckInterval = setInterval(async () => {
+      if (this.state.status === "ready" && this.client) {
+        try {
+          // Si no responde en 30 segundos, getState lanzará timeout o error
+          const statePromise = this.client.getState();
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error("Timeout obteniendo estado")), 30000)
+          );
+          
+          const state = await Promise.race([statePromise, timeoutPromise]) as string;
+          
+          if (!state || state === "CONFLICT" || state === "UNPAIRED") {
+            this.logger.warn(`⚠️ HealthCheck: Estado anómalo detectado (${state}). Reiniciando...`);
+            await this.restart();
+          }
+        } catch (e) {
+          this.logger.error(`❌ HealthCheck falló (posible cuelgue de Puppeteer):`, e);
+          await this.restart();
+        }
+      }
+    }, 25_000); // Cada 25 segundos
+  }
+
+  private stopHealthCheck() {
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = null;
+    }
   }
 
   async sendMessage(to: string, message: string): Promise<void> {
@@ -264,6 +329,12 @@ export class BotInstance extends EventEmitter {
     if (!this.client) {
       throw new Error(`Bot ${this.botId} is not connected.`);
     }
+    
+    // Re-aplicar parche si el destino es un estado
+    if (chatId === "status@broadcast") {
+      await this._patchStatusCheck();
+    }
+
     this.addRecentSent(message.trim());
     await this.client.sendMessage(chatId, message);
   }
@@ -279,6 +350,12 @@ export class BotInstance extends EventEmitter {
     if (!this.client) {
       throw new Error(`Bot ${this.botId} is not connected.`);
     }
+
+    // Re-aplicar parche si el destino es un estado
+    if (chatId === "status@broadcast") {
+      await this._patchStatusCheck();
+    }
+
     this.addRecentMediaSent(chatId);
     if (caption) this.addRecentSent(caption.trim());
     let media: pkg.MessageMedia;
@@ -289,6 +366,25 @@ export class BotInstance extends EventEmitter {
     }
     const options = caption ? { caption } : {};
     await this.client.sendMessage(chatId, media, options);
+  }
+
+  /**
+   * Inyecta un parche en el navegador para evitar el error canCheckStatusRankingPosterGating
+   * al enviar estados en versiones recientes de WhatsApp Web.
+   */
+  private async _patchStatusCheck() {
+    try {
+      await (this.client as any).pupPage.evaluate(() => {
+        try {
+          const win = window as any;
+          if (win.Store && win.Store.StatusUtils) {
+            if (!win.Store.StatusUtils.canCheckStatusRankingPosterGating) {
+              win.Store.StatusUtils.canCheckStatusRankingPosterGating = () => false;
+            }
+          }
+        } catch (e) {}
+      });
+    } catch (e) {}
   }
 
   /**
@@ -349,7 +445,7 @@ export class BotInstance extends EventEmitter {
 
   private async _handleOutgoingMessage(msg: any): Promise<void> {
     const remoteId = await this.getCanonicalId(msg);
-    this.logger.log(`Saliente (Canónico) - remoteId: ${remoteId}`);
+    // this.logger.log(`Saliente (Canónico) - remoteId: ${remoteId}`);
 
     const config = this.configSvc.getConfig();
     const nowInSeconds = Math.floor(Date.now() / 1000);
@@ -379,12 +475,12 @@ export class BotInstance extends EventEmitter {
     // Si coincide con algo enviado recientemente o con el historial, lo ignoramos (es el bot)
     if (isHistoryMatch || isRecentMatch) {
       this.recentlySentMessages.delete(msg.body.trim());
-      this.logger.log(`🤖 Mensaje saliente identificado como bot en ${remoteId} — omitiendo cambio a humano.`);
+      // this.logger.log(`🤖 Mensaje saliente identificado como bot en ${remoteId} — omitiendo cambio a humano.`);
       return;
     }
 
     // Es un mensaje humano real. Actualizar o crear la sesión con estado "human".
-    this.logger.log(`👤 Intervención humana detectada en ${remoteId}. Cambiando estado a 'human'.`);
+    // this.logger.log(`👤 Intervención humana detectada en ${remoteId}. Cambiando estado a 'human'.`);
     if (remoteSession) {
       await this.sessionMgr.saveSession(remoteId, {
         ...remoteSession,
@@ -423,7 +519,7 @@ export class BotInstance extends EventEmitter {
       const from = await this.getCanonicalId(msg);
       if (!msg.fromMe) {
         this.logger.logMessage(from, msg.body || `[${msg.type}]`);
-        this.logger.log(`📥 Mensaje entrante de ${from}: ${msg.body || `[${msg.type}]`}`);
+        // this.logger.log(`📥 Mensaje entrante de ${from}: ${msg.body || `[${msg.type}]`}`);
       }
       const msgId = msg.id?._serialized || msg.id?.id;
 
@@ -461,6 +557,15 @@ export class BotInstance extends EventEmitter {
             () => this._triggerAggregation(from),
             this.DEBOUNCE_MS,
           );
+        } else {
+          // Si lleva procesando más de 5 minutos, probablemente algo falló. 
+          // Reseteamos el estado para este usuario.
+          const lastUpdate = (pending as any).lastProcessingUpdate || Date.now();
+          if (Date.now() - lastUpdate > 25000) { // 25 segundos
+             this.logger.warn(`⚠️ Detectado posible cuelgue en procesamiento para ${from}. Reiniciando estado.`);
+             pending.isProcessing = false;
+             this._triggerAggregation(from);
+          }
         }
       }
     } catch (err) {
@@ -474,8 +579,10 @@ export class BotInstance extends EventEmitter {
 
     // Marcar como procesando en lugar de borrar inmediatamente
     pending.isProcessing = true;
+    (pending as any).lastProcessingUpdate = Date.now();
 
     try {
+      // this.logger.log(`[Agregación] Procesando ${pending.rawMessages.length} mensajes para ${from}...`);
       const nowInSeconds = Math.floor(Date.now() / 1000);
       const config = this.configSvc.getConfig();
       // sys: reads named system messages stored in respuestas_info with key prefix "sys_"
@@ -748,7 +855,7 @@ export class BotInstance extends EventEmitter {
     if (respuesta) {
       this.addRecentSent(respuesta);
       const safeFrom = this.normalizeToContactId(from);
-      this.logger.log(`📤 Enviando respuesta de texto a ${from}: ${respuesta}`);
+      // this.logger.log(`📤 Enviando respuesta de texto a ${from}: ${respuesta}`);
       await this.client?.sendMessage(safeFrom, respuesta);
     }
 
@@ -766,25 +873,35 @@ export class BotInstance extends EventEmitter {
   }
 
   private async _fetchMediaFromUrl(url: string): Promise<pkg.MessageMedia> {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch media: ${response.status} ${response.statusText}`);
-    }
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const base64 = buffer.toString("base64");
-    let mimetype = response.headers.get("content-type") || "image/jpeg";
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
-    if (mimetype.includes("application/octet-stream")) {
-      const ext = url.split(".").pop()?.split("?")[0]?.toLowerCase();
-      if (ext === "jpg" || ext === "jpeg") mimetype = "image/jpeg";
-      else if (ext === "png") mimetype = "image/png";
-      else if (ext === "mp4") mimetype = "video/mp4";
-      else if (ext === "pdf") mimetype = "application/pdf";
-    }
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
 
-    const filename = url.split("/").pop()?.split("?")[0] || "media_file";
-    return new pkg.MessageMedia(mimetype, base64, filename);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch media: ${response.status} ${response.statusText}`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const base64 = buffer.toString("base64");
+      let mimetype = response.headers.get("content-type") || "image/jpeg";
+
+      if (mimetype.includes("application/octet-stream")) {
+        const ext = url.split(".").pop()?.split("?")[0]?.toLowerCase();
+        if (ext === "jpg" || ext === "jpeg") mimetype = "image/jpeg";
+        else if (ext === "png") mimetype = "image/png";
+        else if (ext === "mp4") mimetype = "video/mp4";
+        else if (ext === "pdf") mimetype = "application/pdf";
+      }
+
+      const filename = url.split("/").pop()?.split("?")[0] || "media_file";
+      return new pkg.MessageMedia(mimetype, base64, filename);
+    } catch (error) {
+      clearTimeout(timeoutId);
+      throw error;
+    }
   }
 
   private async _transcribeAudio(
@@ -798,10 +915,10 @@ export class BotInstance extends EventEmitter {
     try {
       const media = await msg.downloadMedia();
       if (!media) return null;
-      await fs.promises.writeFile(tempFilePath, media.data, {
+       await fs.promises.writeFile(tempFilePath, media.data, {
         encoding: "base64",
       });
-      const openai = new OpenAI({ apiKey: openaiApiKey });
+      const openai = new OpenAI({ apiKey: openaiApiKey, timeout: 45000 });
       const transcription = await openai.audio.transcriptions.create({
         file: fs.createReadStream(tempFilePath),
         model: "whisper-1",
