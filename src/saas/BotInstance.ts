@@ -866,8 +866,8 @@ export class BotInstance extends EventEmitter {
         this.addRecentMediaSent(safeFrom);
         const media = await this._fetchMediaFromUrl(url);
         await this.client?.sendMessage(safeFrom, media);
-      } catch (err) {
-        this.logger.error(`Error enviando imagen extraída (${url}):`, err);
+      } catch (err: any) {
+        this.logger.error(`Advertencia: No se pudo enviar la imagen extraída. URL: ${url} - Motivo: ${err.message || 'Error desconocido'}`);
       }
     }
   }
@@ -881,12 +881,24 @@ export class BotInstance extends EventEmitter {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch media: ${response.status} ${response.statusText}`);
+        throw new Error(`HTTP ${response.status} ${response.statusText}`);
       }
+      
+      let mimetype = response.headers.get("content-type") || "image/jpeg";
+      
+      // Validar que no sea una respuesta de error en JSON o HTML que el servidor haya devuelto con un status 200
+      if (mimetype.includes("application/json") || mimetype.includes("text/html") || mimetype.includes("text/plain")) {
+        throw new Error(`El archivo no es multimedia válido (Mime: ${mimetype})`);
+      }
+
       const arrayBuffer = await response.arrayBuffer();
+      
+      if (arrayBuffer.byteLength < 100) {
+        throw new Error("El archivo descargado es demasiado pequeño o está corrupto.");
+      }
+
       const buffer = Buffer.from(arrayBuffer);
       const base64 = buffer.toString("base64");
-      let mimetype = response.headers.get("content-type") || "image/jpeg";
 
       if (mimetype.includes("application/octet-stream")) {
         const ext = url.split(".").pop()?.split("?")[0]?.toLowerCase();
