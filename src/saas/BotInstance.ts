@@ -153,10 +153,20 @@ export class BotInstance extends EventEmitter {
     
     // Cleanup SingletonLock if it exists (prevents "Profile in use" error after crash)
     try {
-      const lockPath = path.join(sessionDir, 'Default', 'SingletonLock');
-      if (fs.existsSync(lockPath)) {
-        this.logger.log(`⚠️ SingletonLock detectado. Eliminando para evitar bloqueo de instancia.`);
-        fs.unlinkSync(lockPath);
+      const lockFiles = [
+        path.join(sessionDir, 'SingletonLock'),
+        path.join(sessionDir, 'SingletonCookie'),
+        path.join(sessionDir, 'SingletonSocket'),
+        path.join(sessionDir, 'Default', 'SingletonLock'),
+        path.join(sessionDir, 'Default', 'SingletonCookie'),
+        path.join(sessionDir, 'Default', 'SingletonSocket')
+      ];
+
+      for (const lockFile of lockFiles) {
+        if (fs.existsSync(lockFile)) {
+          this.logger.log(`⚠️ Archivo de bloqueo detectado (${path.basename(lockFile)}). Eliminando para evitar bloqueo de instancia.`);
+          fs.unlinkSync(lockFile);
+        }
       }
     } catch (e) {
       // Ignore errors during lock removal
