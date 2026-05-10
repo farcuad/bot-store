@@ -163,9 +163,14 @@ export class BotInstance extends EventEmitter {
       ];
 
       for (const lockFile of lockFiles) {
-        if (fs.existsSync(lockFile)) {
-          this.logger.log(`⚠️ Archivo de bloqueo detectado (${path.basename(lockFile)}). Eliminando para evitar bloqueo de instancia.`);
-          fs.unlinkSync(lockFile);
+        try {
+          const stats = fs.lstatSync(lockFile);
+          if (stats) {
+            this.logger.log(`⚠️ Archivo de bloqueo detectado (${path.basename(lockFile)}). Eliminando para evitar bloqueo de instancia.`);
+            fs.unlinkSync(lockFile);
+          }
+        } catch (err) {
+          // File or broken symlink doesn't exist, ignore
         }
       }
     } catch (e) {
