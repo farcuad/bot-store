@@ -145,11 +145,9 @@ export const sendContactMessageController = async (
     const { to, message, fromMe, mediaUrl } = req.body as ContactMessageBody;
 
     if (!botId) {
-      return res
-        .status(400)
-        .json({
-          error: "botId es requerido (x-client-botid header o parámetro)",
-        });
+      return res.status(400).json({
+        error: "botId es requerido (x-client-botid header o parámetro)",
+      });
     }
 
     if (!to || !message || !fromMe) {
@@ -168,18 +166,6 @@ export const sendContactMessageController = async (
 
     const instance = await getReadyInstance(botId, req, res);
     if (!instance) return;
-
-    // 🛑 Gate by Subscription Plan (API Access)
-    try {
-      const subContext = await subscriptionService.getBotSubscriptionContext(botId);
-      if (!subContext.plan.features.apiAccess) {
-        return res.status(403).json({ 
-          error: `Tu plan actual (${subContext.plan.name}) no incluye acceso a la API de envío de mensajes. Actualiza al plan Pro o Premium.` 
-        });
-      }
-    } catch (e: any) {
-      return res.status(500).json({ error: "Error verificando suscripción: " + e.message });
-    }
 
     // Send with or without media
     if (mediaUrl) {
@@ -216,11 +202,9 @@ export const sendStatusController = async (req: Request, res: Response) => {
     const { message, mediaUrl } = req.body as StatusMessageBody;
 
     if (!botId) {
-      return res
-        .status(400)
-        .json({
-          error: "botId es requerido (x-client-botid header o parámetro)",
-        });
+      return res.status(400).json({
+        error: "botId es requerido (x-client-botid header o parámetro)",
+      });
     }
 
     if (!message && !mediaUrl) {
@@ -231,18 +215,6 @@ export const sendStatusController = async (req: Request, res: Response) => {
 
     const instance = await getReadyInstance(botId, req, res);
     if (!instance) return;
-
-    // 🛑 Gate by Subscription Plan (API Access)
-    try {
-      const subContext = await subscriptionService.getBotSubscriptionContext(botId);
-      if (!subContext.plan.features.apiAccess) {
-        return res.status(403).json({ 
-          error: `Tu plan actual (${subContext.plan.name}) no incluye el envío de estados vía API. Actualiza al plan Pro o Premium.` 
-        });
-      }
-    } catch (e: any) {
-      return res.status(500).json({ error: "Error verificando suscripción: " + e.message });
-    }
 
     const chatId = "status@broadcast";
 
@@ -333,11 +305,9 @@ export const getGroupsController = async (req: Request, res: Response) => {
     const botId = (req.headers["x-client-botid"] || req.params.botId) as string;
 
     if (!botId) {
-      return res
-        .status(400)
-        .json({
-          error: "botId es requerido (x-client-botid header o parámetro)",
-        });
+      return res.status(400).json({
+        error: "botId es requerido (x-client-botid header o parámetro)",
+      });
     }
 
     const instance = await getReadyInstance(botId, req, res);
@@ -392,11 +362,9 @@ export const sendGroupMessageController = async (
     const { to, message, mediaUrl, fromMe } = req.body as GroupMessageBody;
 
     if (!botId) {
-      return res
-        .status(400)
-        .json({
-          error: "botId es requerido (x-client-botid header o parámetro)",
-        });
+      return res.status(400).json({
+        error: "botId es requerido (x-client-botid header o parámetro)",
+      });
     }
 
     if (!to || !message || !fromMe) {
@@ -414,18 +382,6 @@ export const sendGroupMessageController = async (
 
     const instance = await getReadyInstance(botId, req, res);
     if (!instance) return;
-
-    // 🛑 Gate by Subscription Plan (API Access)
-    try {
-      const subContext = await subscriptionService.getBotSubscriptionContext(botId);
-      if (!subContext.plan.features.apiAccess) {
-        return res.status(403).json({ 
-          error: `Tu plan actual (${subContext.plan.name}) no incluye acceso a la API de envío de mensajes a grupos. Actualiza al plan Pro o Premium.` 
-        });
-      }
-    } catch (e: any) {
-      return res.status(500).json({ error: "Error verificando suscripción: " + e.message });
-    }
 
     // Send with or without media
     if (mediaUrl) {

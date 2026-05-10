@@ -10,6 +10,7 @@ class SubscriptionService {
     if (doc.exists) {
       return { id: doc.id, ...doc.data() } as PricingPlan;
     }
+
     // Fallback if not found in DB
     console.warn(`Plan ${planId} no encontrado en la base de datos. Cayendo a fallback básico.`);
     return {
@@ -81,14 +82,35 @@ class SubscriptionService {
   async getBotSubscriptionContext(botId: string) {
     const botDoc = await db.collection("bots").doc(botId).get();
     if (!botDoc.exists) {
-      console.error(`[SubscriptionService] Bot ${botId} no encontrado`);
-      throw new Error(`Bot ${botId} no encontrado`);
+      console.error(`[SubscriptionService] Bot ${botId} no encontrado en la colección 'bots'`);
+      // No lanzamos error si no existe en 'bots' todavía, intentamos buscar en registro
     }
     
-    const botData = botDoc.data();
-    const ownerId = botData?.ownerUid || botData?.ownerId || botId;
+    const botData = botDoc.exists ? botDoc.data() : null;
     
-    console.log(`[SubscriptionService] Bot: ${botId} | Owner: ${ownerId}`);
+    // 1. Intentar obtener el ownerId (priorizando botData si existe)
+    let ownerId = botData?.ownerUid || botData?.ownerId;
+
+    // 2. Si no hay ownerId, buscar en el registro de la plataforma (SaaS registry)
+    if (!ownerId) {
+      const registryDoc = await db.collection("platform").doc("bots").collection("registry").doc(botId).get();
+      if (registryDoc.exists) {
+        ownerId = registryDoc.data()?.ownerUid;
+        console.log(`[SubscriptionService] Owner found in registry for ${botId}: ${ownerId}`);
+      }
+    }
+
+    // 3. Prioridad especial: Si el bot TIENE una suscripción propia definida
+    if (botData?.subscription) {
+      const userSub = botData.subscription as UserSubscription;
+      const plan = await this.getPlanInfo(userSub.planId);
+      return { userSub, plan, ownerId: ownerId || botId };
+    }
+
+    // Fallback final a botId para el owner
+    ownerId = ownerId || botId;
+    
+    console.log(`[SubscriptionService] Resolving subscription for Bot: ${botId} | Owner: ${ownerId}`);
     
     const userSub = await this.getUserSubscription(ownerId);
     console.log(`[SubscriptionService] UserSub for ${ownerId}:`, JSON.stringify(userSub));
