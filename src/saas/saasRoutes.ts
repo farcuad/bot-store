@@ -889,6 +889,58 @@ router.get('/bots/:id/templates', async (req, res) => {
   } catch (e: any) { return fail(res, 500, e.message); }
 });
 
+// POST /api/saas/bots/:id/templates/generate-ai
+// ⚠️ Must be declared BEFORE POST /bots/:id/templates so Express doesn't treat 'generate-ai' as a :tid
+router.post('/bots/:id/templates/generate-ai', async (req, res) => {
+  const id = req.params.id as string;
+  const { name } = req.body as { name?: string };
+
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return fail(res, 400, 'Se requiere el nombre de la plantilla.');
+  }
+
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, 'Bot not found');
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) return fail(res, 403, 'No autorizado');
+
+    const { llamarDeepseek } = await import('../config/deepseek.js');
+
+    const messages = [
+      {
+        role: 'system',
+        content: `Eres un experto en marketing digital y comunicación por WhatsApp.
+Genera mensajes promocionales atractivos usando el formato nativo de WhatsApp:
+- Usa *texto* para negrita (NO uses ** de markdown, solo un asterisco por lado)
+- Usa _texto_ para cursiva
+- Usa emojis relevantes para hacer el mensaje más dinámico y cercano
+- Mantén un tono amigable, cercano y profesional en español
+- El mensaje debe ser conciso pero persuasivo (máximo 250 palabras)
+- Incluye un llamado a la acción claro al final
+- NO uses markdown como ##, **, o ---. Solo usa el formato nativo de WhatsApp: *negrita*, _cursiva_`,
+      },
+      {
+        role: 'user',
+        content: `Genera un mensaje de WhatsApp para una plantilla llamada: "${name.trim()}".
+El mensaje debe estar listo para ser enviado a clientes por WhatsApp, usando formato WhatsApp (*negrita*, _cursiva_, emojis).
+Responde ÚNICAMENTE con el texto del mensaje, sin títulos, sin explicaciones adicionales, sin comillas envolventes.`,
+      },
+    ];
+
+    const result = await llamarDeepseek(messages);
+    const generatedText: string | undefined = result?.choices?.[0]?.message?.content?.trim();
+
+    if (!generatedText) {
+      return fail(res, 500, 'La IA no generó una respuesta válida.');
+    }
+
+    return res.json({ ok: true, text: generatedText });
+  } catch (e: any) {
+    console.error('❌ Error generando plantilla con IA:', e.message);
+    return fail(res, 500, e.message || 'Error al contactar la IA.');
+  }
+});
+
 router.post('/bots/:id/templates', async (req, res) => {
   const id = req.params.id as string;
   const { name, text, imageUrl } = req.body as { name: string; text: string; imageUrl?: string };
