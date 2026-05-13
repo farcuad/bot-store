@@ -120,6 +120,7 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
   const [tImageUrl, setTImageUrl] = useState('');
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [generatingText, setGeneratingText] = useState(false);
 
   const [broadcasts, setBroadcasts] = useState<BroadcastRecord[]>([]);
   const [loadingBroadcasts, setLoadingBroadcasts] = useState(true);
@@ -229,6 +230,31 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
       fire({ title: 'Error', text: e.response?.data?.error || e.message, icon: 'error' });
     } finally {
       setSavingTemplate(false);
+    }
+  };
+
+  const generateWithAI = async () => {
+    if (!tName.trim()) {
+      fire({ title: 'Falta el nombre', text: 'Escribe el nombre de la plantilla primero para que la IA tenga contexto.', icon: 'warning' });
+      return;
+    }
+    setGeneratingText(true);
+    try {
+      const headers = await getHeaders();
+      const res = await axios.post(
+        `${API_URL}/api/saas/bots/${botNumber}/templates/generate-ai`,
+        { name: tName.trim() },
+        { headers }
+      );
+      if (res.data.ok) {
+        setTText(res.data.text);
+      } else {
+        fire({ title: 'Error de IA', text: res.data.error, icon: 'error' });
+      }
+    } catch (e: any) {
+      fire({ title: 'Error', text: e.response?.data?.error || e.message, icon: 'error' });
+    } finally {
+      setGeneratingText(false);
     }
   };
 
@@ -554,14 +580,33 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Mensaje</label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Mensaje</label>
+                  <button
+                    type="button"
+                    onClick={generateWithAI}
+                    disabled={generatingText || !tName.trim()}
+                    title={!tName.trim() ? 'Escribe el nombre primero' : 'Generar mensaje con IA'}
+                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-violet-500/10 text-violet-400 border border-violet-500/20 hover:bg-violet-500/20 hover:text-violet-300 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {generatingText ? (
+                      <><div className="h-3 w-3 border-2 border-violet-400/30 border-t-violet-400 rounded-full animate-spin" /> Generando…</>
+                    ) : (
+                      <>✨ Generar con IA</>
+                    )}
+                  </button>
+                </div>
                 <textarea
                   value={tText}
                   onChange={e => setTText(e.target.value)}
-                  placeholder="Escribe el mensaje que se enviará por WhatsApp…"
+                  placeholder="Escribe el mensaje o genera uno con IA…"
                   rows={5}
                   className="w-full bg-black/30 border border-white/5 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-[#25d366] focus:ring-1 focus:ring-[#25d366] transition-all resize-none"
                 />
+                <p className="text-[11px] text-gray-600 mt-1.5">
+                  Tip: usa <span className="font-mono text-gray-500">*negrita*</span>,{' '}
+                  <span className="font-mono text-gray-500">_cursiva_</span> y emojis — formato nativo WhatsApp 🚀
+                </p>
               </div>
 
               <div>
