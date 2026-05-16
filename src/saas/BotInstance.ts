@@ -290,8 +290,13 @@ export class BotInstance extends EventEmitter {
           
           const state = await Promise.race([statePromise, timeoutPromise]) as string;
           
-          if (!state || state === "CONFLICT" || state === "UNPAIRED") {
-            this.logger.warn(`⚠️ HealthCheck: Estado anómalo detectado (${state}). Reiniciando...`);
+          // Verificar también que WWebJS siga inyectado (si la página se recargó sola, window.WWebJS será undefined)
+          const isWWebJSInjected = await (this.client as any).pupPage.evaluate(() => {
+            return typeof window !== "undefined" && (window as any).WWebJS !== undefined;
+          }).catch(() => false);
+          
+          if (!state || state === "CONFLICT" || state === "UNPAIRED" || !isWWebJSInjected) {
+            this.logger.warn(`⚠️ HealthCheck: Estado anómalo detectado (State: ${state}, WWebJS: ${isWWebJSInjected}). Reiniciando...`);
             await this.restart();
           }
         } catch (e) {
@@ -440,6 +445,11 @@ export class BotInstance extends EventEmitter {
       // Resolve the actual contact (phone number) from the chat ID (LID or Phone)
       const contact = await this.client?.getContactById(rawRemote);
       if (!contact) throw new Error(`Contact ${rawRemote} not found.`);
+      
+      // Preferir el número real si está disponible, evita fallos de enrutamiento al intentar enviar a un @lid
+      if (contact.number) {
+        return `${contact.number}@c.us`;
+      }
       return this.normalizeToContactId(contact.id._serialized);
     } catch (e) {
       // Fallback to chat ID if contact resolution fails

@@ -1009,7 +1009,7 @@ router.get('/bots/:id/groups', async (req, res) => {
       // Bot is live — fetch groups directly from WhatsApp client and sync to Firestore
       const chats = await instance.getChats();
       const groups = chats.filter((c: any) => c.isGroup).map((c: any) => ({
-        id: c.id._serialized, name: c.name, participantCount: c.participants?.length ?? 0
+        id: c.id._serialized, name: c.name || "Sin nombre", participantCount: c.participants?.length ?? 0
       }));
 
       // Sync to Firestore (fire-and-forget)
