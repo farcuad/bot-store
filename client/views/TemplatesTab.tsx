@@ -121,6 +121,7 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [generatingText, setGeneratingText] = useState(false);
+  const [aiPreview, setAiPreview] = useState<string | null>(null);
 
   const [broadcasts, setBroadcasts] = useState<BroadcastRecord[]>([]);
   const [loadingBroadcasts, setLoadingBroadcasts] = useState(true);
@@ -234,20 +235,21 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
   };
 
   const generateWithAI = async () => {
-    if (!tName.trim()) {
-      fire({ title: 'Falta el nombre', text: 'Escribe el nombre de la plantilla primero para que la IA tenga contexto.', icon: 'warning' });
+    if (!tText.trim()) {
+      fire({ title: 'Falta la descripción', text: 'Escribe una descripción del mensaje primero para que la IA pueda mejorarla.', icon: 'warning' });
       return;
     }
+    setAiPreview(null);
     setGeneratingText(true);
     try {
       const headers = await getHeaders();
       const res = await axios.post(
         `${API_URL}/api/saas/bots/${botNumber}/templates/generate-ai`,
-        { name: tName.trim() },
+        { description: tText.trim(), name: tName.trim() },
         { headers }
       );
       if (res.data.ok) {
-        setTText(res.data.text);
+        setAiPreview(res.data.text); // show preview, don't replace yet
       } else {
         fire({ title: 'Error de IA', text: res.data.error, icon: 'error' });
       }
@@ -257,6 +259,12 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
       setGeneratingText(false);
     }
   };
+
+  const acceptAiPreview = () => {
+    if (aiPreview) { setTText(aiPreview); setAiPreview(null); }
+  };
+
+  const discardAiPreview = () => setAiPreview(null);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -585,8 +593,8 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
                   <button
                     type="button"
                     onClick={generateWithAI}
-                    disabled={generatingText || !tName.trim()}
-                    title={!tName.trim() ? 'Escribe el nombre primero' : 'Generar mensaje con IA'}
+                    disabled={generatingText || !tText.trim()}
+                    title={!tText.trim() ? 'Escribe tu mensaje primero para que la IA lo mejore' : 'Mejorar descripción con IA'}
                     className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-violet-500/10 text-violet-400 border border-violet-500/20 hover:bg-violet-500/20 hover:text-violet-300 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {generatingText ? (
@@ -598,11 +606,40 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
                 </div>
                 <textarea
                   value={tText}
-                  onChange={e => setTText(e.target.value)}
-                  placeholder="Escribe el mensaje o genera uno con IA…"
+                  onChange={e => { setTText(e.target.value); setAiPreview(null); }}
+                  placeholder="Escribe aquí tu mensaje y luego usa ✨ Generar con IA para mejorarlo…"
                   rows={5}
                   className="w-full bg-black/30 border border-white/5 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-[#25d366] focus:ring-1 focus:ring-[#25d366] transition-all resize-none"
                 />
+
+                {/* AI Preview */}
+                {aiPreview && (
+                  <div className="mt-3 rounded-xl border border-violet-500/30 bg-violet-500/5 overflow-hidden">
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-violet-500/20">
+                      <span className="text-xs font-semibold text-violet-400 flex items-center gap-1.5">
+                        ✨ Sugerencia de la IA — ¿te gusta?
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap px-3 py-3">{aiPreview}</p>
+                    <div className="flex gap-2 px-3 pb-3">
+                      <button
+                        type="button"
+                        onClick={acceptAiPreview}
+                        className="flex-1 py-2 rounded-lg bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 text-xs font-semibold transition-all border border-violet-500/30"
+                      >
+                        ✅ Usar este texto
+                      </button>
+                      <button
+                        type="button"
+                        onClick={discardAiPreview}
+                        className="flex-1 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 text-xs font-semibold transition-all border border-white/10"
+                      >
+                        ✕ Descartar
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <p className="text-[11px] text-gray-600 mt-1.5">
                   Tip: usa <span className="font-mono text-gray-500">*negrita*</span>,{' '}
                   <span className="font-mono text-gray-500">_cursiva_</span> y emojis — formato nativo WhatsApp 🚀

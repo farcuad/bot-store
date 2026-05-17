@@ -244,7 +244,7 @@ function Hero() {
 
             <div className="flex flex-col sm:flex-row justify-center lg:justify-start gap-4 mb-10">
               <a
-                href="https://wa.me/584127575904"
+                href="/login"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center gap-2.5 bg-[#25d366] hover:bg-[#20c55d] text-black font-bold text-base px-8 py-4 rounded-xl transition-all duration-200 shadow-xl shadow-[#25d366]/30 cursor-pointer"
@@ -630,14 +630,14 @@ function Pricing() {
   const plans = [
     {
       name: "Basic",
-      price: "15",
+      price: "29",
       description: "Ideal para emprendedores que inician su automatización.",
       features: [
         "1 Bot de WhatsApp",
         "IA Conversacional Básica",
         "Base de Conocimiento",
         "Estadísticas de Uso",
-        "Soporte por Ticket"
+        "Soporte por Whatsapp"
       ],
       popular: false,
       buttonText: "Empezar ahora",
@@ -646,7 +646,7 @@ function Pricing() {
     },
     {
       name: "Pro",
-      price: "29",
+      price: "45",
       description: "La solución completa para negocios en crecimiento.",
       features: [
         "1 Bot de WhatsApp",
@@ -663,7 +663,7 @@ function Pricing() {
     },
     {
       name: "Premium",
-      price: "39",
+      price: "59",
       description: "Para empresas que necesitan máxima potencia y escala.",
       features: [
         "Hasta 2 Bots de WhatsApp",
@@ -708,8 +708,8 @@ function Pricing() {
             <div
               key={plan.name}
               className={`group relative flex flex-col p-10 rounded-[40px] border transition-all duration-500 hover:scale-[1.02] ${plan.popular
-                  ? "bg-linear-to-b from-[#0f172a] to-[#080810] border-[#25d366]/40 shadow-[0_0_50px_-12px_rgba(37,211,102,0.15)] ring-1 ring-[#25d366]/20"
-                  : "bg-[#0d0d1a]/50 backdrop-blur-xl border-white/5"
+                ? "bg-linear-to-b from-[#0f172a] to-[#080810] border-[#25d366]/40 shadow-[0_0_50px_-12px_rgba(37,211,102,0.15)] ring-1 ring-[#25d366]/20"
+                : "bg-[#0d0d1a]/50 backdrop-blur-xl border-white/5"
                 }`}
             >
               {plan.popular && (
@@ -754,8 +754,8 @@ function Pricing() {
                 target="_blank"
                 rel="noopener noreferrer"
                 className={`group/btn relative overflow-hidden w-full py-5 px-8 rounded-2xl font-black text-sm uppercase tracking-widest text-center transition-all duration-300 ${plan.popular
-                    ? "bg-[#25d366] text-black hover:shadow-[0_0_30px_rgba(37,211,102,0.4)]"
-                    : "bg-white/5 text-white border border-white/10 hover:bg-white/10"
+                  ? "bg-[#25d366] text-black hover:shadow-[0_0_30px_rgba(37,211,102,0.4)]"
+                  : "bg-white/5 text-white border border-white/10 hover:bg-white/10"
                   }`}
               >
                 <span className="relative z-10">{plan.buttonText}</span>

@@ -893,10 +893,10 @@ router.get('/bots/:id/templates', async (req, res) => {
 // ⚠️ Must be declared BEFORE POST /bots/:id/templates so Express doesn't treat 'generate-ai' as a :tid
 router.post('/bots/:id/templates/generate-ai', async (req, res) => {
   const id = req.params.id as string;
-  const { name } = req.body as { name?: string };
+  const { description, name } = req.body as { description?: string; name?: string };
 
-  if (!name || typeof name !== 'string' || !name.trim()) {
-    return fail(res, 400, 'Se requiere el nombre de la plantilla.');
+  if (!description || typeof description !== 'string' || !description.trim()) {
+    return fail(res, 400, 'Se requiere la descripción del mensaje a mejorar.');
   }
 
   try {
@@ -906,24 +906,25 @@ router.post('/bots/:id/templates/generate-ai', async (req, res) => {
 
     const { llamarDeepseek } = await import('../config/deepseek.js');
 
+    const contextHint = name?.trim() ? ` La plantilla se llama "${name.trim()}".` : '';
+
     const messages = [
       {
         role: 'system',
         content: `Eres un experto en marketing digital y comunicación por WhatsApp.
-Genera mensajes promocionales atractivos usando el formato nativo de WhatsApp:
+Tu tarea es MEJORAR y ENRIQUECER un mensaje que el usuario ya redactó, manteniendo su idea y propósito original pero haciéndolo más atractivo, persuasivo y profesional.
+Usa el formato nativo de WhatsApp:
 - Usa *texto* para negrita (NO uses ** de markdown, solo un asterisco por lado)
 - Usa _texto_ para cursiva
-- Usa emojis relevantes para hacer el mensaje más dinámico y cercano
+- Agrega emojis relevantes para hacer el mensaje más dinámico y cercano
 - Mantén un tono amigable, cercano y profesional en español
 - El mensaje debe ser conciso pero persuasivo (máximo 250 palabras)
-- Incluye un llamado a la acción claro al final
+- Incluye un llamado a la acción claro al final si el original no lo tiene
 - NO uses markdown como ##, **, o ---. Solo usa el formato nativo de WhatsApp: *negrita*, _cursiva_`,
       },
       {
         role: 'user',
-        content: `Genera un mensaje de WhatsApp para una plantilla llamada: "${name.trim()}".
-El mensaje debe estar listo para ser enviado a clientes por WhatsApp, usando formato WhatsApp (*negrita*, _cursiva_, emojis).
-Responde ÚNICAMENTE con el texto del mensaje, sin títulos, sin explicaciones adicionales, sin comillas envolventes.`,
+        content: `Mejora el siguiente mensaje de WhatsApp que escribí.${contextHint}\n\nMensaje original:\n${description.trim()}\n\nDevuelve ÚNICAMENTE el mensaje mejorado, listo para enviar por WhatsApp, sin títulos, sin explicaciones, sin comillas envolventes.`,
       },
     ];
 
