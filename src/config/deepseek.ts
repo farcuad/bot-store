@@ -11,7 +11,7 @@ if (!DEEP_SEEK_API_KEY) {
 } else {
   console.log("✅ DEEPSEEK_API_KEY cargada correctamente");
 }
-
+/* 
 export const tools = [
   {
     type: "function",
@@ -67,19 +67,26 @@ export const tools = [
       },
     },
   },
-];
+]; */
 
-export const llamarDeepseek = async (messages: any[], retries = 2): Promise<any> => {
+
+export const llamarDeepseek = async (messages: any[], retries = 2, customTools?: any[]): Promise<any> => {
   let lastError: any;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
+      const payload: any = {
+        model: "deepseek-chat",
+        messages,
+      };
+
+      if (customTools && customTools.length > 0) {
+        payload.tools = customTools;
+      }
+
       const response = await axios.post(
         "https://api.deepseek.com/chat/completions",
-        {
-          model: "deepseek-chat",
-          messages,
-        },
+        payload,
         {
           headers: {
             "Content-Type": "application/json",

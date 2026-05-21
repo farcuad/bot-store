@@ -33,6 +33,7 @@ export interface BotPublicState {
   timezone?: string | undefined;
   isAutoResponseEnabled?: boolean;
   debugEnabled?: boolean;
+  muevelappMcpEnabled?: boolean;
 }
 
 class BotManager {
@@ -261,6 +262,7 @@ class BotManager {
       const botData = botDoc.data();
       const isAutoResponseEnabled = botData?.isAutoResponseEnabled ?? true;
       const debugEnabled = botData?.debugEnabled ?? false;
+      const muevelappMcpEnabled = botData?.muevelappMcpEnabled ?? false;
 
       const state: BotPublicState = {
         botId: doc.id,
@@ -274,6 +276,7 @@ class BotManager {
         timezone: record.timezone,
         isAutoResponseEnabled,
         debugEnabled,
+        muevelappMcpEnabled,
       };
       if (record.clientKey !== undefined) {
         state.clientKey = record.clientKey;
@@ -296,6 +299,7 @@ class BotManager {
     const botData = botDoc.data();
     const isAutoResponseEnabled = botData?.isAutoResponseEnabled ?? true;
     const debugEnabled = botData?.debugEnabled ?? false;
+    const muevelappMcpEnabled = botData?.muevelappMcpEnabled ?? false;
 
     const state: BotPublicState = {
       botId: record.botId,
@@ -309,6 +313,7 @@ class BotManager {
       timezone: record.timezone,
       isAutoResponseEnabled,
       debugEnabled,
+      muevelappMcpEnabled,
     };
     if (record.clientKey !== undefined) {
       state.clientKey = record.clientKey;
