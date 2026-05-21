@@ -315,18 +315,12 @@ export class BotInstance extends EventEmitter {
   }
 
   async sendMessage(to: string, message: string): Promise<void> {
-    if (!this.client || this.state.status !== "ready") {
-      throw new Error(`Bot ${this.botId} is not ready.`);
-    }
     const chatId = to.includes("@") ? to : `${to.replace(/\D/g, "")}@c.us`;
     this.addRecentSent(message.trim());
-    await this.client.sendMessage(chatId, message);
+    await this.safeSendMessage(chatId, message, undefined, true);
   }
 
   async sendImage(to: string, source: string, caption?: string): Promise<void> {
-    if (!this.client || this.state.status !== "ready") {
-      throw new Error(`Bot ${this.botId} is not ready.`);
-    }
     const chatId = to.includes("@") ? to : `${to.replace(/\D/g, "")}@c.us`;
     this.addRecentMediaSent(chatId);
     if (caption) this.addRecentSent(caption.trim());
@@ -337,7 +331,7 @@ export class BotInstance extends EventEmitter {
       media = pkg.MessageMedia.fromFilePath(source);
     }
     const options = caption ? { caption } : {};
-    await this.client.sendMessage(chatId, media, options);
+    await this.safeSendMessage(chatId, media, options, true);
   }
 
   // ── Generic chat methods (contacts + groups) ────────────────────────────────
@@ -346,17 +340,13 @@ export class BotInstance extends EventEmitter {
    * Send a text message to any pre-normalized chatId (@c.us or @g.us).
    */
   async sendMessageToChat(chatId: string, message: string): Promise<void> {
-    if (!this.client) {
-      throw new Error(`Bot ${this.botId} is not connected.`);
-    }
-    
     // Re-aplicar parche si el destino es un estado
     if (chatId === "status@broadcast") {
       await this._patchStatusCheck();
     }
 
     this.addRecentSent(message.trim());
-    await this.client.sendMessage(chatId, message);
+    await this.safeSendMessage(chatId, message, undefined, true);
   }
 
   /**
@@ -367,10 +357,6 @@ export class BotInstance extends EventEmitter {
     source: string,
     caption?: string,
   ): Promise<void> {
-    if (!this.client) {
-      throw new Error(`Bot ${this.botId} is not connected.`);
-    }
-
     // Re-aplicar parche si el destino es un estado
     if (chatId === "status@broadcast") {
       await this._patchStatusCheck();
@@ -385,7 +371,7 @@ export class BotInstance extends EventEmitter {
       media = pkg.MessageMedia.fromFilePath(source);
     }
     const options = caption ? { caption } : {};
-    await this.client.sendMessage(chatId, media, options);
+    await this.safeSendMessage(chatId, media, options, true);
   }
 
   /**
@@ -434,6 +420,83 @@ export class BotInstance extends EventEmitter {
     // Default to @c.us for phone numbers
     const number = withoutDevice.split("@")[0];
     return `${number}@c.us`;
+  }
+
+  private checkClientState(): void {
+    if (!this.client) {
+      throw new Error(`WhatsApp client is not initialized for bot ${this.botId}.`);
+    }
+    if (this.state.status !== "ready") {
+      throw new Error(`WhatsApp client is not ready (current status: ${this.state.status}) for bot ${this.botId}.`);
+    }
+    if (!this.client.info || !this.client.info.wid) {
+      throw new Error(`WhatsApp client info is not available for bot ${this.botId}.`);
+    }
+  }
+
+  private async resolveToCanonicalContactId(id: string): Promise<string> {
+    const normalized = this.normalizeToContactId(id);
+    if (normalized.includes("@lid")) {
+      try {
+        if (this.client && this.state.status === "ready") {
+          const contact = await this.client.getContactById(normalized);
+          if (contact && contact.number) {
+            const canonical = `${contact.number}@c.us`;
+            this.logger.log(`🔄 Resolví @lid ${normalized} a @c.us canonical ${canonical}`);
+            return canonical;
+          }
+        }
+      } catch (e: any) {
+        this.logger.warn(`⚠️ No se pudo resolver @lid ${normalized} a @c.us: ${e.message || e}`);
+      }
+    }
+    return normalized;
+  }
+
+  private async safeSendMessage(
+    to: string,
+    content: string | pkg.MessageMedia,
+    options?: any,
+    shouldThrow = false,
+    retryCount = 0
+  ): Promise<any> {
+    const maxRetries = 2;
+    const baseDelayMs = 1000;
+
+    try {
+      // 1. Verificar estado del cliente
+      this.checkClientState();
+
+      // 2. Limpieza e intento de resolución de ID (@lid -> @c.us)
+      const resolvedTo = await this.resolveToCanonicalContactId(to);
+
+      // 3. Enviar el mensaje
+      if (!this.client) {
+        throw new Error("Client is null after checkState");
+      }
+      return await this.client.sendMessage(resolvedTo, content, options);
+    } catch (error: any) {
+      const targetId = to;
+      this.logger.error(
+        `❌ Error al enviar mensaje a ${targetId} (intento ${retryCount + 1}/${maxRetries + 1}) para bot ${this.botId}: ${error.message || error}`,
+        error
+      );
+
+      if (retryCount < maxRetries) {
+        const delay = baseDelayMs * Math.pow(2, retryCount);
+        this.logger.log(`🔄 Reintentando envío a ${targetId} en ${delay}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        return this.safeSendMessage(to, content, options, shouldThrow, retryCount + 1);
+      } else {
+        this.logger.error(
+          `💥 Todos los intentos de envío fallaron para ${targetId} en bot ${this.botId}.`
+        );
+        if (shouldThrow) {
+          throw error;
+        }
+        return null;
+      }
+    }
   }
 
   private async getCanonicalId(msg: any): Promise<string> {
@@ -841,10 +904,17 @@ export class BotInstance extends EventEmitter {
       session.human_since = nowInSeconds;
       await this.sessionMgr.saveSession(from, session);
       const phoneNumber = from.replace(/\D/g, "").slice(0, 12);
-      await this.client?.sendMessage(
-        this.client.info.wid._serialized,
-        `📢 Un humano debe intervenir con ${nombre} (${phoneNumber})!`,
-      );
+      const wid = this.client?.info?.wid?._serialized;
+      if (wid) {
+        await this.safeSendMessage(
+          wid,
+          `📢 Un humano debe intervenir con ${nombre} (${phoneNumber})!`,
+          undefined,
+          false
+        );
+      } else {
+        this.logger.error(`❌ No se pudo enviar alerta de intervención humana: client.info.wid no disponible para bot ${this.botId}`);
+      }
     }
 
     this.statsMgr.incrementarMensajesRespondidos();
@@ -879,9 +949,7 @@ export class BotInstance extends EventEmitter {
 
     if (respuesta) {
       this.addRecentSent(respuesta);
-      const safeFrom = this.normalizeToContactId(from);
-      // this.logger.log(`📤 Enviando respuesta de texto a ${from}: ${respuesta}`);
-      await this.client?.sendMessage(safeFrom, respuesta);
+      await this.safeSendMessage(from, respuesta, undefined, false);
     }
 
     // Send images one by one if there are any
@@ -890,7 +958,7 @@ export class BotInstance extends EventEmitter {
         const safeFrom = this.normalizeToContactId(from);
         this.addRecentMediaSent(safeFrom);
         const media = await this._fetchMediaFromUrl(url);
-        await this.client?.sendMessage(safeFrom, media);
+        await this.safeSendMessage(from, media, undefined, false);
       } catch (err: any) {
         this.logger.error(`Advertencia: No se pudo enviar la imagen extraída. URL: ${url} - Motivo: ${err.message || 'Error desconocido'}`);
       }

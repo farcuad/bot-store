@@ -1084,9 +1084,12 @@ router.post('/bots/:id/broadcasts', async (req, res) => {
       broadcastScheduler.executeBroadcast(doc as any).catch((e: any) => console.error('broadcast err:', e));
       return ok(res, { id: ref.id, status: 'sending' });
     } else {
-      const nextRun = calcNextRun(schedule);
-      if (!nextRun) return fail(res, 400, 'La programación no produce ningún envío futuro válido');
-      broadcastScheduler.schedule(doc as any);
+      let nextRun = calcNextRun(schedule);
+      if (!nextRun) {
+        // Fallback grace si por clock drift o zona horaria la fecha ya pasó en el servidor
+        nextRun = new Date();
+      }
+      broadcastScheduler.schedule({ ...doc, schedule: { ...schedule, datetime: nextRun.toISOString() } } as any);
       return ok(res, { id: ref.id, status: 'scheduled', nextRun: nextRun.toISOString() });
     }
   } catch (e: any) { return fail(res, 500, e.message); }
