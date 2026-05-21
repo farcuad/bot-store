@@ -95,7 +95,7 @@ interface ApiLog {
   timestamp: any;
 }
 
-type Tab = 'stats' | 'respuestas' | 'conversaciones' | 'no_ent' | 'logs' | 'api_logs' | 'plantillas' | 'notificaciones';
+type Tab = 'stats' | 'respuestas' | 'conversaciones' | 'no_ent' | 'logs' | 'api_logs' | 'plantillas' | 'notificaciones' | 'mcp';
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'stats',           label: 'Métricas',        icon: Activity },
@@ -103,9 +103,10 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'conversaciones',  label: 'Conversaciones',  icon: MessageSquare },
   { id: 'no_ent',          label: 'No Entendidos',   icon: AlertCircle },
   { id: 'notificaciones',  label: 'Notificaciones',  icon: Bell },
+  { id: 'plantillas',      label: 'Plantillas',      icon: FileText },
   { id: 'logs',            label: 'Logs Sistema',    icon: ScrollText },
   { id: 'api_logs',        label: 'Envíos API',      icon: Activity },
-  { id: 'plantillas',      label: 'Plantillas',      icon: FileText },
+  { id: 'mcp',             label: 'Integraciones MCP', icon: Code },
 ];
 
 const API_URL = import.meta.env.VITE_API_URL || '';
@@ -161,6 +162,9 @@ export default function BotAdmin() {
   const [debugEnabled, setDebugEnabled] = useState(false);
   const [togglingDebug, setTogglingDebug] = useState(false);
 
+  const [mcpMuevelappEnabled, setMcpMuevelappEnabled] = useState(false);
+  const [togglingMcp, setTogglingMcp] = useState(false);
+
   // Plan / subscription state
   const [canUseTemplates, setCanUseTemplates] = useState(true); // optimistic default
   const [canUseApi, setCanUseApi]             = useState(true); 
@@ -176,7 +180,7 @@ export default function BotAdmin() {
   const loadBotInfo = async () => {
     try {
       const token = await user?.getIdToken();
-      const res = await axios.get<ApiResponse<{ nombre: string; timezone?: string; clientKey?: string; isAutoResponseEnabled?: boolean; debugEnabled?: boolean }>>(`${API_URL}/api/saas/bots/${botNumber}`, {
+      const res = await axios.get<ApiResponse<{ nombre: string; timezone?: string; clientKey?: string; isAutoResponseEnabled?: boolean; debugEnabled?: boolean; muevelappMcpEnabled?: boolean }>>(`${API_URL}/api/saas/bots/${botNumber}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.data.ok) {
@@ -190,6 +194,7 @@ export default function BotAdmin() {
         }
         setAutoResponseEnabled(res.data.data.isAutoResponseEnabled !== false);
         setDebugEnabled(!!res.data.data.debugEnabled);
+        setMcpMuevelappEnabled(!!res.data.data.muevelappMcpEnabled);
       }
     } catch (e) {
       console.error("Error loading bot meta:", e);
@@ -251,6 +256,35 @@ export default function BotAdmin() {
       });
     } finally {
       setTogglingDebug(false);
+    }
+  };
+
+  const toggleMcpMuevelapp = async () => {
+    setTogglingMcp(true);
+    try {
+      const token = await user?.getIdToken();
+      const nextValue = !mcpMuevelappEnabled;
+      const res = await axios.patch<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/mcp-muevelapp`, 
+        { enabled: nextValue },
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      if (res.data.ok) {
+        setMcpMuevelappEnabled(nextValue);
+        fire({
+          title: nextValue ? 'MCP Muevelapp Activado' : 'MCP Muevelapp Desactivado',
+          text: nextValue ? 'El bot ahora puede validar usuarios y crear órdenes.' : 'El bot ya no tiene acceso a la API de Muevelapp.',
+          icon: 'success',
+          timer: 3000
+        });
+      }
+    } catch (e: any) {
+      fire({
+        title: 'Error',
+        text: "Error al cambiar MCP: " + (e.response?.data?.error || e.message),
+        icon: 'error'
+      });
+    } finally {
+      setTogglingMcp(false);
     }
   };
 
@@ -970,7 +1004,7 @@ export default function BotAdmin() {
 
       {/* ── Horizontal Tab Bar ─────────────────────────────── */}
       <div className="flex gap-1 bg-[#12121a] border border-white/5 rounded-2xl p-1.5 mb-6 overflow-x-auto">
-        {TABS.map(({ id, label, icon: Icon }) => (
+        {TABS.filter(tab => tab.id !== 'mcp' || isAdmin).map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             onClick={() => setActiveTab(id)}
@@ -1602,6 +1636,58 @@ export default function BotAdmin() {
           {/* PLANTILLAS */}
           {activeTab === 'plantillas' && (
             <TemplatesTab botNumber={botNumber} getHeaders={getHeaders} canUseTemplates={canUseTemplates || isAdmin} />
+          )}
+
+          {/* INTEGRACIONES MCP */}
+          {activeTab === 'mcp' && isAdmin && (
+            <div className="space-y-6">
+              <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
+                <div>
+                  <h3 className="text-xl font-bold">Integraciones MCP</h3>
+                  <p className="text-gray-400 text-sm mt-1">Configura las integraciones del protocolo Model Context para que la IA utilice herramientas externas.</p>
+                </div>
+              </div>
+
+              <div className="bg-[#12121a] border border-white/5 rounded-2xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-3 rounded-xl flex items-center justify-center ${
+                      mcpMuevelappEnabled ? 'bg-[#25d366]/20 text-[#25d366]' : 'bg-gray-800 text-gray-400'
+                    }`}>
+                      <Code className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-white font-medium text-lg">Muevelapp (Core API)</h4>
+                      <p className="text-gray-400 text-sm">Permite validar usuarios, registrarlos y crear órdenes directamente desde el chat.</p>
+                    </div>
+                  </div>
+                  <div>
+                    <button
+                      onClick={toggleMcpMuevelapp}
+                      disabled={togglingMcp}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                        mcpMuevelappEnabled ? 'bg-[#25d366]' : 'bg-gray-600'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          mcpMuevelappEnabled ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 mt-6">
+                  <h5 className="text-blue-400 font-semibold text-sm mb-2">Herramientas expuestas a la IA:</h5>
+                  <ul className="list-disc list-inside text-gray-300 text-sm space-y-1">
+                    <li><code className="text-blue-300 bg-blue-900/30 px-1 py-0.5 rounded">validar_usuario</code> - Chequea si el teléfono está en Firebase.</li>
+                    <li><code className="text-blue-300 bg-blue-900/30 px-1 py-0.5 rounded">crear_usuario</code> - Registra un usuario nuevo en Muevelapp.</li>
+                    <li><code className="text-blue-300 bg-blue-900/30 px-1 py-0.5 rounded">crear_orden_link</code> - Procesa un link de Google Maps para cotizar el viaje.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
           )}
 
         </div>

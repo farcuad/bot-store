@@ -37,6 +37,7 @@ export function createConfigService(botId: string) {
     timezone?: string | undefined;
     motivosNotificacion?: string[] | undefined;
     debugEnabled?: boolean;
+    muevelappMcpEnabled?: boolean;
   }> {
     const doc = await botRef().get();
     const data = doc.data();
@@ -50,6 +51,7 @@ export function createConfigService(botId: string) {
         ? (data!.motivosNotificacion as string[])
         : undefined,
       debugEnabled: !!data?.debugEnabled,
+      muevelappMcpEnabled: !!data?.muevelappMcpEnabled,
     };
   }
 
@@ -72,7 +74,7 @@ export function createConfigService(botId: string) {
   async function loadConfig(): Promise<void> {
     try {
       const [
-        { nombre, activo, isAutoResponseEnabled, prompt_ia, timezone, motivosNotificacion, debugEnabled },
+        { nombre, activo, isAutoResponseEnabled, prompt_ia, timezone, motivosNotificacion, debugEnabled, muevelappMcpEnabled },
         respuestas_info,
       ] = await Promise.all([
         fetchNombreYActivo(),
@@ -88,6 +90,7 @@ export function createConfigService(botId: string) {
         timezone: timezone || "America/Caracas",
         motivosNotificacion: motivosNotificacion ?? [],
         debugEnabled: debugEnabled ?? false,
+        muevelappMcpEnabled: muevelappMcpEnabled ?? false,
       } as any;
       console.log(
         new Date().toLocaleString(),

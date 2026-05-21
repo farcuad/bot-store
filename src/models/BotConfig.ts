@@ -46,6 +46,8 @@ export interface BotConfig {
   activo: boolean;
   /** Si false, el bot no responde automáticamente a mensajes entrantes. */
   isAutoResponseEnabled: boolean;
+  /** Activar Integración MCP de Muevelapp */
+  muevelappMcpEnabled?: boolean;
   /** Prompt base para la IA. Si no existe, se usa uno por defecto. */
   prompt_ia?: string | undefined;
   /** Zona horaria configurada para el bot */

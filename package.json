@@ -16,7 +16,8 @@
     "deploy": "npm run build && npm start",
     "start": "node dist/index.js",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "mcp:muevelapp": "tsx src/mcp/MuevelappServer.ts"
   },
   "nodemonConfig": {
     "ignore": [
@@ -40,6 +41,7 @@
     "@fortawesome/free-solid-svg-icons": "^7.2.0",
     "@fortawesome/react-fontawesome": "^3.2.0",
     "@google/generative-ai": "^0.24.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.2.2",
     "@types/qrcode": "^1.5.6",

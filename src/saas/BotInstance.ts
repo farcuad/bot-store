@@ -282,25 +282,32 @@ export class BotInstance extends EventEmitter {
     this.healthCheckInterval = setInterval(async () => {
       if (this.state.status === "ready" && this.client) {
         try {
-          // Si no responde en 30 segundos, getState lanzará timeout o error
-          const statePromise = this.client.getState();
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("Timeout obteniendo estado")), 30000)
+          const timeoutPromise = (ms: number, msg: string) => new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error(msg)), ms)
           );
-          
-          const state = await Promise.race([statePromise, timeoutPromise]) as string;
+
+          // Si no responde en 30 segundos, getState lanzará timeout o error
+          const state = await Promise.race([
+            this.client.getState(),
+            timeoutPromise(30000, "Timeout obteniendo estado")
+          ]) as string;
           
           // Verificar también que WWebJS siga inyectado (si la página se recargó sola, window.WWebJS será undefined)
-          const isWWebJSInjected = await (this.client as any).pupPage.evaluate(() => {
+          const evaluatePromise = (this.client as any).pupPage.evaluate(() => {
             return typeof window !== "undefined" && (window as any).WWebJS !== undefined;
-          }).catch(() => false);
+          });
+
+          const isWWebJSInjected = await Promise.race([
+            evaluatePromise,
+            timeoutPromise(30000, "Timeout verificando WWebJS inyectado")
+          ]).catch(() => false);
           
           if (!state || state === "CONFLICT" || state === "UNPAIRED" || !isWWebJSInjected) {
             this.logger.warn(`⚠️ HealthCheck: Estado anómalo detectado (State: ${state}, WWebJS: ${isWWebJSInjected}). Reiniciando...`);
             await this.restart();
           }
-        } catch (e) {
-          this.logger.error(`❌ HealthCheck falló (posible cuelgue de Puppeteer):`, e);
+        } catch (e: any) {
+          this.logger.error(`❌ HealthCheck falló (posible cuelgue de Puppeteer): ${e.message || e}`);
           await this.restart();
         }
       }
@@ -780,6 +787,8 @@ export class BotInstance extends EventEmitter {
         config.prompt_ia,
         config.timezone,
         motivosNotificacion,
+        config.muevelappMcpEnabled,
+        realFrom.split('@')[0]
       );
 
       // 6. Verificar estado humano ANTES de finalizar (puede haber cambiado durante la generación IA)
@@ -829,6 +838,23 @@ export class BotInstance extends EventEmitter {
     session: any,
     sys: (k: string) => string,
   ): Promise<string | null> {
+    // 📍 Detectar y procesar ubicación enviada por WhatsApp (Soporte robusto y resiliente)
+    if (msg.type === "location" || msg.type === "liveLocation" || msg.location || msg._data?.lat) {
+      console.log(`[📍 DETECTOR UBICACIÓN] msg.type: "${msg.type}", hasMedia: ${msg.hasMedia}`);
+      console.log(`[📍 DETECTOR UBICACIÓN] msg.location:`, msg.location);
+      console.log(`[📍 DETECTOR UBICACIÓN] msg._data:`, msg._data ? JSON.stringify(msg._data).substring(0, 500) : "undefined");
+
+      const lat = msg.location?.latitude || msg._data?.lat || msg.lat;
+      const lng = msg.location?.longitude || msg._data?.lng || msg.lng;
+
+      if (lat && lng) {
+        this.logger.log(`📍 Ubicación de WhatsApp procesada con éxito: Lat: ${lat}, Lng: ${lng}`);
+        return `https://maps.google.com/?q=${lat},${lng}`;
+      } else {
+        this.logger.error(`❌ Mensaje recibido como ubicación pero no se pudieron extraer las coordenadas lat/lng.`);
+      }
+    }
+
     const isMedia =
       msg.hasMedia ||
       ["image", "video", "audio", "ptt", "sticker", "document", "gif"].includes(
