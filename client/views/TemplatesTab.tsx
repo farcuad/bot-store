@@ -164,6 +164,7 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
   const [sendToStatus, setSendToStatus] = useState(false);
   const [groupsError, setGroupsError] = useState('');
   const [contactSearch, setContactSearch] = useState('');
+  const [groupSearch, setGroupSearch] = useState('');
 
   // ── Load data
   const loadTemplates = useCallback(async () => {
@@ -332,6 +333,7 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
     setSchedule({ type: 'now' });
     setSendToStatus(false);
     setContactSearch('');
+    setGroupSearch('');
     setGroupsError('');
     setLoadingRecipients(true);
     try {
@@ -362,10 +364,6 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
   // ── Toggle selection helpers
   const toggleContact = (id: string) => setSelectedContacts(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const toggleGroup = (id: string) => setSelectedGroups(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const toggleAll = <T,>(items: T[], getId: (i: T) => string, selected: Set<string>, setSelected: (s: Set<string>) => void) => {
-    if (selected.size === items.length) setSelected(new Set());
-    else setSelected(new Set(items.map(getId)));
-  };
 
   const totalSelected = selectedContacts.size + selectedGroups.size + (sendToStatus ? 1 : 0);
 
@@ -377,6 +375,12 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
     return name.includes(q) || phone.includes(q);
   });
 
+  const filteredGroups = groups.filter(g => {
+    const q = groupSearch.toLowerCase().trim();
+    if (!q) return true;
+    return (g.name || '').toLowerCase().includes(q);
+  });
+
   const allFilteredSelected = filteredContacts.length > 0 && filteredContacts.every(c => selectedContacts.has(c.id));
 
   const toggleAllContacts = () => {
@@ -386,6 +390,20 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
         filteredContacts.forEach(c => next.delete(c.id));
       } else {
         filteredContacts.forEach(c => next.add(c.id));
+      }
+      return next;
+    });
+  };
+
+  const allFilteredGroupsSelected = filteredGroups.length > 0 && filteredGroups.every(g => selectedGroups.has(g.id));
+
+  const toggleAllGroups = () => {
+    setSelectedGroups(prev => {
+      const next = new Set(prev);
+      if (allFilteredGroupsSelected) {
+        filteredGroups.forEach(g => next.delete(g.id));
+      } else {
+        filteredGroups.forEach(g => next.add(g.id));
       }
       return next;
     });
@@ -853,34 +871,49 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
                       )}
                     </div>
                   ) : recipientTab === 'groups' ? (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {groupsError ? (
                         <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 text-xs text-yellow-400">{groupsError}</div>
                       ) : groups.length === 0 ? (
                         <p className="text-center text-gray-600 text-sm py-6">No se encontraron grupos</p>
                       ) : (
                         <>
+                          <div className="relative">
+                            <input
+                              type="text"
+                              placeholder="Buscar grupo por nombre..."
+                              value={groupSearch}
+                              onChange={e => setGroupSearch(e.target.value)}
+                              className="w-full bg-black/30 border border-white/5 rounded-xl pl-10 pr-4 py-2.5 text-white text-xs placeholder-gray-500 focus:outline-none focus:border-[#25d366] transition-all"
+                            />
+                            <Search className="absolute left-3.5 top-3 h-4 w-4 text-gray-500" />
+                          </div>
+
                           <button
-                            onClick={() => toggleAll(groups, g => g.id, selectedGroups, setSelectedGroups)}
+                            onClick={toggleAllGroups}
                             className="flex items-center gap-2 text-xs text-gray-500 hover:text-white transition-colors"
                           >
-                            {selectedGroups.size === groups.length ? <CheckSquare className="h-4 w-4 text-[#25d366]" /> : <Square className="h-4 w-4" />}
-                            {selectedGroups.size === groups.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                            {allFilteredGroupsSelected ? <CheckSquare className="h-4 w-4 text-[#25d366]" /> : <Square className="h-4 w-4" />}
+                            {allFilteredGroupsSelected ? 'Deseleccionar todos' : 'Seleccionar todos'}
                           </button>
-                          <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
-                            {groups.map(g => (
-                              <button
-                                key={g.id}
-                                onClick={() => toggleGroup(g.id)}
-                                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${selectedGroups.has(g.id) ? 'bg-[#25d366]/10 border border-[#25d366]/20' : 'bg-black/20 border border-white/0 hover:border-white/5'}`}
-                              >
-                                {selectedGroups.has(g.id) ? <CheckSquare className="h-4 w-4 text-[#25d366] shrink-0" /> : <Square className="h-4 w-4 text-gray-600 shrink-0" />}
-                                <div className="min-w-0 flex-1">
-                                  <div className="text-sm text-white font-medium truncate">{g.name}</div>
-                                  <div className="text-xs text-gray-500">{g.participantCount} participantes</div>
-                                </div>
-                              </button>
-                            ))}
+                          <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1 scrollbar-thin">
+                            {filteredGroups.length === 0 ? (
+                              <p className="text-center text-gray-600 text-xs py-4">No se encontraron grupos</p>
+                            ) : (
+                              filteredGroups.map(g => (
+                                <button
+                                  key={g.id}
+                                  onClick={() => toggleGroup(g.id)}
+                                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${selectedGroups.has(g.id) ? 'bg-[#25d366]/10 border border-[#25d366]/20' : 'bg-black/20 border border-white/0 hover:border-white/5'}`}
+                                >
+                                  {selectedGroups.has(g.id) ? <CheckSquare className="h-4 w-4 text-[#25d366] shrink-0" /> : <Square className="h-4 w-4 text-gray-600 shrink-0" />}
+                                  <div className="min-w-0 flex-1">
+                                    <div className="text-sm text-white font-medium truncate">{g.name}</div>
+                                    <div className="text-xs text-gray-500">{g.participantCount} participantes</div>
+                                  </div>
+                                </button>
+                              ))
+                            )}
                           </div>
                         </>
                       )}
@@ -961,7 +994,7 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
                       <input
                         type="datetime-local"
                         min={minDateTime}
-                        value={schedule.datetime || ''}
+                        value={schedule.datetime || minDateTime}
                         onChange={e => setSchedule(s => ({ ...s, datetime: e.target.value }))}
                         className="w-full bg-black/30 border border-white/5 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-[#25d366] focus:ring-1 focus:ring-[#25d366] transition-all"
                       />
