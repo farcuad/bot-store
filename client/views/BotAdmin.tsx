@@ -17,11 +17,18 @@ function StatCard({ label, value, isText = false, accent = 'green' }: {
   isText?: boolean;
   accent?: 'green' | 'red';
 }) {
-  const color = accent === 'red' ? 'text-red-400' : 'text-[#25d366]';
+  const isGreen = accent !== 'red';
+  const glowClass = isGreen ? 'shadow-[0_0_20px_rgba(37,211,102,0.07)]' : 'shadow-[0_0_20px_rgba(248,113,113,0.07)]';
+  const textColor = isGreen ? 'text-[#25d366]' : 'text-red-400';
+  const barGradient = isGreen
+    ? 'from-[#25d366] to-[#128c7e]'
+    : 'from-red-500 to-rose-600';
   return (
-    <div className="bg-[#12121a] border border-white/5 rounded-2xl p-6 hover:border-white/10 transition-all">
+    <div className={`relative bg-[#12121a] border border-white/5 rounded-2xl p-6 hover:border-white/10 transition-all overflow-hidden group ${glowClass}`}>
+      {/* subtle top accent bar */}
+      <div className={`absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r ${barGradient} opacity-60 group-hover:opacity-100 transition-opacity`} />
       <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-3">{label}</p>
-      <div className={`font-bold ${isText ? 'text-lg text-gray-300' : `text-3xl ${color}`}`}>{value}</div>
+      <div className={`font-bold ${isText ? 'text-lg text-gray-300 leading-snug' : `text-3xl ${textColor}`}`}>{value}</div>
     </div>
   );
 }
@@ -29,10 +36,10 @@ function StatCard({ label, value, isText = false, accent = 'green' }: {
 function Empty({ icon: Icon, text }: { icon: React.ElementType; text: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 text-gray-500">
-      <div className="bg-white/5 rounded-full p-5 mb-4">
-        <Icon className="h-8 w-8 text-gray-600" />
+      <div className="bg-white/5 border border-white/5 rounded-2xl p-6 mb-4 shadow-lg">
+        <Icon className="h-10 w-10 text-gray-600" />
       </div>
-      <p className="text-sm">{text}</p>
+      <p className="text-sm text-gray-500">{text}</p>
     </div>
   );
 }
@@ -852,38 +859,45 @@ export default function BotAdmin() {
     <div className="max-w-6xl mx-auto space-y-0">
 
       {/* ── Page Header ──────────────────────────────────────── */}
-      <div className="flex flex-col gap-3 mb-6">
+      <div className="flex flex-col gap-4 mb-8">
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-3 flex-wrap">
-              {isEditingName ? (
-                <input
-                  autoFocus
-                  type="text"
-                  value={editNameValue}
-                  onChange={(e) => setEditNameValue(e.target.value)}
-                  onBlur={saveBotName}
-                  onKeyDown={(e) => e.key === 'Enter' ? saveBotName() : e.key === 'Escape' && setIsEditingName(false)}
-                  className="text-xl sm:text-2xl font-bold bg-transparent border-b border-[#25d366] text-white focus:outline-none px-1 py-0 min-w-[200px]"
-                />
-              ) : (
-                <>
-                  <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
-                    {botName || botNumber}
-                  </h1>
-                  <button
-                    onClick={() => setIsEditingName(true)}
-                    className="text-gray-500 hover:text-white transition-colors p-1"
-                    title="Renombrar bot"
-                  >
-                    <Edit2 className="h-4 w-4" />
-                  </button>
-                </>
-              )}
+          <div className="flex items-start gap-4">
+            {/* Bot avatar */}
+            <div className="shrink-0 w-12 h-12 rounded-2xl bg-gradient-to-br from-[#25d366]/30 to-[#128c7e]/20 border border-[#25d366]/20 flex items-center justify-center shadow-lg shadow-[#25d366]/5">
+              <MessageSquare className="h-6 w-6 text-[#25d366]" />
             </div>
-            <div className="flex items-center gap-2 mt-0.5">
-              <p className="text-gray-500 text-xs sm:text-sm font-mono">{botNumber} • Panel de administración</p>
-              <span className="text-gray-500 text-xs sm:text-sm">•</span>
+            <div>
+              <div className="flex items-center gap-3 flex-wrap">
+                {isEditingName ? (
+                  <input
+                    autoFocus
+                    type="text"
+                    value={editNameValue}
+                    onChange={(e) => setEditNameValue(e.target.value)}
+                    onBlur={saveBotName}
+                    onKeyDown={(e) => e.key === 'Enter' ? saveBotName() : e.key === 'Escape' && setIsEditingName(false)}
+                    className="text-xl sm:text-2xl font-bold bg-transparent border-b border-[#25d366] text-white focus:outline-none px-1 py-0 min-w-[200px]"
+                  />
+                ) : (
+                  <>
+                    <h1 className="text-xl sm:text-2xl font-bold text-white">
+                      {botName || botNumber}
+                    </h1>
+                    <button
+                      onClick={() => setIsEditingName(true)}
+                      className="text-gray-600 hover:text-gray-300 transition-colors p-1.5 hover:bg-white/5 rounded-lg"
+                      title="Renombrar bot"
+                    >
+                      <Edit2 className="h-3.5 w-3.5" />
+                    </button>
+                  </>
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-gray-600 text-xs font-mono">{botNumber}</span>
+                <span className="text-gray-700">•</span>
+                <span className="text-[10px] font-semibold text-[#25d366] bg-[#25d366]/10 border border-[#25d366]/20 px-2 py-0.5 rounded-full">Panel de administración</span>
+                <span className="text-gray-700">•</span>
               <select
                 value={botTimezone}
                 onChange={(e) => saveTimezone(e.target.value)}
@@ -913,31 +927,32 @@ export default function BotAdmin() {
                 <option value="America/Montevideo">🇺🇾 Uruguay</option>
                 <option value="America/Caracas">🇻🇪 Venezuela</option>
               </select>
+              </div>
             </div>
           </div>
         </div>
-        {/* Action buttons: scrollable row on mobile */}
+        {/* Action buttons */}
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
           <button
             onClick={toggleAutoResponse}
             disabled={togglingAutoResponse}
-            className={`shrink-0 flex items-center gap-2 text-sm border px-3 py-2 rounded-xl transition-all ${
+            className={`shrink-0 flex items-center gap-1.5 text-xs font-medium border px-3 py-2 rounded-xl transition-all ${
               autoResponseEnabled 
-                ? 'text-[#25d366] bg-[#25d366]/10 border-[#25d366]/20 hover:bg-[#25d366]/20' 
-                : 'text-gray-400 bg-white/5 border-white/10 hover:bg-white/10'
+                ? 'text-[#25d366] bg-[#25d366]/10 border-[#25d366]/20 hover:bg-[#25d366]/20 shadow-sm shadow-[#25d366]/10' 
+                : 'text-gray-500 bg-white/3 border-white/8 hover:bg-white/8 hover:text-gray-300'
             }`}
             title={autoResponseEnabled ? 'Desactivar auto-respuesta (modo silencio)' : 'Activar auto-respuesta'}
           >
             {togglingAutoResponse ? (
-              <RefreshCw className="h-4 w-4 animate-spin" />
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
             ) : autoResponseEnabled ? (
               <>
-                <MessageSquare className="h-4 w-4" />
+                <MessageSquare className="h-3.5 w-3.5" />
                 <span className="whitespace-nowrap">Auto-Respuesta: ON</span>
               </>
             ) : (
               <>
-                <X className="h-4 w-4" />
+                <X className="h-3.5 w-3.5" />
                 <span className="whitespace-nowrap">Auto-Respuesta: OFF</span>
               </>
             )}
@@ -945,76 +960,76 @@ export default function BotAdmin() {
           <button
             onClick={toggleDebug}
             disabled={togglingDebug}
-            className={`shrink-0 flex items-center gap-2 text-sm border px-3 py-2 rounded-xl transition-all ${
+            className={`shrink-0 flex items-center gap-1.5 text-xs font-medium border px-3 py-2 rounded-xl transition-all ${
               debugEnabled 
-                ? 'text-amber-400 bg-amber-400/10 border-amber-400/20 hover:bg-amber-400/20' 
-                : 'text-gray-400 bg-white/5 border-white/10 hover:bg-white/10'
+                ? 'text-amber-400 bg-amber-400/10 border-amber-400/20 hover:bg-amber-400/20 shadow-sm shadow-amber-400/10' 
+                : 'text-gray-500 bg-white/3 border-white/8 hover:bg-white/8 hover:text-gray-300'
             }`}
             title={debugEnabled ? 'Desactivar captura de logs detallados' : 'Activar captura de logs detallados'}
           >
             {togglingDebug ? (
-              <RefreshCw className="h-4 w-4 animate-spin" />
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
             ) : debugEnabled ? (
               <>
-                <Database className="h-4 w-4" />
-                <span className="whitespace-nowrap">Capturar Logs: ON</span>
+                <Database className="h-3.5 w-3.5" />
+                <span className="whitespace-nowrap">Logs: ON</span>
               </>
             ) : (
               <>
-                <Database className="h-4 w-4 opacity-50" />
-                <span className="whitespace-nowrap">Capturar Logs: OFF</span>
+                <Database className="h-3.5 w-3.5 opacity-50" />
+                <span className="whitespace-nowrap">Logs: OFF</span>
               </>
             )}
           </button>
           <button
             onClick={() => { loadBotInfo(); loadData(); }}
-            className="shrink-0 flex items-center gap-2 text-sm text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/5 px-3 py-2 rounded-xl transition-all"
+            className="shrink-0 flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-white bg-white/3 hover:bg-white/8 border border-white/8 px-3 py-2 rounded-xl transition-all"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">Actualizar</span>
           </button>
           <button
             onClick={handleClearSession}
-            className="shrink-0 flex items-center gap-2 text-sm text-orange-400 hover:text-white bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/20 px-3 py-2 rounded-xl transition-all"
+            className="shrink-0 flex items-center gap-1.5 text-xs font-medium text-orange-400 hover:text-white bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/20 px-3 py-2 rounded-xl transition-all"
             title="Elimina la sesión de Chrome para re-escanear el QR sin borrar el bot"
           >
-            <RotateCcw className="h-4 w-4" />
+            <RotateCcw className="h-3.5 w-3.5" />
             <span className="whitespace-nowrap">Limpiar Sesión</span>
           </button>
           <button
             onClick={handleExport}
-            className="shrink-0 flex items-center gap-2 text-sm text-indigo-400 hover:text-white bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 px-3 py-2 rounded-xl transition-all"
+            className="shrink-0 flex items-center gap-1.5 text-xs font-medium text-indigo-400 hover:text-white bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 px-3 py-2 rounded-xl transition-all"
             title="Descarga la configuración del bot como JSON"
           >
-            <Download className="h-4 w-4" />
+            <Download className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Exportar</span>
           </button>
           <input ref={importInputRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
           <button
             onClick={() => importInputRef.current?.click()}
             disabled={importing}
-            className="shrink-0 flex items-center gap-2 text-sm text-emerald-400 hover:text-white bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 px-3 py-2 rounded-xl transition-all disabled:opacity-50"
+            className="shrink-0 flex items-center gap-1.5 text-xs font-medium text-emerald-400 hover:text-white bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 px-3 py-2 rounded-xl transition-all disabled:opacity-50"
             title="Importa configuración desde un JSON exportado"
           >
-            <Upload className="h-4 w-4" />
+            <Upload className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">{importing ? 'Importando…' : 'Importar'}</span>
           </button>
         </div>
       </div>
 
       {/* ── Horizontal Tab Bar ─────────────────────────────── */}
-      <div className="flex gap-1 bg-[#12121a] border border-white/5 rounded-2xl p-1.5 mb-6 overflow-x-auto">
+      <div className="flex gap-1 bg-[#0e0e16] border border-white/5 rounded-2xl p-1.5 mb-6 overflow-x-auto shadow-inner">
         {TABS.filter(tab => tab.id !== 'mcp' || isAdmin).map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             onClick={() => setActiveTab(id)}
-            className={`flex items-center gap-2 shrink-0 sm:flex-1 justify-center px-3 sm:px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+            className={`flex items-center gap-2 shrink-0 sm:flex-1 justify-center px-3 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all ${
               activeTab === id
-                ? 'bg-[#25d366]/10 text-[#25d366] shadow-sm'
-                : 'text-gray-400 hover:text-white hover:bg-white/5'
+                ? 'bg-[#25d366]/12 text-[#25d366] shadow-[0_0_12px_rgba(37,211,102,0.12)] border border-[#25d366]/15'
+                : 'text-gray-500 hover:text-gray-200 hover:bg-white/4 border border-transparent'
             }`}
           >
-            <Icon className="h-4 w-4" />
+            <Icon className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">{label}</span>
           </button>
         ))}
