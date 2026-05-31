@@ -75,9 +75,11 @@ REGLAS CRÍTICAS:
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
-let mcpClientInstance: Client | null = null;
-async function getMcpClient() {
-  if (mcpClientInstance) return mcpClientInstance;
+let muevelappClientInstance: Client | null = null;
+let ordenalappClientInstance: Client | null = null;
+
+async function getMuevelappClient() {
+  if (muevelappClientInstance) return muevelappClientInstance;
 
   const transport = new StdioClientTransport({
     command: "npx",
@@ -85,12 +87,30 @@ async function getMcpClient() {
   });
 
   const client = new Client(
-    { name: "bot-store-client", version: "1.0.0" },
+    { name: "bot-store-client-muevelapp", version: "1.0.0" },
     { capabilities: {} }
   );
 
   await client.connect(transport);
-  mcpClientInstance = client;
+  muevelappClientInstance = client;
+  return client;
+}
+
+async function getOrdenalappClient() {
+  if (ordenalappClientInstance) return ordenalappClientInstance;
+
+  const transport = new StdioClientTransport({
+    command: "npx",
+    args: ["tsx", "src/mcp/OrdenalapServer.ts"],
+  });
+
+  const client = new Client(
+    { name: "bot-store-client-ordenalapp", version: "1.0.0" },
+    { capabilities: {} }
+  );
+
+  await client.connect(transport);
+  ordenalappClientInstance = client;
   return client;
 }
 
@@ -103,7 +123,9 @@ export const generarRespuestaBot = async (
   timezone?: string,
   motivosNotificacion?: string[],
   mcpEnabled?: boolean,
-  telefonoUsuario?: string
+  telefonoUsuario?: string,
+  ordenalappMcpEnabled?: boolean,
+  ordenalappSlug?: string
 ): Promise<string> => {
   try {
     let systemPrompt = buildSystemPrompt(
@@ -115,8 +137,15 @@ export const generarRespuestaBot = async (
     );
 
     if (mcpEnabled) {
-      systemPrompt += `\n\n[SISTEMA MCP ACTIVADO]
-IMPORTANTE: Realiza las llamadas a herramientas de forma inmediata tan pronto tengas los datos, utilizando el loop de ejecución en un solo turno.`;
+      systemPrompt += `\n\n[SISTEMA MCP MUEVELAPP ACTIVADO]
+El bot tiene acceso al sistema de logística/viajes de Muevelapp. Realiza las llamadas a herramientas de forma inmediata tan pronto tengas los datos, utilizando el loop de ejecución en un solo turno.`;
+    }
+
+    if (ordenalappMcpEnabled) {
+      systemPrompt += `\n\n[SISTEMA MCP DE E-COMMERCE ORDENALAPP ACTIVADO]
+El bot tiene acceso al sistema de e-commerce del restaurante/negocio.
+- Cuando utilices las herramientas de OrdenalApp (obtener_catalogo_ecommerce, crear_pedido_ecommerce), debes pasar OBLIGATORIAMENTE el parámetro 'slug' con el valor exacto: "${ordenalappSlug || 'mundoolimpico'}".
+- Puedes obtener el catálogo de productos o crear un pedido llamando a las herramientas correspondientes.`;
     }
 
     if (telefonoUsuario) {
@@ -137,22 +166,41 @@ IMPORTANTE: Realiza las llamadas a herramientas de forma inmediata tan pronto te
     ];
 
     let openaiTools: any[] = [];
-    let mcpClient: Client | null = null;
+    const activeMcpClients: { client: Client; type: 'muevelapp' | 'ordenalapp' }[] = [];
 
     if (mcpEnabled) {
       try {
-        mcpClient = await getMcpClient();
-        const { tools } = await mcpClient.listTools();
-        openaiTools = tools.map(tool => ({
+        const client = await getMuevelappClient();
+        const { tools } = await client.listTools();
+        openaiTools.push(...tools.map(tool => ({
           type: "function",
           function: {
             name: tool.name,
             description: tool.description,
             parameters: tool.inputSchema
           }
-        }));
+        })));
+        activeMcpClients.push({ client, type: 'muevelapp' });
       } catch (e) {
         console.error("Error conectando al MCP de Muevelapp:", e);
+      }
+    }
+
+    if (ordenalappMcpEnabled) {
+      try {
+        const client = await getOrdenalappClient();
+        const { tools } = await client.listTools();
+        openaiTools.push(...tools.map(tool => ({
+          type: "function",
+          function: {
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.inputSchema
+          }
+        })));
+        activeMcpClients.push({ client, type: 'ordenalapp' });
+      } catch (e) {
+        console.error("Error conectando al MCP de Ordenalapp:", e);
       }
     }
 
@@ -160,9 +208,10 @@ IMPORTANTE: Realiza las llamadas a herramientas de forma inmediata tan pronto te
 
     let loopCount = 0;
     const maxLoops = 5;
+    const isAnyMcpEnabled = mcpEnabled || ordenalappMcpEnabled;
 
     // Support sequential tool calling loop
-    while (mcpEnabled && response.choices && response.choices[0].message.tool_calls && response.choices[0].message.tool_calls.length > 0 && mcpClient && loopCount < maxLoops) {
+    while (isAnyMcpEnabled && response.choices && response.choices[0].message.tool_calls && response.choices[0].message.tool_calls.length > 0 && activeMcpClients.length > 0 && loopCount < maxLoops) {
       loopCount++;
       const toolCalls = response.choices[0].message.tool_calls;
 
@@ -180,7 +229,18 @@ IMPORTANTE: Realiza las llamadas a herramientas de forma inmediata tan pronto te
         console.log(`[MCP] 🔧 [Loop ${loopCount}] Ejecutando herramienta: ${functionName}`, functionArgs);
         let result;
         try {
-          result = await mcpClient.callTool({
+          let clientToUse: Client | null = null;
+          if (functionName === 'obtener_catalogo_ecommerce' || functionName === 'crear_pedido_ecommerce') {
+            clientToUse = activeMcpClients.find(c => c.type === 'ordenalapp')?.client || null;
+          } else {
+            clientToUse = activeMcpClients.find(c => c.type === 'muevelapp')?.client || null;
+          }
+
+          if (!clientToUse) {
+            throw new Error(`No hay un cliente MCP activo para ejecutar la herramienta: ${functionName}`);
+          }
+
+          result = await clientToUse.callTool({
             name: functionName,
             arguments: functionArgs
           });
