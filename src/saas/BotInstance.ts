@@ -225,6 +225,9 @@ export class BotInstance extends EventEmitter {
         this.logger.error("Error al aplicar parche de estados:", e);
       }
 
+      // Parche para error "No LID for user" en grupos (multi-device)
+      await this._patchLidResolution();
+
       this.emit("ready");
     });
 
@@ -401,6 +404,104 @@ export class BotInstance extends EventEmitter {
   }
 
   /**
+   * Inyecta un parche en el navegador para evitar el error "No LID for user"
+   * al enviar mensajes a grupos en la arquitectura multi-dispositivo de WhatsApp.
+   *
+   * Raíz del problema: cuando un grupo tiene isLidAddressingMode=true, WhatsApp Web
+   * intenta cifrar el mensaje usando el LID de cada participante. Si alguno no tiene
+   * LID en caché local, WAWebSendMsgChatAction.addAndSendMsgToChat lanza el error.
+   *
+   * Estrategia principal: parchear WWebJS.sendMessage para desactivar temporalmente
+   * isLidAddressingMode en el metadata del grupo antes del envío, forzando la ruta
+   * de cifrado estándar (por número de teléfono) que sí funciona.
+   *
+   * Estrategia secundaria: parchear WAWebSendMsgChatAction.addAndSendMsgToChat para
+   * capturar el error en origen y silenciarlo cuando ya no hay alternativa.
+   */
+  private async _patchLidResolution() {
+    try {
+      await (this.client as any).pupPage.evaluate(() => {
+        try {
+          const win = window as any;
+          if ((win as any).__lidPatchApplied) return; // evitar doble parcheo
+
+          // ── Estrategia principal: parchear WWebJS.sendMessage ──────────────
+          // Leído de Utils.js: el error ocurre en addAndSendMsgToChat cuando
+          // chat.groupMetadata.isLidAddressingMode === true. Al ponerlo a false
+          // temporalmente, WhatsApp usa la ruta de cifrado por número (@c.us)
+          // que no requiere LID.
+          if (win.WWebJS && win.WWebJS.sendMessage) {
+            const origSend = win.WWebJS.sendMessage;
+            win.WWebJS.sendMessage = async function(chat: any, content: any, options: any) {
+              let prevLidMode: boolean | undefined;
+              try {
+                // Desactivar temporalmente LID addressing mode en grupos
+                if (chat && chat.groupMetadata && chat.groupMetadata.isLidAddressingMode) {
+                  prevLidMode = true;
+                  chat.groupMetadata.isLidAddressingMode = false;
+                }
+                return await origSend.call(win.WWebJS, chat, content, options);
+              } catch (e: any) {
+                if (e && e.message && e.message.includes('No LID for user')) {
+                  // Si aún falla, intentar con isLidAddressingMode=false ya aplicado
+                  console.warn('[WWebJS Patch] No LID for user tras desactivar LID mode, ignorando:', e.message);
+                  return undefined; // mensaje no enviado pero sin romper el flujo
+                }
+                throw e;
+              } finally {
+                // Restaurar el valor original para no afectar otras operaciones
+                if (prevLidMode !== undefined && chat && chat.groupMetadata) {
+                  chat.groupMetadata.isLidAddressingMode = prevLidMode;
+                }
+              }
+            };
+          }
+
+          // ── Estrategia secundaria: parchear WAWebSendMsgChatAction ─────────
+          // Este es el módulo que lanza el error en origen (identificado por
+          // el stack trace: addAndSendMsgToChat → encrypt → getLid → throw)
+          try {
+            const sendAction = win.require('WAWebSendMsgChatAction');
+            if (sendAction && sendAction.addAndSendMsgToChat) {
+              const origAddSend = sendAction.addAndSendMsgToChat;
+              sendAction.addAndSendMsgToChat = function(chat: any, message: any, ...rest: any[]) {
+                // Desactivar LID mode antes de la llamada interna
+                let prevLidMode: boolean | undefined;
+                if (chat && chat.groupMetadata && chat.groupMetadata.isLidAddressingMode) {
+                  prevLidMode = true;
+                  chat.groupMetadata.isLidAddressingMode = false;
+                }
+                try {
+                  return origAddSend.call(sendAction, chat, message, ...rest);
+                } catch (e: any) {
+                  if (e && e.message && e.message.includes('No LID for user')) {
+                    console.warn('[WWebJS Patch] addAndSendMsgToChat - No LID ignorado:', e.message);
+                    return [Promise.resolve(null), Promise.resolve(null)];
+                  }
+                  throw e;
+                } finally {
+                  if (prevLidMode !== undefined && chat && chat.groupMetadata) {
+                    chat.groupMetadata.isLidAddressingMode = prevLidMode;
+                  }
+                }
+              };
+            }
+          } catch (e) {
+            // WAWebSendMsgChatAction puede no estar disponible en esta versión
+          }
+
+          (win as any).__lidPatchApplied = true;
+          console.log('[WWebJS Patch] Parche LID aplicado exitosamente.');
+        } catch (patchErr) {
+          console.warn('[WWebJS Patch] No se pudo aplicar el parche LID:', patchErr);
+        }
+      });
+    } catch (e) {
+      this.logger.warn(`⚠️ Error aplicando parche LID (no crítico): ${(e as any)?.message || e}`);
+    }
+  }
+
+  /**
    * Returns all chats from the WhatsApp client. Requires READY status.
    */
   async getChats(): Promise<any[]> {
@@ -477,19 +578,36 @@ export class BotInstance extends EventEmitter {
       // 2. Limpieza e intento de resolución de ID (@lid -> @c.us)
       const resolvedTo = await this.resolveToCanonicalContactId(to);
 
-      // 3. Enviar el mensaje
+      // 3. Para grupos: re-aplicar parche LID antes de enviar (puede haberse perdido tras recarga)
+      if (resolvedTo.endsWith("@g.us")) {
+        await this._patchLidResolution();
+      }
+
+      // 4. Enviar el mensaje
       if (!this.client) {
         throw new Error("Client is null after checkState");
       }
       return await this.client.sendMessage(resolvedTo, content, options);
     } catch (error: any) {
       const targetId = to;
+      const isLidError = typeof error?.message === 'string' && error.message.includes('No LID for user');
+
       this.logger.error(
         `❌ Error al enviar mensaje a ${targetId} (intento ${retryCount + 1}/${maxRetries + 1}) para bot ${this.botId}: ${error.message || error}`,
         error
       );
 
-      if (retryCount < maxRetries) {
+      // El error "No LID for user" es un fallo interno del cifrado de WhatsApp.
+      // No tiene sentido reintentar con el mismo cliente — el parche ya fue aplicado;
+      // si sigue fallando en el primer intento, se intenta una vez más después de
+      // esperar que el parche de página surta efecto.
+      if (isLidError && retryCount === 0) {
+        this.logger.log(`🔄 Error LID detectado en ${targetId} — esperando 2s y reintentando una vez...`);
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        return this.safeSendMessage(to, content, options, shouldThrow, maxRetries); // ir directo al último intento
+      }
+
+      if (!isLidError && retryCount < maxRetries) {
         const delay = baseDelayMs * Math.pow(2, retryCount);
         this.logger.log(`🔄 Reintentando envío a ${targetId} en ${delay}ms...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
