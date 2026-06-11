@@ -38,6 +38,8 @@ export function createConfigService(botId: string) {
     motivosNotificacion?: string[] | undefined;
     debugEnabled?: boolean;
     muevelappMcpEnabled?: boolean;
+    ordenalappMcpEnabled?: boolean;
+    ordenalappSlug?: string;
   }> {
     const doc = await botRef().get();
     const data = doc.data();
@@ -52,6 +54,8 @@ export function createConfigService(botId: string) {
         : undefined,
       debugEnabled: !!data?.debugEnabled,
       muevelappMcpEnabled: !!data?.muevelappMcpEnabled,
+      ordenalappMcpEnabled: !!data?.ordenalappMcpEnabled,
+      ordenalappSlug: (data?.ordenalappSlug as string) ?? "",
     };
   }
 
@@ -74,7 +78,7 @@ export function createConfigService(botId: string) {
   async function loadConfig(): Promise<void> {
     try {
       const [
-        { nombre, activo, isAutoResponseEnabled, prompt_ia, timezone, motivosNotificacion, debugEnabled, muevelappMcpEnabled },
+        { nombre, activo, isAutoResponseEnabled, prompt_ia, timezone, motivosNotificacion, debugEnabled, muevelappMcpEnabled, ordenalappMcpEnabled, ordenalappSlug },
         respuestas_info,
       ] = await Promise.all([
         fetchNombreYActivo(),
@@ -91,13 +95,15 @@ export function createConfigService(botId: string) {
         motivosNotificacion: motivosNotificacion ?? [],
         debugEnabled: debugEnabled ?? false,
         muevelappMcpEnabled: muevelappMcpEnabled ?? false,
+        ordenalappMcpEnabled: ordenalappMcpEnabled ?? false,
+        ordenalappSlug: ordenalappSlug ?? "",
       } as any;
       console.log(
         new Date().toLocaleString(),
         `[${botId}] 🔥 Config cargada — "${nombre}" | ` +
-          `${Object.keys(respuestas_info).length} informaciones | ` +
-          `${(motivosNotificacion ?? []).length} motivos notificación | ` +
-          `Debug: ${debugEnabled ? "ACTIVADO" : "desactivado"}.`,
+        `${Object.keys(respuestas_info).length} informaciones | ` +
+        `${(motivosNotificacion ?? []).length} motivos notificación | ` +
+        `Debug: ${debugEnabled ? "ACTIVADO" : "desactivado"}.`,
       );
     } catch (error) {
       console.error(`[${botId}] ❌ Error al cargar configuración:`, error);
@@ -159,11 +165,11 @@ console.log("TESTING_MODE", TESTING_MODE);
 
 const _legacy = BOT_PHONE_NUMBER ? createConfigService(BOT_PHONE_NUMBER) : null;
 
-export const loadConfig = _legacy?.loadConfig ?? (async () => {});
-export const startConfigRefresh = _legacy?.startConfigRefresh ?? (() => {});
+export const loadConfig = _legacy?.loadConfig ?? (async () => { });
+export const startConfigRefresh = _legacy?.startConfigRefresh ?? (() => { });
 export const getConfig =
   _legacy?.getConfig ??
   (() => ({ nombre: "Bot", respuestas_info: {}, activo: false }));
 export const getNombre = _legacy?.getNombre ?? (() => "Bot");
 export const registrarNoEntendido =
-  _legacy?.registrarNoEntendido ?? (async () => {});
+  _legacy?.registrarNoEntendido ?? (async () => { });
