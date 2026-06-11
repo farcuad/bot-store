@@ -421,14 +421,28 @@ export class BotInstance extends EventEmitter {
     } catch (e) { }
   }
 
+  private _cachedChats: any[] | null = null;
+  private _cachedChatsTime: number = 0;
+
   /**
    * Returns all chats from the WhatsApp client. Requires READY status.
+   * Caches the result for 60 seconds to avoid overloading Puppeteer on frequent calls.
    */
   async getChats(): Promise<any[]> {
     if (!this.client || this.state.status !== "ready") {
       throw new Error(`Bot ${this.botId} is not ready.`);
     }
-    return this.client.getChats();
+    
+    const now = Date.now();
+    if (this._cachedChats && now - this._cachedChatsTime < 60000) {
+      return this._cachedChats;
+    }
+    
+    const chats = await this.client.getChats();
+    this._cachedChats = chats;
+    this._cachedChatsTime = now;
+    
+    return chats;
   }
 
   /**
@@ -495,13 +509,30 @@ export class BotInstance extends EventEmitter {
       // 1. Verificar estado del cliente
       this.checkClientState();
 
-      // 2. Limpieza e intento de resolución de ID (@lid -> @c.us)
-      const resolvedTo = await this.resolveToCanonicalContactId(to);
-
-      // 3. Enviar el mensaje
+      // 2. Segmentar estrategia de envío según tipo de destino
       if (!this.client) {
         throw new Error("Client is null after checkState");
       }
+
+      // ── Grupos (@g.us): usar chat.sendMessage() para evitar el validador de LID ──
+      if (to.endsWith("@g.us")) {
+        const chat = await this.client.getChatById(to);
+        return await chat.sendMessage(content, options);
+      }
+
+      // ── Estados (status@broadcast): envolver en timeout para evitar bloqueos ──
+      if (to === "status@broadcast") {
+        const STATUS_TIMEOUT_MS = 30_000;
+        return await Promise.race([
+          this.client.sendMessage(to, content, options),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Timeout: envío a status@broadcast tardó más de 30s")), STATUS_TIMEOUT_MS)
+          ),
+        ]);
+      }
+
+      // ── Contactos individuales (@c.us, @lid): resolver LID normalmente ──
+      const resolvedTo = await this.resolveToCanonicalContactId(to);
       return await this.client.sendMessage(resolvedTo, content, options);
     } catch (error: any) {
       const targetId = to;
