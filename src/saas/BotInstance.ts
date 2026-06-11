@@ -26,6 +26,7 @@ export type BotStatus =
   | "idle"
   | "initializing"
   | "qr"
+  | "authenticated"
   | "ready"
   | "disconnected"
   | "error";
@@ -150,7 +151,7 @@ export class BotInstance extends EventEmitter {
 
     const { promises: fsp } = await import("node:fs");
     const sessionDir = path.join(dataPath, `session-${this.botId}`);
-    
+
     // Cleanup SingletonLock if it exists (prevents "Profile in use" error after crash)
     try {
       const lockFiles = [
@@ -187,6 +188,7 @@ export class BotInstance extends EventEmitter {
         args: [
           "--no-sandbox",
           "--disable-setuid-sandbox",
+          '--unhandled-rejections=strict',
           "--disable-dev-shm-usage",
           "--disable-accelerated-2d-canvas",
           "--disable-gpu",
@@ -203,15 +205,32 @@ export class BotInstance extends EventEmitter {
     this.configSvc.startConfigRefresh();
     await this.statsMgr.loadStats();
 
+    let authTimeout: NodeJS.Timeout | null = null;
+
     this.client.on("qr", (qr: string) => {
       this.setState({ status: "qr", qr });
       this.emit("qr", qr);
     });
 
+    this.client.on("authenticated", () => {
+      this.setState({ status: "authenticated", qr: null });
+      this.emit("authenticated");
+
+      // Prevenir que se quede colgado eternamente en autenticación
+      if (authTimeout) clearTimeout(authTimeout);
+      authTimeout = setTimeout(async () => {
+        if (this.state.status === "authenticated") {
+          this.logger.error("⏳ Timeout: Se quedó colgado en 'authenticated' por demasiado tiempo. Reiniciando para destrabar...");
+          await this.restart();
+        }
+      }, 90000); // 90 segundos de tolerancia
+    });
+
     this.client.on("ready", async () => {
+      if (authTimeout) clearTimeout(authTimeout);
       this.logger.log(`✅ Bot listo y operativo.`);
       this.setState({ status: "ready", qr: null, readySince: Date.now() });
-      
+
       // Parche para error de estados (canCheckStatusRankingPosterGating)
       try {
         await (this.client as any).pupPage.evaluate(() => {
@@ -229,11 +248,13 @@ export class BotInstance extends EventEmitter {
     });
 
     this.client.on("disconnected", (reason: string) => {
+      if (authTimeout) clearTimeout(authTimeout);
       this.setState({ status: "disconnected", qr: null });
       this.emit("disconnected", reason);
     });
 
     this.client.on("auth_failure", (msg: string) => {
+      if (authTimeout) clearTimeout(authTimeout);
       this.logger.error(`Error de autenticación: ${msg}`);
       this.setState({ status: "error", lastError: msg });
     });
@@ -265,7 +286,7 @@ export class BotInstance extends EventEmitter {
     if (!this.client) return;
     try {
       await this.client.destroy();
-    } catch (e) {}
+    } catch (e) { }
     this.client = null;
     this.configSvc.stopConfigRefresh();
     this.setState({ status: "idle", qr: null });
@@ -282,7 +303,7 @@ export class BotInstance extends EventEmitter {
     this.healthCheckInterval = setInterval(async () => {
       if (this.state.status === "ready" && this.client) {
         try {
-          const timeoutPromise = (ms: number, msg: string) => new Promise<never>((_, reject) => 
+          const timeoutPromise = (ms: number, msg: string) => new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error(msg)), ms)
           );
 
@@ -291,7 +312,7 @@ export class BotInstance extends EventEmitter {
             this.client.getState(),
             timeoutPromise(30000, "Timeout obteniendo estado")
           ]) as string;
-          
+
           // Verificar también que WWebJS siga inyectado (si la página se recargó sola, window.WWebJS será undefined)
           const evaluatePromise = (this.client as any).pupPage.evaluate(() => {
             return typeof window !== "undefined" && (window as any).WWebJS !== undefined;
@@ -301,7 +322,7 @@ export class BotInstance extends EventEmitter {
             evaluatePromise,
             timeoutPromise(30000, "Timeout verificando WWebJS inyectado")
           ]).catch(() => false);
-          
+
           if (!state || state === "CONFLICT" || state === "UNPAIRED" || !isWWebJSInjected) {
             this.logger.warn(`⚠️ HealthCheck: Estado anómalo detectado (State: ${state}, WWebJS: ${isWWebJSInjected}). Reiniciando...`);
             await this.restart();
@@ -395,9 +416,9 @@ export class BotInstance extends EventEmitter {
               win.Store.StatusUtils.canCheckStatusRankingPosterGating = () => false;
             }
           }
-        } catch (e) {}
+        } catch (e) { }
       });
-    } catch (e) {}
+    } catch (e) { }
   }
 
   /**
@@ -515,7 +536,7 @@ export class BotInstance extends EventEmitter {
       // Resolve the actual contact (phone number) from the chat ID (LID or Phone)
       const contact = await this.client?.getContactById(rawRemote);
       if (!contact) throw new Error(`Contact ${rawRemote} not found.`);
-      
+
       // Preferir el número real si está disponible, evita fallos de enrutamiento al intentar enviar a un @lid
       if (contact.number) {
         return `${contact.number}@c.us`;
@@ -657,9 +678,9 @@ export class BotInstance extends EventEmitter {
           // Reseteamos el estado para este usuario.
           const lastUpdate = (pending as any).lastProcessingUpdate || Date.now();
           if (Date.now() - lastUpdate > 25000) { // 25 segundos
-             this.logger.warn(`⚠️ Detectado posible cuelgue en procesamiento para ${from}. Reiniciando estado.`);
-             pending.isProcessing = false;
-             this._triggerAggregation(from);
+            this.logger.warn(`⚠️ Detectado posible cuelgue en procesamiento para ${from}. Reiniciando estado.`);
+            pending.isProcessing = false;
+            this._triggerAggregation(from);
           }
         }
       }
@@ -1004,16 +1025,16 @@ export class BotInstance extends EventEmitter {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status} ${response.statusText}`);
       }
-      
+
       let mimetype = response.headers.get("content-type") || "image/jpeg";
-      
+
       // Validar que no sea una respuesta de error en JSON o HTML que el servidor haya devuelto con un status 200
       if (mimetype.includes("application/json") || mimetype.includes("text/html") || mimetype.includes("text/plain")) {
         throw new Error(`El archivo no es multimedia válido (Mime: ${mimetype})`);
       }
 
       const arrayBuffer = await response.arrayBuffer();
-      
+
       if (arrayBuffer.byteLength < 100) {
         throw new Error("El archivo descargado es demasiado pequeño o está corrupto.");
       }
@@ -1048,7 +1069,7 @@ export class BotInstance extends EventEmitter {
     try {
       const media = await msg.downloadMedia();
       if (!media) return null;
-       await fs.promises.writeFile(tempFilePath, media.data, {
+      await fs.promises.writeFile(tempFilePath, media.data, {
         encoding: "base64",
       });
       const openai = new OpenAI({ apiKey: openaiApiKey, timeout: 45000 });
