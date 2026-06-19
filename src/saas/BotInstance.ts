@@ -194,7 +194,7 @@ export class BotInstance extends EventEmitter {
           "--disable-gpu",
         ],
         timeout: 60000,
-        protocolTimeout: 300000,
+        protocolTimeout: 60000,
       },
     });
 
@@ -564,18 +564,27 @@ export class BotInstance extends EventEmitter {
         ? msg.id.remote
         : msg.id.remote._serialized;
     try {
-      // Resolve the actual contact (phone number) from the chat ID (LID or Phone)
-      const contact = await this.client?.getContactById(rawRemote);
+      const contactPromise = this.client?.getContactById(rawRemote);
+      if (!contactPromise) throw new Error(`Client not available`);
+
+      const GET_CONTACT_TIMEOUT = 5000;
+      const contact = await Promise.race([
+        contactPromise,
+        new Promise<any>((_, reject) =>
+          setTimeout(() => reject(new Error(`getContactById timed out after ${GET_CONTACT_TIMEOUT}ms`)), GET_CONTACT_TIMEOUT)
+        ),
+      ]);
       if (!contact) throw new Error(`Contact ${rawRemote} not found.`);
 
-      // Preferir el número real si está disponible, evita fallos de enrutamiento al intentar enviar a un @lid
       if (contact.number) {
         return `${contact.number}@c.us`;
       }
-      return this.normalizeToContactId(contact.id._serialized);
+
+      const baseId = (contact.id._serialized || rawRemote).split("@")[0];
+      return `${baseId}@c.us`;
     } catch (e) {
-      // Fallback to chat ID if contact resolution fails
-      return this.normalizeToContactId(rawRemote);
+      const baseId = rawRemote.split("@")[0];
+      return `${baseId}@c.us`;
     }
   }
 
@@ -728,6 +737,13 @@ export class BotInstance extends EventEmitter {
     pending.isProcessing = true;
     (pending as any).lastProcessingUpdate = Date.now();
 
+    const AGGREGATION_TIMEOUT = 120_000;
+    const aggregationTimeout = setTimeout(() => {
+      this.logger.error(`⚠️ Agregación timed out para ${from} (${AGGREGATION_TIMEOUT / 1000}s). Limpiando estado para destrabar.`);
+      pending.isProcessing = false;
+      this.aggregationMap.delete(from);
+    }, AGGREGATION_TIMEOUT);
+
     try {
       // this.logger.log(`[Agregación] Procesando ${pending.rawMessages.length} mensajes para ${from}...`);
       const nowInSeconds = Math.floor(Date.now() / 1000);
@@ -749,13 +765,23 @@ export class BotInstance extends EventEmitter {
       let contact: any;
       let realFrom = from;
       try {
-        contact = await firstMsg.getContact();
+        const GET_CONTACT_TIMEOUT = 5000;
+        contact = await Promise.race([
+          firstMsg.getContact(),
+          new Promise<any>((_, reject) =>
+            setTimeout(() => reject(new Error(`getContact timed out after ${GET_CONTACT_TIMEOUT}ms`)), GET_CONTACT_TIMEOUT)
+          ),
+        ]);
       } catch (contactErr) {
         this.logger.error(
           `Error obteniendo contacto para ${from}, usando fallback:`,
           contactErr,
         );
         contact = null;
+      }
+
+      if (contact && contact.number) {
+        realFrom = `${contact.number}@c.us`;
       }
 
       let session = await this.sessionMgr.getSession(realFrom);
@@ -872,6 +898,7 @@ export class BotInstance extends EventEmitter {
     } catch (err) {
       this.logger.error(`Error en agregación (${from}):`, err);
     } finally {
+      clearTimeout(aggregationTimeout);
       pending.isProcessing = false;
 
       // Si llegaron nuevos mensajes mientras procesábamos, re-enviamos la agregación
