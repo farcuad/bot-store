@@ -144,6 +144,7 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
 
   const [broadcasts, setBroadcasts] = useState<BroadcastRecord[]>([]);
   const [loadingBroadcasts, setLoadingBroadcasts] = useState(true);
+  const [expandedBroadcasts, setExpandedBroadcasts] = useState<Set<string>>(new Set());
 
   // ── Bot config state
   const [botTimezone, setBotTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
@@ -189,9 +190,20 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
     }
   }, [botNumber, getHeaders]);
 
+  const loadGroups = useCallback(async () => {
+    try {
+      const headers = await getHeaders();
+      const res = await axios.get(`${API_URL}/api/saas/bots/${botNumber}/groups`, { headers });
+      if (res.data.ok) setGroups(res.data.data);
+    } catch (e) {
+      console.error("Error al cargar grupos:", e);
+    }
+  }, [botNumber, getHeaders]);
+
   useEffect(() => {
     loadTemplates();
     loadBroadcasts();
+    loadGroups();
     // Load timezone
     getHeaders().then(headers => {
       axios.get(`${API_URL}/api/saas/bots/${botNumber}`, { headers }).then(res => {
@@ -200,7 +212,7 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
         }
       }).catch(console.error);
     });
-  }, [loadTemplates, loadBroadcasts, botNumber, getHeaders]);
+  }, [loadTemplates, loadBroadcasts, loadGroups, botNumber, getHeaders]);
 
   // Update current time display for scheduling
   useEffect(() => {
@@ -478,6 +490,18 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
     }
   };
 
+  const toggleExpandBroadcast = (id: string) => {
+    setExpandedBroadcasts(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
   // ── Schedule helpers
   const toggleDayOfWeek = (d: number) => setSchedule(s => {
     const days = new Set(s.daysOfWeek ?? []);
@@ -627,12 +651,37 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
                     <span className="text-xs text-gray-500">{scheduleLabel(b.schedule)}</span>
                   </div>
                   <p className="text-sm text-gray-300 truncate">"{b.templateSnapshot?.text?.slice(0, 80)}{(b.templateSnapshot?.text?.length ?? 0) > 80 ? '…' : ''}"</p>
-                  <div className="flex items-center gap-3 text-xs text-gray-600">
+                  <div className="flex items-center gap-3 text-xs text-gray-600 flex-wrap">
                     <span><Users className="h-3 w-3 inline mr-1" />{(b.recipients?.contactIds?.length ?? 0) + (b.recipients?.groupIds?.length ?? 0) + (b.recipients?.status ? 1 : 0)} dest.</span>
                     {b.recipients?.status && <span className="bg-[#25d366]/10 text-[#25d366] px-1.5 py-0.5 rounded text-[10px]">Estado</span>}
                     {b.nextRun && parseDate(b.nextRun) && <span><Clock className="h-3 w-3 inline mr-1" />Próximo: {parseDate(b.nextRun)!.toLocaleString('es', { dateStyle: 'short', timeStyle: 'short' })}</span>}
                     {b.lastRun && parseDate(b.lastRun) && <span>Último: {parseDate(b.lastRun)!.toLocaleString('es', { dateStyle: 'short', timeStyle: 'short' })}</span>}
+                    {b.recipients?.groupIds && b.recipients.groupIds.length > 0 && (
+                      <button
+                        onClick={() => toggleExpandBroadcast(b.id)}
+                        className="text-indigo-400 hover:text-indigo-300 font-semibold transition-colors flex items-center gap-0.5 ml-2 cursor-pointer"
+                      >
+                        {expandedBroadcasts.has(b.id) ? 'Ocultar grupos' : 'Ver grupos'}
+                        <ChevronRight className={`h-3 w-3 transition-transform duration-200 ${expandedBroadcasts.has(b.id) ? 'rotate-90' : ''}`} />
+                      </button>
+                    )}
                   </div>
+                  {expandedBroadcasts.has(b.id) && b.recipients?.groupIds && b.recipients.groupIds.length > 0 && (
+                    <div className="mt-3 bg-black/40 border border-white/5 rounded-xl p-3 space-y-1.5">
+                      <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Grupos de destino ({b.recipients.groupIds.length}):</div>
+                      <div className="space-y-1 max-h-48 overflow-y-auto pr-1 scrollbar-thin">
+                        {b.recipients.groupIds.map(gid => {
+                          const found = groups.find(g => g.id === gid);
+                          return (
+                            <div key={gid} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 py-1 px-2 bg-white/[0.02] border border-white/5 rounded-lg hover:bg-white/5 transition-colors">
+                              <span className="text-xs font-semibold text-gray-200">{found ? found.name : 'Grupo (no sincronizado)'}</span>
+                              <span className="text-[10px] font-mono text-gray-500">{gid}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                   {b.errorMessage && <p className="text-xs text-red-400">{b.errorMessage}</p>}
                 </div>
                 <button onClick={() => deleteBroadcast(b)} className="p-2 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors shrink-0">
