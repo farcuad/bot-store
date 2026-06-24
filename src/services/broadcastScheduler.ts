@@ -190,33 +190,64 @@ class BroadcastScheduler {
     }
 
     const { text, imageUrl } = broadcast.templateSnapshot;
-    const allRecipients = [
-      ...broadcast.recipients.contactIds,
-      ...broadcast.recipients.groupIds,
-    ];
-    if (broadcast.recipients.status) {
-      allRecipients.push("status@broadcast");
-    }
+    let totalSent = 0;
+    let totalErrors = 0;
 
-    let sent = 0;
-    let errors = 0;
-
-    for (const chatId of allRecipients) {
+    // Helper to send a single message to a chatId
+    const sendOne = async (chatId: string): Promise<boolean> => {
       try {
         if (imageUrl) {
           await instance.sendMediaToChat(chatId, imageUrl, text || undefined);
         } else {
           await instance.sendMessageToChat(chatId, text);
         }
-        sent++;
-        // Small delay between messages to avoid WA rate limiting
-        await new Promise(r => setTimeout(r, 800));
+        return true;
       } catch (err: any) {
         console.error(`📅 Error enviando a ${chatId}:`, err.message);
-        errors++;
+        return false;
       }
+    };
+
+    // ── 1. Contactos individuales ──────────────────────────────────────────────
+    const contactIds = broadcast.recipients.contactIds ?? [];
+    let contactSent = 0;
+    let contactErrors = 0;
+    for (const chatId of contactIds) {
+      const ok = await sendOne(chatId);
+      ok ? contactSent++ : contactErrors++;
+      await new Promise(r => setTimeout(r, 800));
+    }
+    totalSent += contactSent;
+    totalErrors += contactErrors;
+
+    // ── 2. Grupos ─────────────────────────────────────────────────────────────
+    const groupIds = broadcast.recipients.groupIds ?? [];
+    let groupSent = 0;
+    let groupErrors = 0;
+    for (const chatId of groupIds) {
+      const ok = await sendOne(chatId);
+      ok ? groupSent++ : groupErrors++;
+      await new Promise(r => setTimeout(r, 1200)); // Más delay para grupos
+    }
+    totalSent += groupSent;
+    totalErrors += groupErrors;
+
+    // ── 3. Estados ────────────────────────────────────────────────────────────
+    let statusResult = "—";
+    if (broadcast.recipients.status) {
+      const ok = await sendOne("status@broadcast");
+      ok ? totalSent++ : totalErrors++;
+      statusResult = ok ? "✅" : "❌";
     }
 
+    // ── Logging detallado ─────────────────────────────────────────────────────
+    const segments: string[] = [];
+    if (contactIds.length > 0) segments.push(`Contactos: ${contactSent}/${contactIds.length}`);
+    if (groupIds.length > 0) segments.push(`Grupos: ${groupSent}/${groupIds.length}`);
+    if (broadcast.recipients.status) segments.push(`Estado: ${statusResult}`);
+    console.log(`📅 Broadcast ${broadcast.id}: ${segments.join(" | ")} — Total: ✅ ${totalSent} enviados, ❌ ${totalErrors} errores`);
+
+    // ── Actualizar Firestore ──────────────────────────────────────────────────
     const isRecurring = broadcast.schedule.type === "weekly" || broadcast.schedule.type === "monthly";
     const nextRun = isRecurring ? calcNextRun(broadcast.schedule, new Date()) : null;
 
@@ -224,11 +255,12 @@ class BroadcastScheduler {
       status: isRecurring ? "scheduled" : "done",
       lastRun: new Date(),
       ...(nextRun ? { nextRun } : {}),
-      errorMessage: errors > 0 ? `${errors} error(es) en ${allRecipients.length} destinatario(s)` : null,
+      errorMessage: totalErrors > 0
+        ? `${totalErrors} error(es): ${segments.join(", ")}`
+        : null,
     });
 
-    console.log(`📅 Broadcast ${broadcast.id}: ✅ ${sent} enviados, ❌ ${errors} errores`);
-    return { sent, errors };
+    return { sent: totalSent, errors: totalErrors };
   }
 
   cancelBroadcast(botId: string, broadcastId: string) {

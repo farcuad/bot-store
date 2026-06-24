@@ -105,15 +105,15 @@ interface ApiLog {
 type Tab = 'stats' | 'respuestas' | 'conversaciones' | 'no_ent' | 'logs' | 'api_logs' | 'plantillas' | 'notificaciones' | 'mcp';
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
-  { id: 'stats',           label: 'Métricas',        icon: Activity },
-  { id: 'respuestas',      label: 'Base de Datos',   icon: Database },
-  { id: 'conversaciones',  label: 'Conversaciones',  icon: MessageSquare },
-  { id: 'no_ent',          label: 'No Entendidos',   icon: AlertCircle },
-  { id: 'notificaciones',  label: 'Notificaciones',  icon: Bell },
-  { id: 'plantillas',      label: 'Plantillas',      icon: FileText },
-  { id: 'logs',            label: 'Logs Sistema',    icon: ScrollText },
-  { id: 'api_logs',        label: 'Envíos API',      icon: Activity },
-  { id: 'mcp',             label: 'Integraciones MCP', icon: Code },
+  { id: 'stats', label: 'Métricas', icon: Activity },
+  { id: 'respuestas', label: 'Base de Datos', icon: Database },
+  { id: 'conversaciones', label: 'Conversaciones', icon: MessageSquare },
+  { id: 'no_ent', label: 'No Entendidos', icon: AlertCircle },
+  { id: 'notificaciones', label: 'Notificaciones', icon: Bell },
+  { id: 'plantillas', label: 'Plantillas', icon: FileText },
+  { id: 'logs', label: 'Logs Sistema', icon: ScrollText },
+  { id: 'api_logs', label: 'Envíos API', icon: Activity },
+  { id: 'mcp', label: 'Integraciones MCP', icon: Code },
 ];
 
 const API_URL = import.meta.env.VITE_API_URL || '';
@@ -128,15 +128,15 @@ export default function BotAdmin() {
   const { user, isAdmin } = useAuth();
   const { fire } = useGlassAlert();
 
-  const [loading, setLoading]           = useState(true);
-  const [stats, setStats]               = useState<BotStats | null>(null);
-  const [respuestas, setRespuestas]     = useState<RespuestaInfo[]>([]);
-  const [sessions, setSessions]         = useState<Session[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<BotStats | null>(null);
+  const [respuestas, setRespuestas] = useState<RespuestaInfo[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
   const [noEntendidos, setNoEntendidos] = useState<MensajeNoEntendido[]>([]);
 
   const [editingRes, setEditingRes] = useState<RespuestaInfo | null>(null);
-  const [resNombre, setResNombre]   = useState('');
-  const [resText, setResText]       = useState('');
+  const [resNombre, setResNombre] = useState('');
+  const [resText, setResText] = useState('');
   const [resMediaUrls, setResMediaUrls] = useState<string[]>([]);
   const [tempMediaUrl, setTempMediaUrl] = useState('');
   const [uploadingMedia, setUploadingMedia] = useState(false);
@@ -157,13 +157,13 @@ export default function BotAdmin() {
 
   // API Logs state
   const [apiLogs, setApiLogs] = useState<ApiLog[]>([]);
-  const [apiKey, setApiKey]   = useState<string>('');
+  const [apiKey, setApiKey] = useState<string>('');
 
   // Bot metadata state
-  const [botName, setBotName]           = useState<string>('');
+  const [botName, setBotName] = useState<string>('');
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
-  const [botTimezone, setBotTimezone]   = useState<string>('America/Caracas');
+  const [botTimezone, setBotTimezone] = useState<string>('America/Caracas');
   const [autoResponseEnabled, setAutoResponseEnabled] = useState(true);
   const [togglingAutoResponse, setTogglingAutoResponse] = useState(false);
   const [debugEnabled, setDebugEnabled] = useState(false);
@@ -172,22 +172,27 @@ export default function BotAdmin() {
   const [mcpMuevelappEnabled, setMcpMuevelappEnabled] = useState(false);
   const [togglingMcp, setTogglingMcp] = useState(false);
 
+  const [mcpOrdenalappEnabled, setMcpOrdenalappEnabled] = useState(false);
+  const [togglingOrdenalappMcp, setTogglingOrdenalappMcp] = useState(false);
+  const [ordenalappSlug, setOrdenalappSlug] = useState('');
+  const [savingOrdenalappSlug, setSavingOrdenalappSlug] = useState(false);
+
   // Plan / subscription state
   const [canUseTemplates, setCanUseTemplates] = useState(true); // optimistic default
-  const [canUseApi, setCanUseApi]             = useState(true); 
-  const [userPlanName, setUserPlanName]     = useState('Basic');
+  const [canUseApi, setCanUseApi] = useState(true);
+  const [userPlanName, setUserPlanName] = useState('Basic');
 
   // Notification triggers state
-  const [motivos, setMotivos]             = useState<string[]>([]);
+  const [motivos, setMotivos] = useState<string[]>([]);
   const [loadingMotivos, setLoadingMotivos] = useState(false);
-  const [savingMotivos, setSavingMotivos]   = useState(false);
-  const [nuevoMotivo, setNuevoMotivo]       = useState('');
+  const [savingMotivos, setSavingMotivos] = useState(false);
+  const [nuevoMotivo, setNuevoMotivo] = useState('');
   const [editingMotivoIdx, setEditingMotivoIdx] = useState<number | null>(null);
 
   const loadBotInfo = async () => {
     try {
       const token = await user?.getIdToken();
-      const res = await axios.get<ApiResponse<{ nombre: string; timezone?: string; clientKey?: string; isAutoResponseEnabled?: boolean; debugEnabled?: boolean; muevelappMcpEnabled?: boolean }>>(`${API_URL}/api/saas/bots/${botNumber}`, {
+      const res = await axios.get<ApiResponse<{ nombre: string; timezone?: string; clientKey?: string; isAutoResponseEnabled?: boolean; debugEnabled?: boolean; muevelappMcpEnabled?: boolean; ordenalappMcpEnabled?: boolean; ordenalappSlug?: string }>>(`${API_URL}/api/saas/bots/${botNumber}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.data.ok) {
@@ -202,6 +207,10 @@ export default function BotAdmin() {
         setAutoResponseEnabled(res.data.data.isAutoResponseEnabled !== false);
         setDebugEnabled(!!res.data.data.debugEnabled);
         setMcpMuevelappEnabled(!!res.data.data.muevelappMcpEnabled);
+        setMcpOrdenalappEnabled(!!res.data.data.ordenalappMcpEnabled);
+        if (res.data.data.ordenalappSlug) {
+          setOrdenalappSlug(res.data.data.ordenalappSlug);
+        }
       }
     } catch (e) {
       console.error("Error loading bot meta:", e);
@@ -213,7 +222,7 @@ export default function BotAdmin() {
     try {
       const token = await user?.getIdToken();
       const nextValue = !autoResponseEnabled;
-      const res = await axios.patch<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/auto-response`, 
+      const res = await axios.patch<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/auto-response`,
         { enabled: nextValue },
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
@@ -242,7 +251,7 @@ export default function BotAdmin() {
     try {
       const token = await user?.getIdToken();
       const nextValue = !debugEnabled;
-      const res = await axios.patch<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/debug`, 
+      const res = await axios.patch<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/debug`,
         { enabled: nextValue },
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
@@ -271,7 +280,7 @@ export default function BotAdmin() {
     try {
       const token = await user?.getIdToken();
       const nextValue = !mcpMuevelappEnabled;
-      const res = await axios.patch<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/mcp-muevelapp`, 
+      const res = await axios.patch<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/mcp-muevelapp`,
         { enabled: nextValue },
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
@@ -292,6 +301,75 @@ export default function BotAdmin() {
       });
     } finally {
       setTogglingMcp(false);
+    }
+  };
+
+  const toggleMcpOrdenalapp = async () => {
+    const nextValue = !mcpOrdenalappEnabled;
+    if (nextValue && !ordenalappSlug.trim()) {
+      fire({
+        title: 'Subdominio requerido',
+        text: 'Debes ingresar un subdominio/slug válido para tu e-commerce antes de poder activar la integración.',
+        icon: 'warning'
+      });
+      return;
+    }
+
+    setTogglingOrdenalappMcp(true);
+    try {
+      const token = await user?.getIdToken();
+      const res = await axios.patch<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/mcp-ordenalapp`,
+        { enabled: nextValue, slug: ordenalappSlug.trim() },
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      if (res.data.ok) {
+        setMcpOrdenalappEnabled(nextValue);
+        fire({
+          title: nextValue ? 'MCP OrdenalApp Activado' : 'MCP OrdenalApp Desactivado',
+          text: nextValue ? 'El bot ahora puede consultar el catálogo y crear pedidos de ecommerce.' : 'El bot ya no tiene acceso a la API de OrdenalApp.',
+          icon: 'success',
+          timer: 3000
+        });
+      }
+    } catch (e: any) {
+      const errorMsg = e.response?.data?.error || e.response?.data?.message || e.message || e.toString();
+      fire({
+        title: 'Error',
+        text: "Error al cambiar MCP OrdenalApp: " + errorMsg,
+        icon: 'error'
+      });
+    } finally {
+      setTogglingOrdenalappMcp(false);
+    }
+  };
+
+  const saveOrdenalappSlug = async () => {
+    if (!ordenalappSlug.trim()) return;
+    setSavingOrdenalappSlug(true);
+    try {
+      const token = await user?.getIdToken();
+      const res = await axios.patch<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/mcp-ordenalapp`,
+        { enabled: mcpOrdenalappEnabled, slug: ordenalappSlug.trim() },
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      if (res.data.ok) {
+        fire({
+          title: 'Subdominio Guardado',
+          text: 'El subdominio de OrdenalApp ha sido guardado exitosamente.',
+          icon: 'success',
+          timer: 3000
+        });
+      }
+    } catch (e: any) {
+      const errorMsg = e.response?.data?.error || e.response?.data?.message || e.message || e.toString();
+      fire({
+        title: 'Error',
+        text: "Error al guardar el subdominio: " + errorMsg,
+        icon: 'error'
+      });
+      console.error("error detail:", e.response?.data || e);
+    } finally {
+      setSavingOrdenalappSlug(false);
     }
   };
 
@@ -346,8 +424,8 @@ export default function BotAdmin() {
     }
     try {
       const token = await user?.getIdToken();
-      await axios.put<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/name`, 
-        { nombre: editNameValue.trim() }, 
+      await axios.put<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/name`,
+        { nombre: editNameValue.trim() },
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
       setBotName(editNameValue.trim());
@@ -365,8 +443,8 @@ export default function BotAdmin() {
     setBotTimezone(newTz);
     try {
       const token = await user?.getIdToken();
-      await axios.put<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/timezone`, 
-        { timezone: newTz }, 
+      await axios.put<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/timezone`,
+        { timezone: newTz },
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
     } catch (e: any) {
@@ -439,7 +517,7 @@ export default function BotAdmin() {
   const addMotivo = async () => {
     const trimmed = nuevoMotivo.trim();
     if (!trimmed) return;
-    
+
     let newList: string[];
     if (editingMotivoIdx !== null) {
       newList = [...motivos];
@@ -449,7 +527,7 @@ export default function BotAdmin() {
       if (motivos.includes(trimmed)) return;
       newList = [...motivos, trimmed];
     }
-    
+
     await saveMotivosList(newList);
     setNuevoMotivo('');
   };
@@ -613,7 +691,7 @@ export default function BotAdmin() {
       const headers = await getHeaders();
       await axios.delete<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/respuestas-info/${id}`, { headers });
       loadData();
-    } catch (e: any) { 
+    } catch (e: any) {
       fire({
         title: 'Error',
         text: e.message,
@@ -627,7 +705,7 @@ export default function BotAdmin() {
       const headers = await getHeaders();
       await axios.put<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/respuestas-info/${r.id}`, { activo: !r.activo }, { headers });
       setRespuestas(respuestas.map(x => x.id === r.id ? { ...x, activo: !x.activo } : x));
-    } catch (e: any) { 
+    } catch (e: any) {
       fire({
         title: 'Error',
         text: e.message,
@@ -641,7 +719,7 @@ export default function BotAdmin() {
       const headers = await getHeaders();
       await axios.patch<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/no-entendidos/${id}/revisado`, {}, { headers });
       setNoEntendidos(noEntendidos.map(n => n.id === id ? { ...n, revisado: true } : n));
-    } catch (e: any) { 
+    } catch (e: any) {
       fire({
         title: 'Error',
         text: e.message,
@@ -655,7 +733,7 @@ export default function BotAdmin() {
       const headers = await getHeaders();
       await axios.delete<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/no-entendidos/${id}`, { headers });
       setNoEntendidos(noEntendidos.filter(n => n.id !== id));
-    } catch (e: any) { 
+    } catch (e: any) {
       fire({
         title: 'Error',
         text: e.message,
@@ -669,7 +747,7 @@ export default function BotAdmin() {
       const headers = await getHeaders();
       await axios.patch<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/sessions/${encodeURIComponent(sessionId)}`, { estado: newStatus }, { headers });
       setSessions(sessions.map(s => s.id === sessionId ? { ...s, estado: newStatus } : s));
-    } catch (e: any) { 
+    } catch (e: any) {
       fire({
         title: 'Error',
         text: e.message,
@@ -685,7 +763,7 @@ export default function BotAdmin() {
       await axios.patch<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/sessions/${encodeURIComponent(sessionId)}`, { contactName: trimmed }, { headers });
       setSessions(sessions.map(s => s.id === sessionId ? { ...s, contactName: trimmed || undefined } : s));
       setEditingSessionId(null);
-    } catch (e: any) { 
+    } catch (e: any) {
       fire({
         title: 'Error',
         text: e.message,
@@ -709,7 +787,7 @@ export default function BotAdmin() {
       const headers = await getHeaders();
       await axios.delete<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/sessions/${encodeURIComponent(sessionId)}`, { headers });
       setSessions(sessions.filter(s => s.id !== sessionId));
-    } catch (e: any) { 
+    } catch (e: any) {
       fire({
         title: 'Error',
         text: 'Error eliminando sesión: ' + (e.response?.data?.error || e.message),
@@ -777,7 +855,7 @@ export default function BotAdmin() {
         text: '✅ Sesión limpiada. Reinicia el bot para ver el QR nuevo.',
         icon: 'success'
       });
-    } catch (e: any) { 
+    } catch (e: any) {
       fire({
         title: 'Error',
         text: 'Error: ' + (e.response?.data?.error || e.message),
@@ -799,7 +877,7 @@ export default function BotAdmin() {
       a.download = `${botNumber}-export.json`;
       a.click();
       window.URL.revokeObjectURL(url);
-    } catch (e: any) { 
+    } catch (e: any) {
       fire({
         title: 'Error',
         text: 'Error exportando: ' + e.message,
@@ -842,7 +920,7 @@ export default function BotAdmin() {
         });
         loadData();
       }
-    } catch (e: any) { 
+    } catch (e: any) {
       fire({
         title: 'Error',
         text: 'Error importando: ' + e.message,
@@ -898,35 +976,35 @@ export default function BotAdmin() {
                 <span className="text-gray-700">•</span>
                 <span className="text-[10px] font-semibold text-[#25d366] bg-[#25d366]/10 border border-[#25d366]/20 px-2 py-0.5 rounded-full">Panel de administración</span>
                 <span className="text-gray-700">•</span>
-              <select
-                value={botTimezone}
-                onChange={(e) => saveTimezone(e.target.value)}
-                className="bg-transparent border border-white/10 rounded-md text-xs sm:text-sm text-gray-400 focus:outline-none focus:border-[#25d366] px-1 py-0.5 max-w-[150px]"
-                title="País / Zona horaria del bot"
-              >
-                <option value="America/Argentina/Buenos_Aires">🇦🇷 Argentina</option>
-                <option value="America/La_Paz">🇧🇴 Bolivia</option>
-                <option value="America/Sao_Paulo">🇧🇷 Brasil</option>
-                <option value="America/Santiago">🇨🇱 Chile</option>
-                <option value="America/Bogota">🇨🇴 Colombia</option>
-                <option value="America/Costa_Rica">🇨🇷 Costa Rica</option>
-                <option value="America/Havana">🇨🇺 Cuba</option>
-                <option value="America/Guayaquil">🇪🇨 Ecuador</option>
-                <option value="America/El_Salvador">🇸🇻 El Salvador</option>
-                <option value="Europe/Madrid">🇪🇸 España</option>
-                <option value="America/New_York">🇺🇸 EE.UU. (NY)</option>
-                <option value="America/Guatemala">🇬🇹 Guatemala</option>
-                <option value="America/Tegucigalpa">🇭🇳 Honduras</option>
-                <option value="America/Mexico_City">🇲🇽 México</option>
-                <option value="America/Managua">🇳🇮 Nicaragua</option>
-                <option value="America/Panama">🇵🇦 Panamá</option>
-                <option value="America/Asuncion">🇵🇾 Paraguay</option>
-                <option value="America/Lima">🇵🇪 Perú</option>
-                <option value="America/Puerto_Rico">🇵🇷 Puerto Rico</option>
-                <option value="America/Santo_Domingo">🇩🇴 Rep. Dom.</option>
-                <option value="America/Montevideo">🇺🇾 Uruguay</option>
-                <option value="America/Caracas">🇻🇪 Venezuela</option>
-              </select>
+                <select
+                  value={botTimezone}
+                  onChange={(e) => saveTimezone(e.target.value)}
+                  className="bg-transparent border border-white/10 rounded-md text-xs sm:text-sm text-gray-400 focus:outline-none focus:border-[#25d366] px-1 py-0.5 max-w-[150px]"
+                  title="País / Zona horaria del bot"
+                >
+                  <option value="America/Argentina/Buenos_Aires">🇦🇷 Argentina</option>
+                  <option value="America/La_Paz">🇧🇴 Bolivia</option>
+                  <option value="America/Sao_Paulo">🇧🇷 Brasil</option>
+                  <option value="America/Santiago">🇨🇱 Chile</option>
+                  <option value="America/Bogota">🇨🇴 Colombia</option>
+                  <option value="America/Costa_Rica">🇨🇷 Costa Rica</option>
+                  <option value="America/Havana">🇨🇺 Cuba</option>
+                  <option value="America/Guayaquil">🇪🇨 Ecuador</option>
+                  <option value="America/El_Salvador">🇸🇻 El Salvador</option>
+                  <option value="Europe/Madrid">🇪🇸 España</option>
+                  <option value="America/New_York">🇺🇸 EE.UU. (NY)</option>
+                  <option value="America/Guatemala">🇬🇹 Guatemala</option>
+                  <option value="America/Tegucigalpa">🇭🇳 Honduras</option>
+                  <option value="America/Mexico_City">🇲🇽 México</option>
+                  <option value="America/Managua">🇳🇮 Nicaragua</option>
+                  <option value="America/Panama">🇵🇦 Panamá</option>
+                  <option value="America/Asuncion">🇵🇾 Paraguay</option>
+                  <option value="America/Lima">🇵🇪 Perú</option>
+                  <option value="America/Puerto_Rico">🇵🇷 Puerto Rico</option>
+                  <option value="America/Santo_Domingo">🇩🇴 Rep. Dom.</option>
+                  <option value="America/Montevideo">🇺🇾 Uruguay</option>
+                  <option value="America/Caracas">🇻🇪 Venezuela</option>
+                </select>
               </div>
             </div>
           </div>
@@ -936,11 +1014,10 @@ export default function BotAdmin() {
           <button
             onClick={toggleAutoResponse}
             disabled={togglingAutoResponse}
-            className={`shrink-0 flex items-center gap-1.5 text-xs font-medium border px-3 py-2 rounded-xl transition-all ${
-              autoResponseEnabled 
-                ? 'text-[#25d366] bg-[#25d366]/10 border-[#25d366]/20 hover:bg-[#25d366]/20 shadow-sm shadow-[#25d366]/10' 
-                : 'text-gray-500 bg-white/3 border-white/8 hover:bg-white/8 hover:text-gray-300'
-            }`}
+            className={`shrink-0 flex items-center gap-2 text-sm border px-3 py-2 rounded-xl transition-all ${autoResponseEnabled
+              ? 'text-[#25d366] bg-[#25d366]/10 border-[#25d366]/20 hover:bg-[#25d366]/20'
+              : 'text-gray-400 bg-white/5 border-white/10 hover:bg-white/10'
+              }`}
             title={autoResponseEnabled ? 'Desactivar auto-respuesta (modo silencio)' : 'Activar auto-respuesta'}
           >
             {togglingAutoResponse ? (
@@ -960,11 +1037,10 @@ export default function BotAdmin() {
           <button
             onClick={toggleDebug}
             disabled={togglingDebug}
-            className={`shrink-0 flex items-center gap-1.5 text-xs font-medium border px-3 py-2 rounded-xl transition-all ${
-              debugEnabled 
-                ? 'text-amber-400 bg-amber-400/10 border-amber-400/20 hover:bg-amber-400/20 shadow-sm shadow-amber-400/10' 
-                : 'text-gray-500 bg-white/3 border-white/8 hover:bg-white/8 hover:text-gray-300'
-            }`}
+            className={`shrink-0 flex items-center gap-2 text-sm border px-3 py-2 rounded-xl transition-all ${debugEnabled
+              ? 'text-amber-400 bg-amber-400/10 border-amber-400/20 hover:bg-amber-400/20'
+              : 'text-gray-400 bg-white/5 border-white/10 hover:bg-white/10'
+              }`}
             title={debugEnabled ? 'Desactivar captura de logs detallados' : 'Activar captura de logs detallados'}
           >
             {togglingDebug ? (
@@ -1023,11 +1099,10 @@ export default function BotAdmin() {
           <button
             key={id}
             onClick={() => setActiveTab(id)}
-            className={`flex items-center gap-2 shrink-0 sm:flex-1 justify-center px-3 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all ${
-              activeTab === id
-                ? 'bg-[#25d366]/12 text-[#25d366] shadow-[0_0_12px_rgba(37,211,102,0.12)] border border-[#25d366]/15'
-                : 'text-gray-500 hover:text-gray-200 hover:bg-white/4 border border-transparent'
-            }`}
+            className={`flex items-center gap-2 shrink-0 sm:flex-1 justify-center px-3 sm:px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${activeTab === id
+              ? 'bg-[#25d366]/10 text-[#25d366] shadow-sm'
+              : 'text-gray-400 hover:text-white hover:bg-white/5'
+              }`}
           >
             <Icon className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">{label}</span>
@@ -1044,10 +1119,10 @@ export default function BotAdmin() {
           {activeTab === 'stats' && (
             stats ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard label="Total Mensajes"      value={stats.total_mensajes ?? stats.mensajes_recibidos ?? 0} />
-                <StatCard label="Usuarios Únicos"     value={stats.usuarios_unicos ?? 0} />
-                <StatCard label="No Entendidos"       value={stats.mensajes_no_entendidos ?? noEntendidos.length} accent="red" />
-                <StatCard label="Última Actividad"    value={(stats.ultima_actualizacion || stats.ultima_interaccion) ? new Date(stats.ultima_actualizacion || stats.ultima_interaccion!).toLocaleString() : 'N/A'} isText />
+                <StatCard label="Total Mensajes" value={stats.total_mensajes ?? stats.mensajes_recibidos ?? 0} />
+                <StatCard label="Usuarios Únicos" value={stats.usuarios_unicos ?? 0} />
+                <StatCard label="No Entendidos" value={stats.mensajes_no_entendidos ?? noEntendidos.length} accent="red" />
+                <StatCard label="Última Actividad" value={(stats.ultima_actualizacion || stats.ultima_interaccion) ? new Date(stats.ultima_actualizacion || stats.ultima_interaccion!).toLocaleString() : 'N/A'} isText />
               </div>
             ) : (
               <Empty icon={Activity} text="No hay estadísticas disponibles aún." />
@@ -1197,97 +1272,96 @@ export default function BotAdmin() {
                 const search = sessionSearch.toLowerCase();
                 return s.phone.includes(search) || (s.contactName?.toLowerCase().includes(search) ?? false);
               }).length === 0
-              ? <Empty icon={MessageSquare} text={sessionSearch ? "No se encontraron conversaciones que coincidan." : "No hay sesiones activas."} />
-              : (
-                <div className="bg-[#12121a] border border-white/5 rounded-2xl overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left min-w-[500px]">
-                    <thead>
-                      <tr className="bg-black/20 text-gray-400 text-sm">
-                        <th className="p-4 font-medium">Contacto</th>
-                        <th className="p-4 font-medium">Estado</th>
-                        <th className="p-4 font-medium">Última interacción</th>
-                        <th className="p-4 font-medium text-right">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {sessions
-                        .filter(s => {
-                          const search = sessionSearch.toLowerCase();
-                          return s.phone.includes(search) || (s.contactName?.toLowerCase().includes(search) ?? false);
-                        })
-                        .map(s => (
-                        <tr key={s.id} className="hover:bg-white/5 transition-colors">
-                          <td className="p-4 font-mono text-sm text-gray-300">
-                            {editingSessionId === s.id ? (
-                              <div className="flex flex-col gap-1">
-                                <input
-                                  autoFocus
-                                  value={editSessionName}
-                                  onChange={e => setEditSessionName(e.target.value)}
-                                  onBlur={() => saveSessionName(s.id)}
-                                  onKeyDown={e => e.key === 'Enter' ? saveSessionName(s.id) : e.key === 'Escape' && setEditingSessionId(null)}
-                                  className="text-gray-200 font-sans font-medium bg-black/50 border border-[#25d366]/50 rounded px-2 py-0.5 focus:outline-none w-full max-w-[200px]"
-                                  placeholder="Alias de contacto"
-                                />
-                                <span className="text-xs text-gray-500 font-mono">+{s.phone}</span>
-                              </div>
-                            ) : (
-                              <div className="flex flex-col gap-0.5 group">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-gray-200 font-sans font-medium">{s.contactName || 'Sin Alias'}</span>
-                                  <button onClick={() => { setEditingSessionId(s.id); setEditSessionName(s.contactName || ''); }} className="text-gray-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity" title="Editar alias">
-                                    <Edit2 className="h-3 w-3" />
-                                  </button>
-                                </div>
-                                <span className="text-xs text-gray-500 font-mono">+{s.phone}</span>
-                              </div>
-                            )}
-                          </td>
-                          <td className="p-4">
-                            <select
-                              value={s.estado || 'bot'}
-                              onChange={(e) => updateSessionStatus(s.id, e.target.value)}
-                              className={`text-xs px-2 py-1 bg-transparent border rounded-full focus:outline-none cursor-pointer hover:brightness-110 transition-all ${
-                                (s.estado || 'bot') === 'bot' 
-                                  ? 'text-[#25d366] border-[#25d366]/20 bg-[#25d366]/10' 
-                                  : 'text-indigo-400 border-indigo-400/20 bg-indigo-400/10'
-                              }`}
-                            >
-                              <option value="bot" className="bg-[#12121a]">bot</option>
-                              <option value="human" className="bg-[#12121a]">human</option>
-                            </select>
-                          </td>
-                          <td className="p-4 text-sm text-gray-400">
-                            {s.last_interaction ? new Date(s.last_interaction).toLocaleString() : 'N/A'}
-                          </td>
-                          <td className="p-4">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => handleViewMessages(s.phone)}
-                                className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-white bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 px-2.5 py-1.5 rounded-lg transition-all whitespace-nowrap"
-                                title="Ver mensajes de este número en el log"
-                              >
-                                <ScrollText className="h-3 w-3" />
-                                Ver mensajes
-                              </button>
-                              <button
-                                onClick={() => deleteSession(s.id, s.phone)}
-                                className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
-                                title="Eliminar registro de este contacto"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                ? <Empty icon={MessageSquare} text={sessionSearch ? "No se encontraron conversaciones que coincidan." : "No hay sesiones activas."} />
+                : (
+                  <div className="bg-[#12121a] border border-white/5 rounded-2xl overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left min-w-[500px]">
+                        <thead>
+                          <tr className="bg-black/20 text-gray-400 text-sm">
+                            <th className="p-4 font-medium">Contacto</th>
+                            <th className="p-4 font-medium">Estado</th>
+                            <th className="p-4 font-medium">Última interacción</th>
+                            <th className="p-4 font-medium text-right">Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {sessions
+                            .filter(s => {
+                              const search = sessionSearch.toLowerCase();
+                              return s.phone.includes(search) || (s.contactName?.toLowerCase().includes(search) ?? false);
+                            })
+                            .map(s => (
+                              <tr key={s.id} className="hover:bg-white/5 transition-colors">
+                                <td className="p-4 font-mono text-sm text-gray-300">
+                                  {editingSessionId === s.id ? (
+                                    <div className="flex flex-col gap-1">
+                                      <input
+                                        autoFocus
+                                        value={editSessionName}
+                                        onChange={e => setEditSessionName(e.target.value)}
+                                        onBlur={() => saveSessionName(s.id)}
+                                        onKeyDown={e => e.key === 'Enter' ? saveSessionName(s.id) : e.key === 'Escape' && setEditingSessionId(null)}
+                                        className="text-gray-200 font-sans font-medium bg-black/50 border border-[#25d366]/50 rounded px-2 py-0.5 focus:outline-none w-full max-w-[200px]"
+                                        placeholder="Alias de contacto"
+                                      />
+                                      <span className="text-xs text-gray-500 font-mono">+{s.phone}</span>
+                                    </div>
+                                  ) : (
+                                    <div className="flex flex-col gap-0.5 group">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-gray-200 font-sans font-medium">{s.contactName || 'Sin Alias'}</span>
+                                        <button onClick={() => { setEditingSessionId(s.id); setEditSessionName(s.contactName || ''); }} className="text-gray-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity" title="Editar alias">
+                                          <Edit2 className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                      <span className="text-xs text-gray-500 font-mono">+{s.phone}</span>
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="p-4">
+                                  <select
+                                    value={s.estado || 'bot'}
+                                    onChange={(e) => updateSessionStatus(s.id, e.target.value)}
+                                    className={`text-xs px-2 py-1 bg-transparent border rounded-full focus:outline-none cursor-pointer hover:brightness-110 transition-all ${(s.estado || 'bot') === 'bot'
+                                      ? 'text-[#25d366] border-[#25d366]/20 bg-[#25d366]/10'
+                                      : 'text-indigo-400 border-indigo-400/20 bg-indigo-400/10'
+                                      }`}
+                                  >
+                                    <option value="bot" className="bg-[#12121a]">bot</option>
+                                    <option value="human" className="bg-[#12121a]">human</option>
+                                  </select>
+                                </td>
+                                <td className="p-4 text-sm text-gray-400">
+                                  {s.last_interaction ? new Date(s.last_interaction).toLocaleString() : 'N/A'}
+                                </td>
+                                <td className="p-4">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button
+                                      onClick={() => handleViewMessages(s.phone)}
+                                      className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-white bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 px-2.5 py-1.5 rounded-lg transition-all whitespace-nowrap"
+                                      title="Ver mensajes de este número en el log"
+                                    >
+                                      <ScrollText className="h-3 w-3" />
+                                      Ver mensajes
+                                    </button>
+                                    <button
+                                      onClick={() => deleteSession(s.id, s.phone)}
+                                      className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                                      title="Eliminar registro de este contacto"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
-              )
-            }</div>
+                )
+              }</div>
           )}
 
 
@@ -1425,7 +1499,7 @@ export default function BotAdmin() {
                   <p className="text-sm text-gray-400 mb-4">
                     Tu plan actual ({userPlanName}) no incluye este servicio. Actualiza al plan Pro o Premium →
                   </p>
-                  <button 
+                  <button
                     onClick={() => navigate('/saas/subscription')}
                     className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/20"
                   >
@@ -1461,7 +1535,7 @@ export default function BotAdmin() {
                       <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">x-client-botid</span>
                       <div className="flex items-center justify-between">
                         <code className="text-indigo-400 font-mono text-sm">{botNumber}</code>
-                        <button 
+                        <button
                           onClick={() => { navigator.clipboard.writeText(botNumber); fire({ title: 'Copiado', toast: true, position: 'top-end', timer: 2000, icon: 'success' }); }}
                           className="p-2 hover:bg-white/5 rounded-lg transition-all text-gray-500 hover:text-white"
                         >
@@ -1473,7 +1547,7 @@ export default function BotAdmin() {
                       <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">x-client-key</span>
                       <div className="flex items-center justify-between">
                         <code className="text-indigo-400 font-mono text-sm">{apiKey || 'Cargando...'}</code>
-                        <button 
+                        <button
                           onClick={() => { navigator.clipboard.writeText(apiKey); fire({ title: 'Copiado', toast: true, position: 'top-end', timer: 2000, icon: 'success' }); }}
                           className="p-2 hover:bg-white/5 rounded-lg transition-all text-gray-500 hover:text-white"
                         >
@@ -1666,9 +1740,8 @@ export default function BotAdmin() {
               <div className="bg-[#12121a] border border-white/5 rounded-2xl p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className={`p-3 rounded-xl flex items-center justify-center ${
-                      mcpMuevelappEnabled ? 'bg-[#25d366]/20 text-[#25d366]' : 'bg-gray-800 text-gray-400'
-                    }`}>
+                    <div className={`p-3 rounded-xl flex items-center justify-center ${mcpMuevelappEnabled ? 'bg-[#25d366]/20 text-[#25d366]' : 'bg-gray-800 text-gray-400'
+                      }`}>
                       <Code className="h-6 w-6" />
                     </div>
                     <div>
@@ -1680,25 +1753,84 @@ export default function BotAdmin() {
                     <button
                       onClick={toggleMcpMuevelapp}
                       disabled={togglingMcp}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                        mcpMuevelappEnabled ? 'bg-[#25d366]' : 'bg-gray-600'
-                      }`}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${mcpMuevelappEnabled ? 'bg-[#25d366]' : 'bg-gray-600'
+                        }`}
                     >
                       <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          mcpMuevelappEnabled ? 'translate-x-6' : 'translate-x-1'
-                        }`}
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${mcpMuevelappEnabled ? 'translate-x-6' : 'translate-x-1'
+                          }`}
                       />
                     </button>
                   </div>
                 </div>
-                
+
                 <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 mt-6">
                   <h5 className="text-blue-400 font-semibold text-sm mb-2">Herramientas expuestas a la IA:</h5>
                   <ul className="list-disc list-inside text-gray-300 text-sm space-y-1">
                     <li><code className="text-blue-300 bg-blue-900/30 px-1 py-0.5 rounded">validar_usuario</code> - Chequea si el teléfono está en Firebase.</li>
                     <li><code className="text-blue-300 bg-blue-900/30 px-1 py-0.5 rounded">crear_usuario</code> - Registra un usuario nuevo en Muevelapp.</li>
                     <li><code className="text-blue-300 bg-blue-900/30 px-1 py-0.5 rounded">crear_orden_link</code> - Procesa un link de Google Maps para cotizar el viaje.</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="bg-[#12121a] border border-white/5 rounded-2xl p-6 mt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-3 rounded-xl flex items-center justify-center ${mcpOrdenalappEnabled ? 'bg-[#25d366]/20 text-[#25d366]' : 'bg-gray-800 text-gray-400'
+                      }`}>
+                      <Code className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-white font-medium text-lg">OrdenalApp (E-commerce)</h4>
+                      <p className="text-gray-400 text-sm">Permite consultar el catálogo y crear pedidos en el sistema del restaurante.</p>
+                    </div>
+                  </div>
+                  <div>
+                    <button
+                      onClick={toggleMcpOrdenalapp}
+                      disabled={togglingOrdenalappMcp}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${mcpOrdenalappEnabled ? 'bg-[#25d366]' : 'bg-gray-600'
+                        }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${mcpOrdenalappEnabled ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-4 border-t border-white/5 pt-4">
+                  <label className="block text-gray-400 text-sm font-medium mb-1">
+                    Subdominio del restaurante (Slug):
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        value={ordenalappSlug}
+                        onChange={(e) => setOrdenalappSlug(e.target.value.toLowerCase().replace(/\s+/g, ''))}
+                        placeholder="ej: mundoolimpico"
+                        className="w-full bg-[#161622] border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-[#25d366] text-sm"
+                      />
+                      <span className="absolute right-3 top-2 text-gray-500 text-sm">.ordenalapp.com</span>
+                    </div>
+                    <button
+                      onClick={saveOrdenalappSlug}
+                      disabled={savingOrdenalappSlug || !ordenalappSlug.trim()}
+                      className="bg-[#25d366]/20 text-[#25d366] hover:bg-[#25d366]/30 transition-colors px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-50"
+                    >
+                      {savingOrdenalappSlug ? 'Guardando...' : 'Guardar'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4 mt-6">
+                  <h5 className="text-orange-400 font-semibold text-sm mb-2">Herramientas expuestas a la IA:</h5>
+                  <ul className="list-disc list-inside text-gray-300 text-sm space-y-1">
+                    <li><code className="text-orange-300 bg-orange-900/30 px-1 py-0.5 rounded">obtener_catalogo_ecommerce</code> - Obtiene la lista de platos y productos.</li>
+                    <li><code className="text-orange-300 bg-orange-900/30 px-1 py-0.5 rounded">crear_pedido_ecommerce</code> - Registra la orden final en el sistema del restaurante.</li>
                   </ul>
                 </div>
               </div>

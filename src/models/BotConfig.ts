@@ -48,6 +48,10 @@ export interface BotConfig {
   isAutoResponseEnabled: boolean;
   /** Activar Integración MCP de Muevelapp */
   muevelappMcpEnabled?: boolean;
+  /** Activar Integración MCP de OrdenalApp (E-commerce) */
+  ordenalappMcpEnabled?: boolean;
+  /** Subdominio/Slug de OrdenalApp */
+  ordenalappSlug?: string;
   /** Prompt base para la IA. Si no existe, se usa uno por defecto. */
   prompt_ia?: string | undefined;
   /** Zona horaria configurada para el bot */

@@ -26,6 +26,7 @@ export type BotStatus =
   | "idle"
   | "initializing"
   | "qr"
+  | "authenticated"
   | "ready"
   | "disconnected"
   | "error";
@@ -150,7 +151,7 @@ export class BotInstance extends EventEmitter {
 
     const { promises: fsp } = await import("node:fs");
     const sessionDir = path.join(dataPath, `session-${this.botId}`);
-    
+
     // Cleanup SingletonLock if it exists (prevents "Profile in use" error after crash)
     try {
       const lockFiles = [
@@ -187,12 +188,13 @@ export class BotInstance extends EventEmitter {
         args: [
           "--no-sandbox",
           "--disable-setuid-sandbox",
+          '--unhandled-rejections=strict',
           "--disable-dev-shm-usage",
           "--disable-accelerated-2d-canvas",
           "--disable-gpu",
         ],
         timeout: 60000,
-        protocolTimeout: 300000,
+        protocolTimeout: 60000,
       },
     });
 
@@ -203,15 +205,32 @@ export class BotInstance extends EventEmitter {
     this.configSvc.startConfigRefresh();
     await this.statsMgr.loadStats();
 
+    let authTimeout: NodeJS.Timeout | null = null;
+
     this.client.on("qr", (qr: string) => {
       this.setState({ status: "qr", qr });
       this.emit("qr", qr);
     });
 
+    this.client.on("authenticated", () => {
+      this.setState({ status: "authenticated", qr: null });
+      this.emit("authenticated");
+
+      // Prevenir que se quede colgado eternamente en autenticación
+      if (authTimeout) clearTimeout(authTimeout);
+      authTimeout = setTimeout(async () => {
+        if (this.state.status === "authenticated") {
+          this.logger.error("⏳ Timeout: Se quedó colgado en 'authenticated' por demasiado tiempo. Reiniciando para destrabar...");
+          await this.restart();
+        }
+      }, 90000); // 90 segundos de tolerancia
+    });
+
     this.client.on("ready", async () => {
+      if (authTimeout) clearTimeout(authTimeout);
       this.logger.log(`✅ Bot listo y operativo.`);
       this.setState({ status: "ready", qr: null, readySince: Date.now() });
-      
+
       // Parche para error de estados (canCheckStatusRankingPosterGating)
       try {
         await (this.client as any).pupPage.evaluate(() => {
@@ -232,11 +251,13 @@ export class BotInstance extends EventEmitter {
     });
 
     this.client.on("disconnected", (reason: string) => {
+      if (authTimeout) clearTimeout(authTimeout);
       this.setState({ status: "disconnected", qr: null });
       this.emit("disconnected", reason);
     });
 
     this.client.on("auth_failure", (msg: string) => {
+      if (authTimeout) clearTimeout(authTimeout);
       this.logger.error(`Error de autenticación: ${msg}`);
       this.setState({ status: "error", lastError: msg });
     });
@@ -268,7 +289,7 @@ export class BotInstance extends EventEmitter {
     if (!this.client) return;
     try {
       await this.client.destroy();
-    } catch (e) {}
+    } catch (e) { }
     this.client = null;
     this.configSvc.stopConfigRefresh();
     this.setState({ status: "idle", qr: null });
@@ -285,7 +306,7 @@ export class BotInstance extends EventEmitter {
     this.healthCheckInterval = setInterval(async () => {
       if (this.state.status === "ready" && this.client) {
         try {
-          const timeoutPromise = (ms: number, msg: string) => new Promise<never>((_, reject) => 
+          const timeoutPromise = (ms: number, msg: string) => new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error(msg)), ms)
           );
 
@@ -294,7 +315,7 @@ export class BotInstance extends EventEmitter {
             this.client.getState(),
             timeoutPromise(30000, "Timeout obteniendo estado")
           ]) as string;
-          
+
           // Verificar también que WWebJS siga inyectado (si la página se recargó sola, window.WWebJS será undefined)
           const evaluatePromise = (this.client as any).pupPage.evaluate(() => {
             return typeof window !== "undefined" && (window as any).WWebJS !== undefined;
@@ -304,7 +325,7 @@ export class BotInstance extends EventEmitter {
             evaluatePromise,
             timeoutPromise(30000, "Timeout verificando WWebJS inyectado")
           ]).catch(() => false);
-          
+
           if (!state || state === "CONFLICT" || state === "UNPAIRED" || !isWWebJSInjected) {
             this.logger.warn(`⚠️ HealthCheck: Estado anómalo detectado (State: ${state}, WWebJS: ${isWWebJSInjected}). Reiniciando...`);
             await this.restart();
@@ -398,117 +419,33 @@ export class BotInstance extends EventEmitter {
               win.Store.StatusUtils.canCheckStatusRankingPosterGating = () => false;
             }
           }
-        } catch (e) {}
+        } catch (e) { }
       });
-    } catch (e) {}
+    } catch (e) { }
   }
 
-  /**
-   * Inyecta un parche en el navegador para evitar el error "No LID for user"
-   * al enviar mensajes a grupos en la arquitectura multi-dispositivo de WhatsApp.
-   *
-   * Raíz del problema: cuando un grupo tiene isLidAddressingMode=true, WhatsApp Web
-   * intenta cifrar el mensaje usando el LID de cada participante. Si alguno no tiene
-   * LID en caché local, WAWebSendMsgChatAction.addAndSendMsgToChat lanza el error.
-   *
-   * Estrategia principal: parchear WWebJS.sendMessage para desactivar temporalmente
-   * isLidAddressingMode en el metadata del grupo antes del envío, forzando la ruta
-   * de cifrado estándar (por número de teléfono) que sí funciona.
-   *
-   * Estrategia secundaria: parchear WAWebSendMsgChatAction.addAndSendMsgToChat para
-   * capturar el error en origen y silenciarlo cuando ya no hay alternativa.
-   */
-  private async _patchLidResolution() {
-    try {
-      await (this.client as any).pupPage.evaluate(() => {
-        try {
-          const win = window as any;
-          if ((win as any).__lidPatchApplied) return; // evitar doble parcheo
-
-          // ── Estrategia principal: parchear WWebJS.sendMessage ──────────────
-          // Leído de Utils.js: el error ocurre en addAndSendMsgToChat cuando
-          // chat.groupMetadata.isLidAddressingMode === true. Al ponerlo a false
-          // temporalmente, WhatsApp usa la ruta de cifrado por número (@c.us)
-          // que no requiere LID.
-          if (win.WWebJS && win.WWebJS.sendMessage) {
-            const origSend = win.WWebJS.sendMessage;
-            win.WWebJS.sendMessage = async function(chat: any, content: any, options: any) {
-              let prevLidMode: boolean | undefined;
-              try {
-                // Desactivar temporalmente LID addressing mode en grupos
-                if (chat && chat.groupMetadata && chat.groupMetadata.isLidAddressingMode) {
-                  prevLidMode = true;
-                  chat.groupMetadata.isLidAddressingMode = false;
-                }
-                return await origSend.call(win.WWebJS, chat, content, options);
-              } catch (e: any) {
-                if (e && e.message && e.message.includes('No LID for user')) {
-                  // Si aún falla, intentar con isLidAddressingMode=false ya aplicado
-                  console.warn('[WWebJS Patch] No LID for user tras desactivar LID mode, ignorando:', e.message);
-                  return undefined; // mensaje no enviado pero sin romper el flujo
-                }
-                throw e;
-              } finally {
-                // Restaurar el valor original para no afectar otras operaciones
-                if (prevLidMode !== undefined && chat && chat.groupMetadata) {
-                  chat.groupMetadata.isLidAddressingMode = prevLidMode;
-                }
-              }
-            };
-          }
-
-          // ── Estrategia secundaria: parchear WAWebSendMsgChatAction ─────────
-          // Este es el módulo que lanza el error en origen (identificado por
-          // el stack trace: addAndSendMsgToChat → encrypt → getLid → throw)
-          try {
-            const sendAction = win.require('WAWebSendMsgChatAction');
-            if (sendAction && sendAction.addAndSendMsgToChat) {
-              const origAddSend = sendAction.addAndSendMsgToChat;
-              sendAction.addAndSendMsgToChat = function(chat: any, message: any, ...rest: any[]) {
-                // Desactivar LID mode antes de la llamada interna
-                let prevLidMode: boolean | undefined;
-                if (chat && chat.groupMetadata && chat.groupMetadata.isLidAddressingMode) {
-                  prevLidMode = true;
-                  chat.groupMetadata.isLidAddressingMode = false;
-                }
-                try {
-                  return origAddSend.call(sendAction, chat, message, ...rest);
-                } catch (e: any) {
-                  if (e && e.message && e.message.includes('No LID for user')) {
-                    console.warn('[WWebJS Patch] addAndSendMsgToChat - No LID ignorado:', e.message);
-                    return [Promise.resolve(null), Promise.resolve(null)];
-                  }
-                  throw e;
-                } finally {
-                  if (prevLidMode !== undefined && chat && chat.groupMetadata) {
-                    chat.groupMetadata.isLidAddressingMode = prevLidMode;
-                  }
-                }
-              };
-            }
-          } catch (e) {
-            // WAWebSendMsgChatAction puede no estar disponible en esta versión
-          }
-
-          (win as any).__lidPatchApplied = true;
-          console.log('[WWebJS Patch] Parche LID aplicado exitosamente.');
-        } catch (patchErr) {
-          console.warn('[WWebJS Patch] No se pudo aplicar el parche LID:', patchErr);
-        }
-      });
-    } catch (e) {
-      this.logger.warn(`⚠️ Error aplicando parche LID (no crítico): ${(e as any)?.message || e}`);
-    }
-  }
+  private _cachedChats: any[] | null = null;
+  private _cachedChatsTime: number = 0;
 
   /**
    * Returns all chats from the WhatsApp client. Requires READY status.
+   * Caches the result for 60 seconds to avoid overloading Puppeteer on frequent calls.
    */
   async getChats(): Promise<any[]> {
     if (!this.client || this.state.status !== "ready") {
       throw new Error(`Bot ${this.botId} is not ready.`);
     }
-    return this.client.getChats();
+
+    const now = Date.now();
+    if (this._cachedChats && now - this._cachedChatsTime < 60000) {
+      return this._cachedChats;
+    }
+
+    const chats = await this.client.getChats();
+    this._cachedChats = chats;
+    this._cachedChatsTime = now;
+
+    return chats;
   }
 
   /**
@@ -575,18 +512,30 @@ export class BotInstance extends EventEmitter {
       // 1. Verificar estado del cliente
       this.checkClientState();
 
-      // 2. Limpieza e intento de resolución de ID (@lid -> @c.us)
-      const resolvedTo = await this.resolveToCanonicalContactId(to);
-
-      // 3. Para grupos: re-aplicar parche LID antes de enviar (puede haberse perdido tras recarga)
-      if (resolvedTo.endsWith("@g.us")) {
-        await this._patchLidResolution();
-      }
-
-      // 4. Enviar el mensaje
+      // 2. Segmentar estrategia de envío según tipo de destino
       if (!this.client) {
         throw new Error("Client is null after checkState");
       }
+
+      // ── Grupos (@g.us): usar chat.sendMessage() para evitar el validador de LID ──
+      if (to.endsWith("@g.us")) {
+        const chat = await this.client.getChatById(to);
+        return await chat.sendMessage(content, options);
+      }
+
+      // ── Estados (status@broadcast): envolver en timeout para evitar bloqueos ──
+      if (to === "status@broadcast") {
+        const STATUS_TIMEOUT_MS = 30_000;
+        return await Promise.race([
+          this.client.sendMessage(to, content, options),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Timeout: envío a status@broadcast tardó más de 30s")), STATUS_TIMEOUT_MS)
+          ),
+        ]);
+      }
+
+      // ── Contactos individuales (@c.us, @lid): resolver LID normalmente ──
+      const resolvedTo = await this.resolveToCanonicalContactId(to);
       return await this.client.sendMessage(resolvedTo, content, options);
     } catch (error: any) {
       const targetId = to;
@@ -630,18 +579,27 @@ export class BotInstance extends EventEmitter {
         ? msg.id.remote
         : msg.id.remote._serialized;
     try {
-      // Resolve the actual contact (phone number) from the chat ID (LID or Phone)
-      const contact = await this.client?.getContactById(rawRemote);
+      const contactPromise = this.client?.getContactById(rawRemote);
+      if (!contactPromise) throw new Error(`Client not available`);
+
+      const GET_CONTACT_TIMEOUT = 5000;
+      const contact = await Promise.race([
+        contactPromise,
+        new Promise<any>((_, reject) =>
+          setTimeout(() => reject(new Error(`getContactById timed out after ${GET_CONTACT_TIMEOUT}ms`)), GET_CONTACT_TIMEOUT)
+        ),
+      ]);
       if (!contact) throw new Error(`Contact ${rawRemote} not found.`);
-      
-      // Preferir el número real si está disponible, evita fallos de enrutamiento al intentar enviar a un @lid
+
       if (contact.number) {
         return `${contact.number}@c.us`;
       }
-      return this.normalizeToContactId(contact.id._serialized);
+
+      const baseId = (contact.id._serialized || rawRemote).split("@")[0];
+      return `${baseId}@c.us`;
     } catch (e) {
-      // Fallback to chat ID if contact resolution fails
-      return this.normalizeToContactId(rawRemote);
+      const baseId = rawRemote.split("@")[0];
+      return `${baseId}@c.us`;
     }
   }
 
@@ -775,9 +733,9 @@ export class BotInstance extends EventEmitter {
           // Reseteamos el estado para este usuario.
           const lastUpdate = (pending as any).lastProcessingUpdate || Date.now();
           if (Date.now() - lastUpdate > 25000) { // 25 segundos
-             this.logger.warn(`⚠️ Detectado posible cuelgue en procesamiento para ${from}. Reiniciando estado.`);
-             pending.isProcessing = false;
-             this._triggerAggregation(from);
+            this.logger.warn(`⚠️ Detectado posible cuelgue en procesamiento para ${from}. Reiniciando estado.`);
+            pending.isProcessing = false;
+            this._triggerAggregation(from);
           }
         }
       }
@@ -793,6 +751,13 @@ export class BotInstance extends EventEmitter {
     // Marcar como procesando en lugar de borrar inmediatamente
     pending.isProcessing = true;
     (pending as any).lastProcessingUpdate = Date.now();
+
+    const AGGREGATION_TIMEOUT = 120_000;
+    const aggregationTimeout = setTimeout(() => {
+      this.logger.error(`⚠️ Agregación timed out para ${from} (${AGGREGATION_TIMEOUT / 1000}s). Limpiando estado para destrabar.`);
+      pending.isProcessing = false;
+      this.aggregationMap.delete(from);
+    }, AGGREGATION_TIMEOUT);
 
     try {
       // this.logger.log(`[Agregación] Procesando ${pending.rawMessages.length} mensajes para ${from}...`);
@@ -815,13 +780,23 @@ export class BotInstance extends EventEmitter {
       let contact: any;
       let realFrom = from;
       try {
-        contact = await firstMsg.getContact();
+        const GET_CONTACT_TIMEOUT = 5000;
+        contact = await Promise.race([
+          firstMsg.getContact(),
+          new Promise<any>((_, reject) =>
+            setTimeout(() => reject(new Error(`getContact timed out after ${GET_CONTACT_TIMEOUT}ms`)), GET_CONTACT_TIMEOUT)
+          ),
+        ]);
       } catch (contactErr) {
         this.logger.error(
           `Error obteniendo contacto para ${from}, usando fallback:`,
           contactErr,
         );
         contact = null;
+      }
+
+      if (contact && contact.number) {
+        realFrom = `${contact.number}@c.us`;
       }
 
       let session = await this.sessionMgr.getSession(realFrom);
@@ -906,7 +881,9 @@ export class BotInstance extends EventEmitter {
         config.timezone,
         motivosNotificacion,
         config.muevelappMcpEnabled,
-        realFrom.split('@')[0]
+        realFrom.split('@')[0],
+        config.ordenalappMcpEnabled,
+        config.ordenalappSlug
       );
 
       // 6. Verificar estado humano ANTES de finalizar (puede haber cambiado durante la generación IA)
@@ -936,6 +913,7 @@ export class BotInstance extends EventEmitter {
     } catch (err) {
       this.logger.error(`Error en agregación (${from}):`, err);
     } finally {
+      clearTimeout(aggregationTimeout);
       pending.isProcessing = false;
 
       // Si llegaron nuevos mensajes mientras procesábamos, re-enviamos la agregación
@@ -1120,16 +1098,16 @@ export class BotInstance extends EventEmitter {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status} ${response.statusText}`);
       }
-      
+
       let mimetype = response.headers.get("content-type") || "image/jpeg";
-      
+
       // Validar que no sea una respuesta de error en JSON o HTML que el servidor haya devuelto con un status 200
       if (mimetype.includes("application/json") || mimetype.includes("text/html") || mimetype.includes("text/plain")) {
         throw new Error(`El archivo no es multimedia válido (Mime: ${mimetype})`);
       }
 
       const arrayBuffer = await response.arrayBuffer();
-      
+
       if (arrayBuffer.byteLength < 100) {
         throw new Error("El archivo descargado es demasiado pequeño o está corrupto.");
       }
@@ -1164,7 +1142,7 @@ export class BotInstance extends EventEmitter {
     try {
       const media = await msg.downloadMedia();
       if (!media) return null;
-       await fs.promises.writeFile(tempFilePath, media.data, {
+      await fs.promises.writeFile(tempFilePath, media.data, {
         encoding: "base64",
       });
       const openai = new OpenAI({ apiKey: openaiApiKey, timeout: 45000 });

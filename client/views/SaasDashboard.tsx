@@ -6,7 +6,7 @@ import LoadingScreen from '../components/LoadingScreen';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { SubscriptionRequestModal } from '../components/SubscriptionRequestModal';
-import type { PricingPlan} from '../components/SubscriptionRequestModal';
+import type { PricingPlan } from '../components/SubscriptionRequestModal';
 
 interface Bot {
   botId: string;
@@ -25,16 +25,16 @@ const SaasDashboard: React.FC = () => {
   const [bots, setBots] = useState<Bot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
+
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newBotName, setNewBotName] = useState('');
   const [newBotTimezone, setNewBotTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Caracas');
-  
+
   const [billingData, setBillingData] = useState<any>(null);
   const [plans, setPlans] = useState<PricingPlan[]>([]);
   const [showRequestModal, setShowRequestModal] = useState(false);
-  
+
   const [qrModalBot, setQrModalBot] = useState<string | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [qrStatus, setQrStatus] = useState<string>('');
@@ -75,13 +75,13 @@ const SaasDashboard: React.FC = () => {
       ]);
       const data = await res.json();
       const bData = await billingRes.json();
-      
+
       if (data.ok) {
         setBots(data.data);
       } else {
         setError(data.error || 'Error fetching bots');
       }
-      
+
       if (bData.ok) {
         setBillingData(bData);
       }
@@ -114,10 +114,23 @@ const SaasDashboard: React.FC = () => {
             setQrCode(data.qr);
             setQrStatus('');
           } else if (data.status) {
-            setQrStatus(`Estado: ${data.status}`);
+            setQrCode(null);
+
+            // En lugar de una alerta, simplemente mostramos el estado de forma amigable
+            if (data.status === 'authenticated') {
+              setQrStatus('Iniciando sesión... Sincronizando tus chats de WhatsApp, esto puede tomar un minuto...');
+            } else {
+              setQrStatus(`Estado: ${data.status}`);
+            }
+
             if (data.status === 'ready') {
               setQrModalBot(null);
               fetchBots();
+              fire({
+                title: 'Bot iniciado',
+                text: '¡Bot listo y operativo!',
+                icon: 'success'
+              });
             }
           }
         } catch (e) {
@@ -364,7 +377,7 @@ const SaasDashboard: React.FC = () => {
           <span>＋</span> Nuevo Bot
         </button>
       </div>
-      
+
       {!isAdmin && billingData?.subscription && (() => {
         const expiresAt = billingData.subscription.expiresAt;
         const ms = expiresAt > 9999999999 ? expiresAt : expiresAt * 1000;
@@ -372,20 +385,18 @@ const SaasDashboard: React.FC = () => {
         const isExpired = daysLeft <= 0;
 
         return (
-          <div 
+          <div
             onClick={() => !isExpired && navigate('/saas/subscription')}
-            className={`mb-6 p-4 rounded-2xl border transition-all flex flex-col sm:flex-row items-center justify-between gap-4 ${
-              isExpired
-                ? 'bg-red-500/10 border-red-500/20 text-red-400'
-                : billingData.subscription.isTrial 
-                  ? 'bg-blue-500/10 border-blue-500/20 text-blue-400 cursor-pointer hover:brightness-110' 
-                  : 'bg-[#25d366]/5 border-[#25d366]/10 text-gray-300 cursor-pointer hover:brightness-110'
-            }`}
+            className={`mb-6 p-4 rounded-2xl border transition-all flex flex-col sm:flex-row items-center justify-between gap-4 ${isExpired
+              ? 'bg-red-500/10 border-red-500/20 text-red-400'
+              : billingData.subscription.isTrial
+                ? 'bg-blue-500/10 border-blue-500/20 text-blue-400 cursor-pointer hover:brightness-110'
+                : 'bg-[#25d366]/5 border-[#25d366]/10 text-gray-300 cursor-pointer hover:brightness-110'
+              }`}
           >
             <div className="flex items-center gap-3 w-full sm:w-auto">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                isExpired ? 'bg-red-500/20' : billingData.subscription.isTrial ? 'bg-blue-500/20' : 'bg-[#25d366]/20'
-              }`}>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isExpired ? 'bg-red-500/20' : billingData.subscription.isTrial ? 'bg-blue-500/20' : 'bg-[#25d366]/20'
+                }`}>
                 {isExpired ? '⚠️' : billingData.subscription.isTrial ? '🎁' : '💎'}
               </div>
               <div>
@@ -397,9 +408,9 @@ const SaasDashboard: React.FC = () => {
                 </h4>
               </div>
             </div>
-            
+
             {isExpired ? (
-              <button 
+              <button
                 onClick={(e) => { e.stopPropagation(); setShowRequestModal(true); }}
                 className="w-full sm:w-auto text-xs font-bold px-5 py-2.5 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20"
               >
@@ -442,110 +453,110 @@ const SaasDashboard: React.FC = () => {
             const subStatus = billingData?.subscription?.status;
             const expiresAt = billingData?.subscription?.expiresAt;
             const now = Math.floor(Date.now() / 1000);
-            
+
             // Check if it can run
             const canRun = subStatus === "active" && (expiresAt > now);
-            
+
             return (
-            <div key={bot.botId} className="bg-[#12121a] border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-all shadow-xl flex flex-col">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h3 className="text-lg font-bold text-white mb-1">{bot.nombre}</h3>
-                  <p className="font-mono text-xs text-gray-500 mb-4">{bot.botId}</p>
-                  
-                  {!isAdmin && !canRun && (
-                    <div className="mb-4 text-xs font-semibold px-3 py-2 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg flex justify-between items-center">
-                      <span>No tienes plan activo</span>
-                      <button onClick={() => setShowRequestModal(true)} className="underline font-bold">Pagar Plan</button>
-                    </div>
-                  )}
+              <div key={bot.botId} className="bg-[#12121a] border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-all shadow-xl flex flex-col">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-white mb-1">{bot.nombre}</h3>
+                    <p className="font-mono text-xs text-gray-500 mb-4">{bot.botId}</p>
+
+                    {!isAdmin && !canRun && (
+                      <div className="mb-4 text-xs font-semibold px-3 py-2 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg flex justify-between items-center">
+                        <span>No tienes plan activo</span>
+                        <button onClick={() => setShowRequestModal(true)} className="underline font-bold">Pagar Plan</button>
+                      </div>
+                    )}
+                  </div>
+                  {getStatusBadge(bot.status)}
                 </div>
-                {getStatusBadge(bot.status)}
-              </div>
-              
-              <div className="text-sm text-gray-400 mt-auto mb-6">
-                {bot.readySince 
-                  ? <span className="text-[#25d366]">🟢 Activo desde {new Date(bot.readySince).toLocaleTimeString()}</span>
-                  : bot.lastError 
-                    ? <span className="text-red-400">⚠️ {bot.lastError}</span>
-                    : '⏳ Preparando sistema...'
-                }
-              </div>
 
-              <div className="flex flex-col gap-2 mt-auto pt-4 border-t border-white/5">
-                {/* Row 1: Gestionar, Status Action, Restart */}
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    onClick={() => navigate(`/bot/${bot.botId}`)}
-                    className="bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1"
-                    title="Gestionar base de datos y configuración"
-                  >
-                    <span>⚙️</span> <span className="hidden min-[450px]:inline">Gestionar</span>
-                  </button>
+                <div className="text-sm text-gray-400 mt-auto mb-6">
+                  {bot.readySince
+                    ? <span className="text-[#25d366]">🟢 Activo desde {new Date(bot.readySince).toLocaleTimeString()}</span>
+                    : bot.lastError
+                      ? <span className="text-red-400">⚠️ {bot.lastError}</span>
+                      : '⏳ Preparando sistema...'
+                  }
+                </div>
 
-                  {/* Middle Action Button */}
-                  {(bot.status === 'qr' || bot.status === 'initializing') && !bot.hasSession ? (
-                    <button onClick={() => setQrModalBot(bot.botId)} className="bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1">
-                      <span>📱</span> <span className="hidden min-[450px]:inline">Vincular</span>
-                    </button>
-                  ) : bot.status === 'ready' ? (
-                    <button onClick={() => botAction(bot.botId, 'stop')} className="bg-white/5 text-white hover:bg-white/10 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1">
-                      <span>⏹</span> <span className="hidden min-[450px]:inline">Parar</span>
-                    </button>
-                  ) : (bot.status === 'idle' || bot.status === 'disconnected' || bot.status === 'error') ? (
+                <div className="flex flex-col gap-2 mt-auto pt-4 border-t border-white/5">
+                  {/* Row 1: Gestionar, Status Action, Restart */}
+                  <div className="grid grid-cols-3 gap-2">
                     <button
-                      onClick={() => {
-                        if (!bot.hasSession) {
-                          botAction(bot.botId, 'start').then(() => setQrModalBot(bot.botId));
-                        } else {
-                          botAction(bot.botId, 'start');
-                        }
-                      }}
-                      className="bg-[#25d366]/10 text-[#25d366] hover:bg-[#25d366]/20 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1"
+                      onClick={() => navigate(`/bot/${bot.botId}`)}
+                      className="bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1"
+                      title="Gestionar base de datos y configuración"
                     >
-                      <span>{bot.hasSession ? '▶' : '📱'}</span> <span className="hidden min-[450px]:inline">{bot.hasSession ? 'Iniciar' : 'Vincular'}</span>
+                      <span>⚙️</span> <span className="hidden min-[450px]:inline">Gestionar</span>
                     </button>
-                  ) : (
-                    <div className="bg-white/5 opacity-50 py-2 rounded-lg text-xs flex items-center justify-center text-gray-500">
-                      ---
-                    </div>
-                  )}
 
-                  <button 
-                    onClick={() => botAction(bot.botId, 'restart')} 
-                    title="Reiniciar bot" 
-                    className="bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg flex items-center justify-center transition-colors py-2"
-                  >
-                    ↺
-                  </button>
-                </div>
+                    {/* Middle Action Button */}
+                    {(bot.status === 'qr' || bot.status === 'initializing') && !bot.hasSession ? (
+                      <button onClick={() => setQrModalBot(bot.botId)} className="bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1">
+                        <span>📱</span> <span className="hidden min-[450px]:inline">Vincular</span>
+                      </button>
+                    ) : bot.status === 'ready' ? (
+                      <button onClick={() => botAction(bot.botId, 'stop')} className="bg-white/5 text-white hover:bg-white/10 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1">
+                        <span>⏹</span> <span className="hidden min-[450px]:inline">Parar</span>
+                      </button>
+                    ) : (bot.status === 'idle' || bot.status === 'disconnected' || bot.status === 'error') ? (
+                      <button
+                        onClick={() => {
+                          if (!bot.hasSession) {
+                            botAction(bot.botId, 'start').then(() => setQrModalBot(bot.botId));
+                          } else {
+                            botAction(bot.botId, 'start');
+                          }
+                        }}
+                        className="bg-[#25d366]/10 text-[#25d366] hover:bg-[#25d366]/20 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1"
+                      >
+                        <span>{bot.hasSession ? '▶' : '📱'}</span> <span className="hidden min-[450px]:inline">{bot.hasSession ? 'Iniciar' : 'Vincular'}</span>
+                      </button>
+                    ) : (
+                      <div className="bg-white/5 opacity-50 py-2 rounded-lg text-xs flex items-center justify-center text-gray-500">
+                        ---
+                      </div>
+                    )}
 
-                {/* Row 2: Audio, Clean, Delete */}
-                <div className="grid grid-cols-3 gap-2">
-                  <button 
-                    onClick={() => setAudioModalBot(bot.botId)} 
-                    title="Configurar análisis de audio" 
-                    className="bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 rounded-lg flex items-center justify-center transition-colors py-2 text-base"
-                  >
-                    🎙️
-                  </button>
-                  <button 
-                    onClick={() => clearSession(bot.botId)} 
-                    title="Limpiar sesión (re-escanear QR)" 
-                    className="bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 rounded-lg flex items-center justify-center transition-colors py-2 text-base"
-                  >
-                    🧹
-                  </button>
-                  <button 
-                    onClick={() => deleteBot(bot.botId)} 
-                    title="Eliminar bot" 
-                    className="bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg flex items-center justify-center transition-colors py-2"
-                  >
-                    🗑
-                  </button>
+                    <button
+                      onClick={() => botAction(bot.botId, 'restart')}
+                      title="Reiniciar bot"
+                      className="bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg flex items-center justify-center transition-colors py-2"
+                    >
+                      ↺
+                    </button>
+                  </div>
+
+                  {/* Row 2: Audio, Clean, Delete */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      onClick={() => setAudioModalBot(bot.botId)}
+                      title="Configurar análisis de audio"
+                      className="bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 rounded-lg flex items-center justify-center transition-colors py-2 text-base"
+                    >
+                      🎙️
+                    </button>
+                    <button
+                      onClick={() => clearSession(bot.botId)}
+                      title="Limpiar sesión (re-escanear QR)"
+                      className="bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 rounded-lg flex items-center justify-center transition-colors py-2 text-base"
+                    >
+                      🧹
+                    </button>
+                    <button
+                      onClick={() => deleteBot(bot.botId)}
+                      title="Eliminar bot"
+                      className="bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg flex items-center justify-center transition-colors py-2"
+                    >
+                      🗑
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
             );
           })}
         </div>
@@ -557,8 +568,8 @@ const SaasDashboard: React.FC = () => {
             <h2 className="text-xl font-bold mb-6">➕ Crear nuevo bot</h2>
             <div className="mb-6">
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Nombre del bot</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 className="w-full bg-[#1a1a26] border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#25d366] focus:ring-1 focus:ring-[#25d366] transition-all"
                 placeholder="Ej: Bot de Ventas"
                 value={newBotName}
@@ -568,7 +579,7 @@ const SaasDashboard: React.FC = () => {
             </div>
             <div className="mb-6">
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Zona Horaria / País</label>
-              <select 
+              <select
                 className="w-full bg-[#1a1a26] border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#25d366] focus:ring-1 focus:ring-[#25d366] transition-all"
                 value={newBotTimezone}
                 onChange={(e) => setNewBotTimezone(e.target.value)}
@@ -599,13 +610,13 @@ const SaasDashboard: React.FC = () => {
               </select>
             </div>
             <div className="flex gap-3 justify-end">
-              <button 
+              <button
                 onClick={() => setIsCreateModalOpen(false)}
                 className="px-5 py-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-colors font-medium"
               >
                 Cancelar
               </button>
-              <button 
+              <button
                 onClick={handleCreateBot}
                 className="bg-[#25d366] hover:brightness-110 text-black px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-[#25d366]/20"
               >
@@ -622,20 +633,24 @@ const SaasDashboard: React.FC = () => {
           <div className="bg-[#12121a] border border-white/10 rounded-2xl p-6 w-full max-w-sm text-center shadow-2xl">
             <h2 className="text-xl font-bold mb-2">📱 Vincular WhatsApp</h2>
             <p className="text-gray-400 text-sm mb-6">Abre WhatsApp → Dispositivos vinculados → Vincular dispositivo</p>
-            
+
             <div className="bg-white p-4 rounded-xl mb-6 min-h-[200px] min-w-[200px] flex items-center justify-center">
               {qrCode ? (
                 <img src={qrCode} alt="QR Code" className="w-[200px] h-[200px]" />
               ) : (
                 <div className="flex flex-col items-center">
                   <div className="w-8 h-8 border-2 border-gray-200 border-t-black rounded-full animate-spin mb-3"></div>
-                  <span className="text-black text-sm font-medium">{qrStatus || 'Generando QR...'}</span>
+                  <span className="text-black text-sm font-medium">
+                    {qrStatus === 'Estado: authenticated'
+                      ? '¡QR Escaneado! Iniciando sesión...'
+                      : (qrStatus || 'Generando QR...')}
+                  </span>
                 </div>
               )}
             </div>
-            
+
             <div className="flex justify-center">
-              <button 
+              <button
                 onClick={() => { setQrModalBot(null); setQrCode(null); setQrStatus(''); }}
                 className="w-full bg-white/10 hover:bg-white/20 text-white px-5 py-2.5 rounded-xl font-bold transition-all"
               >
@@ -673,14 +688,12 @@ const SaasDashboard: React.FC = () => {
                   </div>
                   <button
                     onClick={() => setAudioEnabled(!audioEnabled)}
-                    className={`relative w-12 h-7 rounded-full transition-colors duration-200 ${
-                      audioEnabled ? 'bg-purple-500' : 'bg-gray-700'
-                    }`}
+                    className={`relative w-12 h-7 rounded-full transition-colors duration-200 ${audioEnabled ? 'bg-purple-500' : 'bg-gray-700'
+                      }`}
                   >
                     <span
-                      className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform duration-200 ${
-                        audioEnabled ? 'translate-x-5' : 'translate-x-0'
-                      }`}
+                      className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform duration-200 ${audioEnabled ? 'translate-x-5' : 'translate-x-0'
+                        }`}
                     />
                   </button>
                 </div>
@@ -721,11 +734,10 @@ const SaasDashboard: React.FC = () => {
 
                 {/* Status message */}
                 {audioMessage && (
-                  <div className={`rounded-xl px-4 py-3 mb-4 text-sm ${
-                    audioMessage.type === 'success'
-                      ? 'bg-green-500/10 border border-green-500/20 text-green-400'
-                      : 'bg-red-500/10 border border-red-500/20 text-red-400'
-                  }`}>
+                  <div className={`rounded-xl px-4 py-3 mb-4 text-sm ${audioMessage.type === 'success'
+                    ? 'bg-green-500/10 border border-green-500/20 text-green-400'
+                    : 'bg-red-500/10 border border-red-500/20 text-red-400'
+                    }`}>
                     {audioMessage.text}
                   </div>
                 )}
@@ -733,8 +745,8 @@ const SaasDashboard: React.FC = () => {
                 {/* Info box */}
                 <div className="bg-purple-500/5 border border-purple-500/10 rounded-xl px-4 py-3 mb-6">
                   <p className="text-xs text-purple-300/70 leading-relaxed">
-                    <strong className="text-purple-300">ℹ️ Información:</strong> El bot usará tu API Key de OpenAI para transcribir audios con el modelo Whisper. 
-                    Se cobra por uso directamente en tu cuenta de OpenAI. Si la función está desactivada, 
+                    <strong className="text-purple-300">ℹ️ Información:</strong> El bot usará tu API Key de OpenAI para transcribir audios con el modelo Whisper.
+                    Se cobra por uso directamente en tu cuenta de OpenAI. Si la función está desactivada,
                     el bot responderá que el análisis de audio no está activo.
                   </p>
                 </div>

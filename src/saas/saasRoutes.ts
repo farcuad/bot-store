@@ -38,7 +38,7 @@ async function toDataUrl(qr: string): Promise<string> {
 router.get("/bots/:id/qr", async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const instance = botManager.getInstance(id);
-  
+
   if (!instance) {
     res.status(404).json({ ok: false, error: "Bot not found" });
     return;
@@ -112,7 +112,7 @@ router.post("/bots", async (req: Request, res: Response) => {
       const userSub = await subscriptionService.getUserSubscription(ownerUid);
       const plan = await subscriptionService.getPlanInfo(userSub.planId);
       const maxBots = plan.features.maxBots;
-      
+
       const currentBots = await botManager.listBots(ownerUid);
       if (currentBots.length >= maxBots) {
         return fail(res, 403, `Tu plan actual (${plan.name}) solo permite tener ${maxBots} bot(s). Actualiza a un plan superior para agregar más.`);
@@ -159,7 +159,7 @@ router.put("/bots/:id/name", async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const { nombre } = req.body;
   if (!nombre) return fail(res, 400, "nombre is required");
-  
+
   try {
     const orig = await botManager.getBot(id);
     if (!orig) return fail(res, 404, "Bot not found");
@@ -178,7 +178,7 @@ router.put("/bots/:id/timezone", async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const { timezone } = req.body;
   if (!timezone) return fail(res, 400, "timezone is required");
-  
+
   try {
     const orig = await botManager.getBot(id);
     if (!orig) return fail(res, 404, "Bot not found");
@@ -467,11 +467,11 @@ router.patch("/bots/:id/sessions/:sessionId", async (req: Request, res: Response
   const id = req.params.id as string;
   const sessionId = req.params.sessionId as string;
   const { estado, contactName } = req.body;
-  
+
   try {
     const sessionMgr = createSessionManager(id);
     const session = await sessionMgr.getSession(sessionId);
-    
+
     if (!session) {
       return fail(res, 404, "Sesión no encontrada");
     }
@@ -479,16 +479,16 @@ router.patch("/bots/:id/sessions/:sessionId", async (req: Request, res: Response
     if (estado !== undefined) {
       session.status = estado === 'bot' ? 'bot' : 'human';
       if (estado === 'human') {
-         session.human_since = Math.floor(Date.now() / 1000);
+        session.human_since = Math.floor(Date.now() / 1000);
       } else {
-         session.human_since = undefined;
+        session.human_since = undefined;
       }
     }
-    
+
     if (contactName !== undefined) {
       session.contactName = contactName;
     }
-    
+
     await sessionMgr.saveSession(sessionId, session);
     return ok(res, { id: sessionId, status: session.status, contactName: session.contactName });
   } catch (e: any) {
@@ -535,7 +535,7 @@ router.delete("/bots/:id/sessions", async (req: Request, res: Response) => {
 
     const sessionsCol = db.collection("bots").doc(id).collection("sessions");
     const snap = await sessionsCol.get();
-    
+
     if (snap.empty) {
       return ok(res, { cleared: true, count: 0 });
     }
@@ -641,6 +641,39 @@ router.patch("/bots/:id/mcp-muevelapp", async (req: Request, res: Response) => {
   }
 });
 
+/** PATCH /api/saas/bots/:id/mcp-ordenalapp */
+router.patch("/bots/:id/mcp-ordenalapp", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const { enabled, slug } = req.body;
+  if (enabled === undefined) {
+    return fail(res, 400, "enabled es requerido");
+  }
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) {
+      return fail(res, 404, "Bot not found");
+    }
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) {
+      return fail(res, 403, "No autorizado");
+    }
+
+    const updates: Record<string, any> = { ordenalappMcpEnabled: !!enabled };
+    if (slug !== undefined) {
+      updates.ordenalappSlug = slug.trim();
+    }
+
+    await db.collection("bots").doc(id).set(updates, { merge: true });
+
+    const instance = botManager.getInstance(id);
+    if (instance) {
+      await instance.reloadConfig();
+    }
+    return ok(res, { ordenalappMcpEnabled: !!enabled, ordenalappSlug: slug });
+  } catch (e: any) {
+    return fail(res, 500, e.message || e.toString());
+  }
+});
+
 // ── No Entendidos ─────────────────────────────────────────────────────────────
 
 /** GET /api/saas/bots/:id/no-entendidos */
@@ -741,7 +774,7 @@ router.post("/bots/:id/respuestas-info", async (req, res) => {
       .collection("respuestas_info")
       .doc(rid)
       .set(payload);
-    
+
     // Recarga inmediata de la config del bot
     const instance = botManager.getInstance(id);
     if (instance) {
@@ -763,7 +796,7 @@ router.put("/bots/:id/respuestas-info/:rid", async (req, res) => {
     if (texto !== undefined) updates.texto = texto;
     if (activo !== undefined) updates.activo = activo;
     if (nombre !== undefined) updates.nombre = nombre;
-    
+
     if (mediaUrls !== undefined) {
       updates.mediaUrls = mediaUrls;
     } else if (mediaUrl !== undefined) {
@@ -776,7 +809,7 @@ router.put("/bots/:id/respuestas-info/:rid", async (req, res) => {
       .collection("respuestas_info")
       .doc(rid)
       .update(updates);
-    
+
     // Recarga inmediata de la config del bot
     const instance = botManager.getInstance(id);
     if (instance) {
@@ -799,7 +832,7 @@ router.delete("/bots/:id/respuestas-info/:rid", async (req, res) => {
       .collection("respuestas_info")
       .doc(rid)
       .delete();
-    
+
     // Recarga inmediata de la config del bot
     const instance = botManager.getInstance(id);
     if (instance) {
@@ -974,7 +1007,7 @@ router.post('/bots/:id/templates', async (req, res) => {
     const orig = await botManager.getBot(id);
     if (!orig) return fail(res, 404, 'Bot not found');
     if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) return fail(res, 403, 'No autorizado');
-    
+
     if (!req.isAdmin) {
       const subContext = await subscriptionService.getBotSubscriptionContext(id);
       if (!subContext.plan.features.whatsappTemplates) {
@@ -1026,7 +1059,7 @@ router.get('/bots/:id/groups', async (req, res) => {
     const orig = await botManager.getBot(id);
     if (!orig) return fail(res, 404, 'Bot not found');
     if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) return fail(res, 403, 'No autorizado');
-    
+
     const instance = botManager.getInstance(id);
     const isReady = instance && instance.getState().status === 'ready';
 
@@ -1047,7 +1080,7 @@ router.get('/bots/:id/groups', async (req, res) => {
             { merge: true }
           );
         }
-        batch.commit().catch(() => {}); // non-blocking
+        batch.commit().catch(() => { }); // non-blocking
       }
 
       return ok(res, groups);
@@ -1096,8 +1129,8 @@ router.post('/bots/:id/broadcasts', async (req, res) => {
     }
     const ref = await db.collection('bots').doc(id).collection('broadcasts').add({
       botId: id, templateId: templateId || null, templateSnapshot,
-      recipients: { 
-        contactIds: recipients.contactIds ?? [], 
+      recipients: {
+        contactIds: recipients.contactIds ?? [],
         groupIds: recipients.groupIds ?? [],
         status: recipients.status ?? false
       },

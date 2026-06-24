@@ -338,17 +338,26 @@ export default function TemplatesTab({ botNumber, getHeaders, canUseTemplates = 
     setLoadingRecipients(true);
     try {
       const headers = await getHeaders();
-      // Load contacts (sessions)
-      const cRes = await axios.get(`${API_URL}/api/saas/bots/${botNumber}/sessions`, { headers });
-      if (cRes.data.ok) {
-        setContacts(cRes.data.data.map((s: any) => ({ id: s.id, phone: s.phone, contactName: s.contactName })));
+      
+      // Load contacts and groups in parallel
+      const [cResResult, gResResult] = await Promise.allSettled([
+        axios.get(`${API_URL}/api/saas/bots/${botNumber}/sessions`, { headers }),
+        axios.get(`${API_URL}/api/saas/bots/${botNumber}/groups`, { headers })
+      ]);
+
+      if (cResResult.status === 'fulfilled' && cResResult.value.data.ok) {
+        setContacts(cResResult.value.data.data.map((s: any) => ({ id: s.id, phone: s.phone, contactName: s.contactName })));
       }
-      // Load groups (may fail if bot is not ready)
-      try {
-        const gRes = await axios.get(`${API_URL}/api/saas/bots/${botNumber}/groups`, { headers });
-        if (gRes.data.ok) setGroups(gRes.data.data);
-      } catch (e: any) {
-        setGroupsError(e.response?.data?.error || 'El bot debe estar activo para ver los grupos.');
+
+      if (gResResult.status === 'fulfilled') {
+        if (gResResult.value.data.ok) {
+          setGroups(gResResult.value.data.data);
+        } else {
+          setGroupsError(gResResult.value.data.error || 'Error al cargar grupos.');
+          setGroups([]);
+        }
+      } else {
+        setGroupsError(gResResult.reason?.response?.data?.error || 'El bot debe estar activo para ver los grupos.');
         setGroups([]);
       }
     } catch (e: any) {
