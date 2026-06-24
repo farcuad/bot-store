@@ -52,6 +52,8 @@ export interface BotConfig {
   ordenalappMcpEnabled?: boolean;
   /** Subdominio/Slug de OrdenalApp */
   ordenalappSlug?: string;
+  /** Activar Integración MCP de Cambialapp (Remesas) */
+  cambialappMcpEnabled?: boolean;
   /** Prompt base para la IA. Si no existe, se usa uno por defecto. */
   prompt_ia?: string | undefined;
   /** Zona horaria configurada para el bot */

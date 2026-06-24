@@ -36,6 +36,7 @@ export interface BotPublicState {
   muevelappMcpEnabled?: boolean;
   ordenalappMcpEnabled?: boolean;
   ordenalappSlug?: string;
+  cambialappMcpEnabled?: boolean;
 }
 
 class BotManager {
@@ -267,6 +268,7 @@ class BotManager {
       const muevelappMcpEnabled = botData?.muevelappMcpEnabled ?? false;
       const ordenalappMcpEnabled = botData?.ordenalappMcpEnabled ?? false;
       const ordenalappSlug = botData?.ordenalappSlug ?? "";
+      const cambialappMcpEnabled = botData?.cambialappMcpEnabled ?? false;
 
       const state: BotPublicState = {
         botId: doc.id,
@@ -283,6 +285,7 @@ class BotManager {
         muevelappMcpEnabled,
         ordenalappMcpEnabled,
         ordenalappSlug,
+        cambialappMcpEnabled,
       };
       if (record.clientKey !== undefined) {
         state.clientKey = record.clientKey;
@@ -308,6 +311,7 @@ class BotManager {
     const muevelappMcpEnabled = botData?.muevelappMcpEnabled ?? false;
     const ordenalappMcpEnabled = botData?.ordenalappMcpEnabled ?? false;
     const ordenalappSlug = botData?.ordenalappSlug ?? "";
+    const cambialappMcpEnabled = botData?.cambialappMcpEnabled ?? false;
 
     const state: BotPublicState = {
       botId: record.botId,
@@ -324,6 +328,7 @@ class BotManager {
       muevelappMcpEnabled,
       ordenalappMcpEnabled,
       ordenalappSlug,
+      cambialappMcpEnabled,
     };
     if (record.clientKey !== undefined) {
       state.clientKey = record.clientKey;

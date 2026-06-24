@@ -170,6 +170,9 @@ export default function BotAdmin() {
   const [ordenalappSlug, setOrdenalappSlug] = useState('');
   const [savingOrdenalappSlug, setSavingOrdenalappSlug] = useState(false);
 
+  const [mcpCambialappEnabled, setMcpCambialappEnabled] = useState(false);
+  const [togglingCambialappMcp, setTogglingCambialappMcp] = useState(false);
+
   // Plan / subscription state
   const [canUseTemplates, setCanUseTemplates] = useState(true); // optimistic default
   const [canUseApi, setCanUseApi] = useState(true);
@@ -185,7 +188,7 @@ export default function BotAdmin() {
   const loadBotInfo = async () => {
     try {
       const token = await user?.getIdToken();
-      const res = await axios.get<ApiResponse<{ nombre: string; timezone?: string; clientKey?: string; isAutoResponseEnabled?: boolean; debugEnabled?: boolean; muevelappMcpEnabled?: boolean; ordenalappMcpEnabled?: boolean; ordenalappSlug?: string }>>(`${API_URL}/api/saas/bots/${botNumber}`, {
+      const res = await axios.get<ApiResponse<{ nombre: string; timezone?: string; clientKey?: string; isAutoResponseEnabled?: boolean; debugEnabled?: boolean; muevelappMcpEnabled?: boolean; ordenalappMcpEnabled?: boolean; ordenalappSlug?: string; cambialappMcpEnabled?: boolean }>>(`${API_URL}/api/saas/bots/${botNumber}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.data.ok) {
@@ -201,6 +204,7 @@ export default function BotAdmin() {
         setDebugEnabled(!!res.data.data.debugEnabled);
         setMcpMuevelappEnabled(!!res.data.data.muevelappMcpEnabled);
         setMcpOrdenalappEnabled(!!res.data.data.ordenalappMcpEnabled);
+        setMcpCambialappEnabled(!!res.data.data.cambialappMcpEnabled);
         if (res.data.data.ordenalappSlug) {
           setOrdenalappSlug(res.data.data.ordenalappSlug);
         }
@@ -363,6 +367,36 @@ export default function BotAdmin() {
       console.error("error detail:", e.response?.data || e);
     } finally {
       setSavingOrdenalappSlug(false);
+    }
+  };
+
+  const toggleMcpCambialapp = async () => {
+    setTogglingCambialappMcp(true);
+    try {
+      const token = await user?.getIdToken();
+      const nextValue = !mcpCambialappEnabled;
+      const res = await axios.patch<ApiResponse>(`${API_URL}/api/saas/bots/${botNumber}/mcp-cambialapp`,
+        { enabled: nextValue },
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      if (res.data.ok) {
+        setMcpCambialappEnabled(nextValue);
+        fire({
+          title: nextValue ? 'MCP Cambialapp Activado' : 'MCP Cambialapp Desactivado',
+          text: nextValue ? 'El bot ahora puede consultar tasas de cambio y registrar transacciones de remesas.' : 'El bot ya no tiene acceso a la API de Cambialapp.',
+          icon: 'success',
+          timer: 3000
+        });
+      }
+    } catch (e: any) {
+      const errorMsg = e.response?.data?.error || e.response?.data?.message || e.message || e.toString();
+      fire({
+        title: 'Error',
+        text: "Error al cambiar MCP Cambialapp: " + errorMsg,
+        icon: 'error'
+      });
+    } finally {
+      setTogglingCambialappMcp(false);
     }
   };
 
@@ -1816,6 +1850,43 @@ export default function BotAdmin() {
                   <ul className="list-disc list-inside text-gray-300 text-sm space-y-1">
                     <li><code className="text-orange-300 bg-orange-900/30 px-1 py-0.5 rounded">obtener_catalogo_ecommerce</code> - Obtiene la lista de platos y productos.</li>
                     <li><code className="text-orange-300 bg-orange-900/30 px-1 py-0.5 rounded">crear_pedido_ecommerce</code> - Registra la orden final en el sistema del restaurante.</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="bg-[#12121a] border border-white/5 rounded-2xl p-6 mt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-3 rounded-xl flex items-center justify-center ${mcpCambialappEnabled ? 'bg-[#25d366]/20 text-[#25d366]' : 'bg-gray-800 text-gray-400'
+                      }`}>
+                      <Code className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-white font-medium text-lg">Cambialapp (Remesas)</h4>
+                      <p className="text-gray-400 text-sm">Permite consultar tasas de cambio, ver métodos de pago y crear transacciones de envío de dinero.</p>
+                    </div>
+                  </div>
+                  <div>
+                    <button
+                      onClick={toggleMcpCambialapp}
+                      disabled={togglingCambialappMcp}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${mcpCambialappEnabled ? 'bg-[#25d366]' : 'bg-gray-600'
+                        }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${mcpCambialappEnabled ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 mt-6">
+                  <h5 className="text-emerald-400 font-semibold text-sm mb-2">Herramientas expuestas a la IA:</h5>
+                  <ul className="list-disc list-inside text-gray-300 text-sm space-y-1">
+                    <li><code className="text-emerald-300 bg-emerald-900/30 px-1 py-0.5 rounded">consultar_tasas_cambio</code> - Obtiene las tasas de cambio de divisas vigentes.</li>
+                    <li><code className="text-emerald-300 bg-emerald-900/30 px-1 py-0.5 rounded">consultar_metodos_pago</code> - Obtiene los métodos de pago habilitados para una moneda de origen.</li>
+                    <li><code className="text-emerald-300 bg-emerald-900/30 px-1 py-0.5 rounded">crear_transaccion</code> - Registra una solicitud de envío de dinero a Venezuela en estado PENDIENTE.</li>
                   </ul>
                 </div>
               </div>

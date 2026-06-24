@@ -842,7 +842,8 @@ export class BotInstance extends EventEmitter {
         config.muevelappMcpEnabled,
         realFrom.split('@')[0],
         config.ordenalappMcpEnabled,
-        config.ordenalappSlug
+        config.ordenalappSlug,
+        config.cambialappMcpEnabled
       );
 
       // 6. Verificar estado humano ANTES de finalizar (puede haber cambiado durante la generación IA)
