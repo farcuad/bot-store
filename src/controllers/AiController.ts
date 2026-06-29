@@ -77,6 +77,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 let muevelappClientInstance: Client | null = null;
 let ordenalappClientInstance: Client | null = null;
+let cambialappClientInstance: Client | null = null;
 
 async function getMuevelappClient() {
   if (muevelappClientInstance) return muevelappClientInstance;
@@ -84,6 +85,7 @@ async function getMuevelappClient() {
   const transport = new StdioClientTransport({
     command: "npx",
     args: ["tsx", "src/mcp/MuevelappServer.ts"],
+    env: process.env as Record<string, string>,
   });
 
   const client = new Client(
@@ -102,6 +104,7 @@ async function getOrdenalappClient() {
   const transport = new StdioClientTransport({
     command: "npx",
     args: ["tsx", "src/mcp/OrdenalapServer.ts"],
+    env: process.env as Record<string, string>,
   });
 
   const client = new Client(
@@ -111,6 +114,25 @@ async function getOrdenalappClient() {
 
   await client.connect(transport);
   ordenalappClientInstance = client;
+  return client;
+}
+
+async function getCambialappClient() {
+  if (cambialappClientInstance) return cambialappClientInstance;
+
+  const transport = new StdioClientTransport({
+    command: "npx",
+    args: ["tsx", "src/mcp/CambialappServer.ts"],
+    env: process.env as Record<string, string>,
+  });
+
+  const client = new Client(
+    { name: "bot-store-client-cambialapp", version: "1.0.0" },
+    { capabilities: {} }
+  );
+
+  await client.connect(transport);
+  cambialappClientInstance = client;
   return client;
 }
 
@@ -125,9 +147,10 @@ export const generarRespuestaBot = async (
   mcpEnabled?: boolean,
   telefonoUsuario?: string,
   ordenalappMcpEnabled?: boolean,
-  ordenalappSlug?: string
+  ordenalappSlug?: string,
+  cambialappMcpEnabled?: boolean
 ): Promise<string> => {
-  const AI_TIMEOUT_MS = (mcpEnabled || ordenalappMcpEnabled) ? 90000 : 45000;
+  const AI_TIMEOUT_MS = (mcpEnabled || ordenalappMcpEnabled || cambialappMcpEnabled) ? 90000 : 45000;
 
   try {
     return await Promise.race([
@@ -152,6 +175,14 @@ El bot tiene acceso al sistema de e-commerce del restaurante/negocio.
 - Puedes obtener el catálogo de productos o crear un pedido llamando a las herramientas correspondientes.`;
         }
 
+        if (cambialappMcpEnabled) {
+          systemPrompt += `\n\n[SISTEMA MCP DE REMESAS CAMBIALAPP ACTIVADO]
+El bot tiene acceso al sistema de remesas de Cambialapp. Puedes consultar las tasas de cambio de divisas vigentes respecto al Bolívar venezolano, obtener métodos de pago de origen asociados a monedas (CLP, COP, USD, PEN, EUR, BOB), y registrar solicitudes de envío de dinero con estado PENDIENTE.
+- Cuando utilices la herramienta 'crear_transaccion', debes pasar obligatoriamente el parámetro 'senderPhone' con el teléfono de WhatsApp del usuario actual (${telefonoUsuario || 'el número actual'}).
+- El cliente debe haber realizado la transferencia antes de que llames a 'crear_transaccion', ya que se requiere obligatoriamente una referencia 'ref'.
+- Las transacciones creadas quedan registradas en estado PENDIENTE para posterior validación.`;
+        }
+
         if (telefonoUsuario) {
           systemPrompt += `\n\nEl número de teléfono (WhatsApp) del usuario actual con el que hablas es: ${telefonoUsuario}. NO LE PREGUNTES su número, usa este directamente para cualquier validación o creación de usuario.`;
         }
@@ -170,7 +201,7 @@ El bot tiene acceso al sistema de e-commerce del restaurante/negocio.
         ];
 
         let openaiTools: any[] = [];
-        const activeMcpClients: { client: Client; type: 'muevelapp' | 'ordenalapp' }[] = [];
+        const activeMcpClients: { client: Client; type: 'muevelapp' | 'ordenalapp' | 'cambialapp' }[] = [];
 
         if (mcpEnabled) {
           try {
@@ -208,11 +239,29 @@ El bot tiene acceso al sistema de e-commerce del restaurante/negocio.
           }
         }
 
+        if (cambialappMcpEnabled) {
+          try {
+            const client = await getCambialappClient();
+            const { tools } = await client.listTools();
+            openaiTools.push(...tools.map(tool => ({
+              type: "function",
+              function: {
+                name: tool.name,
+                description: tool.description,
+                parameters: tool.inputSchema
+              }
+            })));
+            activeMcpClients.push({ client, type: 'cambialapp' });
+          } catch (e) {
+            console.error("Error conectando al MCP de Cambialapp:", e);
+          }
+        }
+
         let response = await llamarDeepseek(messages, 2, openaiTools.length > 0 ? openaiTools : undefined);
 
         let loopCount = 0;
         const maxLoops = 5;
-        const isAnyMcpEnabled = mcpEnabled || ordenalappMcpEnabled;
+        const isAnyMcpEnabled = mcpEnabled || ordenalappMcpEnabled || cambialappMcpEnabled;
 
         // Support sequential tool calling loop
         while (isAnyMcpEnabled && response.choices && response.choices[0].message.tool_calls && response.choices[0].message.tool_calls.length > 0 && activeMcpClients.length > 0 && loopCount < maxLoops) {
@@ -230,12 +279,14 @@ El bot tiene acceso al sistema de e-commerce del restaurante/negocio.
             const functionName = toolCall.function.name;
             const functionArgs = JSON.parse(toolCall.function.arguments);
 
-            console.log(`[MCP] 🔧 [Loop ${loopCount}] Ejecutando herramienta: ${functionName}`, functionArgs);
+
             let result;
             try {
               let clientToUse: Client | null = null;
               if (functionName === 'obtener_catalogo_ecommerce' || functionName === 'crear_pedido_ecommerce') {
                 clientToUse = activeMcpClients.find(c => c.type === 'ordenalapp')?.client || null;
+              } else if (functionName === 'consultar_tasas_cambio' || functionName === 'consultar_metodos_pago' || functionName === 'crear_transaccion') {
+                clientToUse = activeMcpClients.find(c => c.type === 'cambialapp')?.client || null;
               } else {
                 clientToUse = activeMcpClients.find(c => c.type === 'muevelapp')?.client || null;
               }
@@ -248,7 +299,6 @@ El bot tiene acceso al sistema de e-commerce del restaurante/negocio.
                 name: functionName,
                 arguments: functionArgs
               });
-              console.log(`[MCP] ✅ Resultado de ${functionName}:`, JSON.stringify(result).substring(0, 500) + '...');
             } catch (toolErr: any) {
               console.error(`[MCP] ❌ Error ejecutando herramienta ${functionName}:`, toolErr.message || toolErr);
               result = { content: [{ type: 'text', text: `Error interno ejecutando la herramienta: ${toolErr.message}` }] };

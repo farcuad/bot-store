@@ -674,6 +674,30 @@ router.patch("/bots/:id/mcp-ordenalapp", async (req: Request, res: Response) => 
   }
 });
 
+/** PATCH /api/saas/bots/:id/mcp-cambialapp */
+router.patch("/bots/:id/mcp-cambialapp", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const { enabled } = req.body;
+  if (enabled === undefined) return fail(res, 400, "enabled es requerido");
+  try {
+    const orig = await botManager.getBot(id);
+    if (!orig) return fail(res, 404, "Bot not found");
+    if (!req.isAdmin && orig.ownerUid !== req.firebaseUid) {
+      return fail(res, 403, "No autorizado");
+    }
+
+    await db.collection("bots").doc(id).update({ cambialappMcpEnabled: !!enabled });
+
+    const instance = botManager.getInstance(id);
+    if (instance) {
+      await instance.reloadConfig();
+    }
+    return ok(res, { cambialappMcpEnabled: !!enabled });
+  } catch (e: any) {
+    return fail(res, 500, e.message);
+  }
+});
+
 // ── No Entendidos ─────────────────────────────────────────────────────────────
 
 /** GET /api/saas/bots/:id/no-entendidos */

@@ -40,6 +40,7 @@ export function createConfigService(botId: string) {
     muevelappMcpEnabled?: boolean;
     ordenalappMcpEnabled?: boolean;
     ordenalappSlug?: string;
+    cambialappMcpEnabled?: boolean;
   }> {
     const doc = await botRef().get();
     const data = doc.data();
@@ -56,6 +57,7 @@ export function createConfigService(botId: string) {
       muevelappMcpEnabled: !!data?.muevelappMcpEnabled,
       ordenalappMcpEnabled: !!data?.ordenalappMcpEnabled,
       ordenalappSlug: (data?.ordenalappSlug as string) ?? "",
+      cambialappMcpEnabled: !!data?.cambialappMcpEnabled,
     };
   }
 
@@ -78,8 +80,9 @@ export function createConfigService(botId: string) {
   async function loadConfig(): Promise<void> {
     try {
       const [
-        { nombre, activo, isAutoResponseEnabled, prompt_ia, timezone, motivosNotificacion, debugEnabled, muevelappMcpEnabled, ordenalappMcpEnabled, ordenalappSlug },
+        { nombre, activo, isAutoResponseEnabled, prompt_ia, timezone, motivosNotificacion, debugEnabled, muevelappMcpEnabled, ordenalappMcpEnabled, ordenalappSlug, cambialappMcpEnabled },
         respuestas_info,
+        _horario,
       ] = await Promise.all([
         fetchNombreYActivo(),
         fetchInfoRespuestas(),
@@ -97,6 +100,7 @@ export function createConfigService(botId: string) {
         muevelappMcpEnabled: muevelappMcpEnabled ?? false,
         ordenalappMcpEnabled: ordenalappMcpEnabled ?? false,
         ordenalappSlug: ordenalappSlug ?? "",
+        cambialappMcpEnabled: cambialappMcpEnabled ?? false,
       } as any;
       console.log(
         new Date().toLocaleString(),
