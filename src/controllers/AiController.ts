@@ -7,7 +7,8 @@ function buildSystemPrompt(
   respuestasInfo: Record<string, InfoRespuesta>,
   customPrompt?: string,
   timezone?: string,
-  motivosNotificacion?: string[]
+  motivosNotificacion?: string[],
+  anyMcpEnabled?: boolean
 ): string {
   const infoText = Object.values(respuestasInfo)
     .filter((r) => r.activo !== false)
@@ -63,7 +64,7 @@ REGLAS CRÍTICAS:
 - Si te preguntan varias cosas, respondé todas en ese mismo mensaje único.
 - Respondé siempre de forma corta y amigable.
 - **IMÁGENES**: Si para responder utilizas información que contiene una etiqueta [URL_IMAGEN: ...], **DEBES incluir obligatoriamente** esa URL tal cual al final de tu respuesta para que el sistema envíe la imagen al cliente.
-- **MANEJO DE INFORMACIÓN DESCONOCIDA**: Si el cliente te pide información, productos, precios específicos o detalles que NO ESTÁN en la INFORMACIÓN ESTRICTA, **NO INVENTES NINGÚN DATO**. Debes responder amablemente que no tienes esa información o que vas a consultarlo, y agregar OBLIGATORIAMENTE la etiqueta [NO_ENTENDI] al final de tu respuesta.
+- **MANEJO DE INFORMACIÓN DESCONOCIDA**: Si el cliente te pide información, productos, precios específicos o detalles que NO ESTÁN en la INFORMACIÓN ESTRICTA ${anyMcpEnabled ? "ni pueden ser obtenidos o consultados a través de las herramientas (tools) disponibles" : ""}, **NO INVENTES NINGÚN DATO**. Debes responder amablemente que no tienes esa información o que vas a consultarlo, y agregar OBLIGATORIAMENTE la etiqueta [NO_ENTENDI] al final de tu respuesta.
 - **INTERVENCIÓN HUMANA (CRÍTICO)**: ${motivosBlock}
 - **EVITAR FALSOS POSITIVOS**: NO uses la etiqueta [HABLAR_CON_HUMANO] si el usuario solo está bromeando, usa jerga (slang), hace comentarios sarcásticos, se queja de forma general o simplemente dice algo confuso. En esos casos, intenta responder de forma natural o usa [NO_ENTENDI] si es incomprensible, pero NO pidas intervención humana a menos que se cumpla claramente uno de los motivos configurados.
 - Nunca digas que sos una IA a menos que te lo pregunten.
@@ -155,12 +156,14 @@ export const generarRespuestaBot = async (
   try {
     return await Promise.race([
       (async () => {
+        const anyMcpEnabled = !!(mcpEnabled || ordenalappMcpEnabled || cambialappMcpEnabled);
         let systemPrompt = buildSystemPrompt(
           nombreNegocio,
           respuestasInfo,
           customPrompt,
           timezone,
-          motivosNotificacion
+          motivosNotificacion,
+          anyMcpEnabled
         );
 
         if (mcpEnabled) {
@@ -177,10 +180,29 @@ El bot tiene acceso al sistema de e-commerce del restaurante/negocio.
 
         if (cambialappMcpEnabled) {
           systemPrompt += `\n\n[SISTEMA MCP DE REMESAS CAMBIALAPP ACTIVADO]
-El bot tiene acceso al sistema de remesas de Cambialapp. Puedes consultar las tasas de cambio de divisas vigentes respecto al Bolívar venezolano, obtener métodos de pago de origen asociados a monedas (CLP, COP, USD, PEN, EUR, BOB), y registrar solicitudes de envío de dinero con estado PENDIENTE.
-- Cuando utilices la herramienta 'crear_transaccion', debes pasar obligatoriamente el parámetro 'senderPhone' con el teléfono de WhatsApp del usuario actual (${telefonoUsuario || 'el número actual'}).
-- El cliente debe haber realizado la transferencia antes de que llames a 'crear_transaccion', ya que se requiere obligatoriamente una referencia 'ref'.
-- Las transacciones creadas quedan registradas en estado PENDIENTE para posterior validación.`;
+El bot tiene acceso al sistema de remesas de Cambialapp para procesar envíos de dinero a Venezuela. Debes seguir estrictamente este flujo de pasos e interacciones, y NUNCA debes inventar tasas, métodos de pago ni confirmaciones:
+
+1. **Consulta de Tasas de Cambio:**
+   - Si el cliente te consulta sobre tasas de cambio, cotizaciones o el valor de alguna moneda, **debes invocar obligatoriamente la herramienta 'consultar_tasas_cambio'** de forma inmediata.
+   - NUNCA inventes las tasas ni los cálculos. Responde usando los valores vigentes devueltos por la herramienta.
+
+2. **Consulta de Cuentas y Métodos de Pago (Solicitud de Transferencia):**
+   - Antes de dar cualquier información sobre dónde depositar o transferir, **debes invocar obligatoriamente la herramienta 'consultar_metodos_pago'** (pasando la moneda en 'currency').
+   - **PROHIBICIÓN ABSOLUTA:** Está estrictamente prohibido responder con números de cuenta, bancos, titulares, Pago Móvil o cualquier dato de transferencia que recuerdes de tu memoria o de mensajes previos del historial. CADA VEZ que el cliente pida los datos para transferir, debes llamar a la herramienta en ese preciso instante.
+   - Si la herramienta falla o no devuelve cuentas, indica amablemente que no tienes los datos disponibles en este momento y pide que espere, pero NUNCA inventes o asumas ninguna cuenta o banco.
+   - Muestra la información exacta de las cuentas devueltas por la herramienta.
+   - Pídele al cliente que realice la transferencia por el monto deseado a la cuenta indicada, y dile que una vez realizada, te comparta el **código de referencia/operación (ref)** de la transferencia y los siguientes datos necesarios para registrar el envío:
+     - Nombre completo del beneficiario en Venezuela.
+     - Cédula de identidad (CI) del beneficiario.
+     - Tipo de pago de destino: "Transferencia" o "Pagomovil".
+     - Banco receptor en Venezuela (ej: "Banesco").
+     - Número de cuenta de 20 dígitos (si es "Transferencia") o Teléfono de pago móvil (si es "Pagomovil").
+
+3. **Creación de la Transacción (Registro de Envío):**
+   - Solo cuando el cliente te haya proporcionado el número de referencia ('ref') y TODOS los datos del beneficiario, **debes invocar obligatoriamente la herramienta 'crear_transaccion'**.
+   - Pasa obligatoriamente el parámetro 'senderPhone' con el teléfono de WhatsApp del usuario actual (${telefonoUsuario || 'el número actual'}).
+   - Pasa todos los demás parámetros con los datos recopilados.
+   - Espera el resultado de la herramienta. Una vez creada, la transacción quedará registrada en estado PENDIENTE para la validación manual por parte del equipo de Cambialapp. Informa al cliente que su transacción se ha registrado y está en validación. NUNCA inventes ni confirmes que el dinero ya llegó o está verificado antes de llamar a la herramienta.`;
         }
 
         if (telefonoUsuario) {
@@ -240,6 +262,7 @@ El bot tiene acceso al sistema de remesas de Cambialapp. Puedes consultar las ta
         }
 
         if (cambialappMcpEnabled) {
+          console.log("Cambialapp activo")
           try {
             const client = await getCambialappClient();
             const { tools } = await client.listTools();
@@ -299,6 +322,7 @@ El bot tiene acceso al sistema de remesas de Cambialapp. Puedes consultar las ta
                 name: functionName,
                 arguments: functionArgs
               });
+              console.log(`[MCP RESPONSE] Tool ${functionName} returned:`, JSON.stringify(result, null, 2));
             } catch (toolErr: any) {
               console.error(`[MCP] ❌ Error ejecutando herramienta ${functionName}:`, toolErr.message || toolErr);
               result = { content: [{ type: 'text', text: `Error interno ejecutando la herramienta: ${toolErr.message}` }] };

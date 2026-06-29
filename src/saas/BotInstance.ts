@@ -597,19 +597,63 @@ export class BotInstance extends EventEmitter {
 
   private async resolveToCanonicalContactId(id: string): Promise<string> {
     const normalized = this.normalizeToContactId(id);
+    if (normalized.endsWith("@g.us") || normalized === "status@broadcast") {
+      return normalized;
+    }
     try {
       if (this.client && this.state.status === "ready") {
-        const contact = await this.client.getContactById(normalized);
-        if (contact && contact.id && contact.id._serialized) {
-          const canonical = contact.id._serialized;
-          if (canonical !== normalized) {
-            this.logger.log(`[BEHAVIOR] Resolved JID ${normalized} to canonical JID ${canonical}`);
+        const page = (this.client as any).pupPage;
+        if (page) {
+          const canonical = await page.evaluate(async (targetId: string) => {
+            try {
+              const WidFactory = window.require('WAWebWidFactory');
+              const wid = WidFactory.createWid(targetId);
+              
+              const ContactColl = window.require('WAWebCollections').Contact;
+              let contact = ContactColl.get(wid);
+              if (!contact) {
+                try {
+                  contact = await ContactColl.find(wid);
+                } catch (err) {
+                  // ignore
+                }
+              }
+              
+              if (contact && contact.id && typeof contact.id.isLid === 'function' && contact.id.isLid()) {
+                return contact.id._serialized;
+              }
+              
+              try {
+                const apiContact = window.require('WAWebApiContact');
+                if (apiContact && typeof apiContact.getAlternateUserWid === 'function') {
+                  const altWid = apiContact.getAlternateUserWid(wid);
+                  if (altWid && typeof altWid.isLid === 'function' && altWid.isLid()) {
+                    return altWid._serialized;
+                  }
+                }
+              } catch (e) {
+                // ignore
+              }
+              
+              if (contact && contact.id) {
+                return contact.id._serialized;
+              }
+            } catch (e) {
+              // ignore
+            }
+            return null;
+          }, normalized);
+
+          if (canonical) {
+            if (canonical !== normalized) {
+              this.logger.log(`[BEHAVIOR] Resolved JID ${normalized} to true LID ${canonical}`);
+            }
+            return canonical;
           }
-          return canonical;
         }
       }
     } catch (e: any) {
-      this.logger.warn(`⚠️ No se pudo resolver contacto ${normalized}: ${e.message || e}`);
+      this.logger.warn(`⚠️ Error al resolver JID real para ${normalized}: ${e.message || e}`);
     }
     return normalized;
   }
@@ -707,11 +751,17 @@ export class BotInstance extends EventEmitter {
       ]);
       if (!contact) throw new Error(`Contact ${rawRemote} not found.`);
 
-      if (contact.number) {
+      // 1. Si el contacto tiene una JID serializada canonical de teléfono, usarla directamente
+      if (contact.id && contact.id._serialized && contact.id._serialized.endsWith("@c.us")) {
+        return contact.id._serialized;
+      }
+
+      // 2. Si no viene de un LID, podemos usar contact.number
+      if (contact.number && !rawRemote.includes("@lid")) {
         return `${contact.number}@c.us`;
       }
 
-      const baseId = (contact.id._serialized || rawRemote).split("@")[0];
+      const baseId = (contact.id?._serialized || rawRemote).split("@")[0];
       return `${baseId}@c.us`;
     } catch (e) {
       const baseId = rawRemote.split("@")[0];
@@ -803,6 +853,33 @@ export class BotInstance extends EventEmitter {
 
   private async _handleMessage(msg: any): Promise<void> {
     try {
+      // Log full details of the incoming message and contact data
+      let contactData = "unknown";
+      try {
+        const contact = await msg.getContact();
+        contactData = JSON.stringify({
+          id: contact.id?._serialized,
+          number: contact.number,
+          name: contact.name,
+          pushname: contact.pushname,
+          isMyContact: contact.isMyContact,
+          isBusiness: contact.isBusiness
+        });
+      } catch (err: any) {
+        contactData = `error: ${err.message || err}`;
+      }
+      const msgData = JSON.stringify({
+        id: msg.id?._serialized,
+        from: msg.from,
+        to: msg.to,
+        body: msg.body,
+        type: msg.type,
+        timestamp: msg.timestamp,
+        fromMe: msg.fromMe,
+        hasMedia: msg.hasMedia
+      });
+      this.logger.log(`[RAW_INCOMING] Contact: ${contactData} | Message: ${msgData}`);
+
       if (msg.timestamp * 1000 < this.bootTime) {
         this.logger.log(`[BEHAVIOR] Ignored incoming message: timestamp older than boot time.`);
         return;
@@ -934,7 +1011,9 @@ export class BotInstance extends EventEmitter {
         contact = null;
       }
 
-      if (contact && contact.number) {
+      if (contact && contact.id && contact.id._serialized && contact.id._serialized.endsWith("@c.us")) {
+        realFrom = contact.id._serialized;
+      } else if (contact && contact.number && !from.includes("@lid")) {
         realFrom = `${contact.number}@c.us`;
       }
 

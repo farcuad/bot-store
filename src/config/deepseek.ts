@@ -82,6 +82,7 @@ export const llamarDeepseek = async (messages: any[], retries = 2, customTools?:
 
       if (customTools && customTools.length > 0) {
         payload.tools = customTools;
+        console.log(`[DEEPSEEK REQUEST] Sending ${customTools.length} tools to DeepSeek:`);
       }
 
       const response = await axios.post(
@@ -95,6 +96,8 @@ export const llamarDeepseek = async (messages: any[], retries = 2, customTools?:
           timeout: 60000,
         },
       );
+
+      console.log("[DEEPSEEK RESPONSE]:", JSON.stringify(response.data.choices?.[0]?.message, null, 2));
       return response.data;
     } catch (err: any) {
       lastError = err;
