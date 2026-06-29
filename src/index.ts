@@ -32,3 +32,22 @@ broadcastScheduler.init().catch(err => {
 });
 
 imprimirResumenStats();
+
+// ─── Graceful Shutdown ─────────────────────────────────────────────────────────
+let shuttingDown = false;
+async function gracefulShutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`\n🛑 Recibido ${signal}. Cerrando de forma segura…`);
+  try {
+    await botManager.stopAll();
+    console.log("✅ Todos los bots se detuvieron.");
+  } catch (err) {
+    console.error("Error deteniendo los bots:", err);
+  } finally {
+    process.exit(0);
+  }
+}
+
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));

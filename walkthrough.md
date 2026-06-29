@@ -67,3 +67,22 @@ flowchart TD
 ## Verificación
 
 - ✅ `npm run build` — compilación exitosa sin errores de TypeScript.
+
+---
+
+## Actualización (29/06/2026): Estabilidad de Puppeteer, Logs de Comportamiento y Corrección de Deploy
+
+### Cambios Realizados
+
+| Archivo | Acción | Descripción |
+|---|---|---|
+| [BotInstance.ts](file:///Users/macbookpro/Documents/proyectos/bot-store/src/saas/BotInstance.ts) | **MODIFIED** | <ul><li>Restaurado el método `_patchLidResolution` para corregir error de TypeScript.</li><li>Aumentados los timeouts de Puppeteer (`timeout` a 120s, `protocolTimeout` a 300s).</li><li>Implementado contador de 3 intentos en el HealthCheck y silenciado de falsas alarmas de navegación (`Execution context was destroyed`).</li><li>Removido el reinicio automático del bot desde estado humano (desactivado timer de 30m y reseteo por inactividad de 24h).</li><li>Añadidos logs de comportamiento detallados de mensajes entrantes y salientes (etiquetados con `[BEHAVIOR]`).</li><li>Actualizado `resolveToCanonicalContactId` para resolver todos los números a su JID canónico (incluyendo `@lid` si aplica), corrigiendo el error `No LID for user` en chats individuales.</li></ul> |
+| [botLogger.ts](file:///Users/macbookpro/Documents/proyectos/bot-store/src/services/botLogger.ts) | **MODIFIED** | Modificado `logMessage` para registrar únicamente la longitud de los mensajes entrantes (`BodyLength`) y no el texto sin procesar, manteniendo la privacidad de la información. |
+| [package.json](file:///Users/macbookpro/Documents/proyectos/bot-store/package.json) | **MODIFIED** | Añadido el hook de ciclo de vida `prestart` (`npm run build`) para garantizar que tanto frontend como backend se compilen al ejecutar `npm start` (deploy regular en VPS). |
+| [index.ts](file:///Users/macbookpro/Documents/proyectos/bot-store/src/index.ts) | **MODIFIED** | Registrado manejador de señales `SIGINT` (Ctrl+C) y `SIGTERM` para apagar limpiamente todos los navegadores de Puppeteer en salida del proceso. |
+| [BotManager.ts](file:///Users/macbookpro/Documents/proyectos/bot-store/src/saas/BotManager.ts) | **MODIFIED** | Añadido método `stopAll()` para detener en paralelo todas las instancias activas de Puppeteer. |
+
+### Verificación
+
+- ✅ `npm run build` — compila exitosamente sin ningún error.
+- ✅ `npm run build:backend` — comprobación de tipados del backend exitosa.

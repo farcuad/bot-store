@@ -93,7 +93,7 @@ export function createBotLogger(botId: string): BotLogger {
     logMessage(from: string, text: string): void {
       if (!debugEnabled) return;
       const ts = formatTimestamp();
-      const line = `[${ts}] 📩 MSG FROM ${from}: ${text}`;
+      const line = `[${ts}] 📩 MSG FROM ${from} | BodyLength: ${text ? text.length : 0}`;
       appendLineAsync(logPath, line);
     },
 

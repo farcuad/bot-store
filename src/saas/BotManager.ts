@@ -216,6 +216,18 @@ class BotManager {
     await instance.stop();
   }
 
+  async stopAll(): Promise<void> {
+    console.log("🤖 BotManager: deteniendo todos los bots...");
+    const stopPromises = Array.from(this.instances.keys()).map(async (botId) => {
+      try {
+        await this.stopBot(botId);
+      } catch (e) {
+        console.error(`[${botId}] Error al detener durante apagado:`, e);
+      }
+    });
+    await Promise.all(stopPromises);
+  }
+
   async restartBot(botId: string): Promise<void> {
     const instance = this._get(botId);
     await instance.restart();

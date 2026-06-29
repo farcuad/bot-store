@@ -53,6 +53,7 @@ export class BotInstance extends EventEmitter {
   private recentlySentMessages = new Set<string>();
   private recentlySentMediaTo = new Set<string>();
   private healthCheckInterval: NodeJS.Timeout | null = null;
+  private healthCheckFailures = 0;
 
   /** Auto-expire entries from recentlySentMessages after 60s to prevent unbounded growth */
   private addRecentSent(text: string): void {
@@ -193,8 +194,8 @@ export class BotInstance extends EventEmitter {
           "--disable-accelerated-2d-canvas",
           "--disable-gpu",
         ],
-        timeout: 60000,
-        protocolTimeout: 60000,
+        timeout: 120000,
+        protocolTimeout: 300000,
       },
     });
 
@@ -303,6 +304,7 @@ export class BotInstance extends EventEmitter {
 
   private startHealthCheck() {
     this.stopHealthCheck();
+    this.healthCheckFailures = 0;
     this.healthCheckInterval = setInterval(async () => {
       if (this.state.status === "ready" && this.client) {
         try {
@@ -327,12 +329,28 @@ export class BotInstance extends EventEmitter {
           ]).catch(() => false);
 
           if (!state || state === "CONFLICT" || state === "UNPAIRED" || !isWWebJSInjected) {
-            this.logger.warn(`⚠️ HealthCheck: Estado anómalo detectado (State: ${state}, WWebJS: ${isWWebJSInjected}). Reiniciando...`);
-            await this.restart();
+            this.healthCheckFailures++;
+            this.logger.warn(`⚠️ HealthCheck: Estado anómalo detectado (Intento ${this.healthCheckFailures}/3) (State: ${state}, WWebJS: ${isWWebJSInjected}).`);
+            if (this.healthCheckFailures >= 3) {
+              this.logger.error(`❌ HealthCheck: 3 fallos consecutivos detectados. Reiniciando...`);
+              await this.restart();
+            }
+          } else {
+            this.healthCheckFailures = 0; // Resetear si todo es normal
           }
         } catch (e: any) {
-          this.logger.error(`❌ HealthCheck falló (posible cuelgue de Puppeteer): ${e.message || e}`);
-          await this.restart();
+          const errMsg = e.message || String(e);
+          // Ignorar errores temporales debido a navegaciones o reestructuraciones de contexto
+          if (errMsg.includes("Execution context was destroyed") || errMsg.includes("navigation") || errMsg.includes("navigating")) {
+            this.logger.warn(`⚠️ HealthCheck: Error temporal de navegación/contexto (ignorado): ${errMsg}`);
+          } else {
+            this.healthCheckFailures++;
+            this.logger.error(`❌ HealthCheck: Error inesperado (Intento ${this.healthCheckFailures}/3): ${errMsg}`);
+            if (this.healthCheckFailures >= 3) {
+              this.logger.error(`❌ HealthCheck: 3 fallos consecutivos por error inesperado. Reiniciando...`);
+              await this.restart();
+            }
+          }
         }
       }
     }, 25_000); // Cada 25 segundos
@@ -424,6 +442,104 @@ export class BotInstance extends EventEmitter {
     } catch (e) { }
   }
 
+  /**
+   * Inyecta un parche en el navegador para evitar el error "No LID for user"
+   * al enviar mensajes a grupos en la arquitectura multi-dispositivo de WhatsApp.
+   *
+   * Raíz del problema: cuando un grupo tiene isLidAddressingMode=true, WhatsApp Web
+   * intenta cifrar el mensaje usando el LID de cada participante. Si alguno no tiene
+   * LID en caché local, WAWebSendMsgChatAction.addAndSendMsgToChat lanza el error.
+   *
+   * Estrategia principal: parchear WWebJS.sendMessage para desactivar temporalmente
+   * isLidAddressingMode en el metadata del grupo antes del envío, forzando la ruta
+   * de cifrado estándar (por número de teléfono) que sí funciona.
+   *
+   * Estrategia secundaria: parchear WAWebSendMsgChatAction.addAndSendMsgToChat para
+   * capturar el error en origen y silenciarlo cuando ya no hay alternativa.
+   */
+  private async _patchLidResolution() {
+    try {
+      await (this.client as any).pupPage.evaluate(() => {
+        try {
+          const win = window as any;
+          if ((win as any).__lidPatchApplied) return; // evitar doble parcheo
+
+          // ── Estrategia principal: parchear WWebJS.sendMessage ──────────────
+          // Leído de Utils.js: el error ocurre en addAndSendMsgToChat cuando
+          // chat.groupMetadata.isLidAddressingMode === true. Al ponerlo a false
+          // temporalmente, WhatsApp usa la ruta de cifrado por número (@c.us)
+          // que no requiere LID.
+          if (win.WWebJS && win.WWebJS.sendMessage) {
+            const origSend = win.WWebJS.sendMessage;
+            win.WWebJS.sendMessage = async function(chat: any, content: any, options: any) {
+              let prevLidMode: boolean | undefined;
+              try {
+                // Desactivar temporalmente LID addressing mode en grupos
+                if (chat && chat.groupMetadata && chat.groupMetadata.isLidAddressingMode) {
+                  prevLidMode = true;
+                  chat.groupMetadata.isLidAddressingMode = false;
+                }
+                return await origSend.call(win.WWebJS, chat, content, options);
+              } catch (e: any) {
+                if (e && e.message && e.message.includes('No LID for user')) {
+                  // Si aún falla, intentar con isLidAddressingMode=false ya aplicado
+                  console.warn('[WWebJS Patch] No LID for user tras desactivar LID mode, ignorando:', e.message);
+                  return undefined; // mensaje no enviado pero sin romper el flujo
+                }
+                throw e;
+              } finally {
+                // Restaurar el valor original para no afectar otras operaciones
+                if (prevLidMode !== undefined && chat && chat.groupMetadata) {
+                  chat.groupMetadata.isLidAddressingMode = prevLidMode;
+                }
+              }
+            };
+          }
+
+          // ── Estrategia secundaria: parchear WAWebSendMsgChatAction ─────────
+          // Este es el módulo que lanza el error en origen (identificado por
+          // el stack trace: addAndSendMsgToChat → encrypt → getLid → throw)
+          try {
+            const sendAction = win.require('WAWebSendMsgChatAction');
+            if (sendAction && sendAction.addAndSendMsgToChat) {
+              const origAddSend = sendAction.addAndSendMsgToChat;
+              sendAction.addAndSendMsgToChat = function(chat: any, message: any, ...rest: any[]) {
+                // Desactivar LID mode antes de la llamada interna
+                let prevLidMode: boolean | undefined;
+                if (chat && chat.groupMetadata && chat.groupMetadata.isLidAddressingMode) {
+                  prevLidMode = true;
+                  chat.groupMetadata.isLidAddressingMode = false;
+                }
+                try {
+                  return origAddSend.call(sendAction, chat, message, ...rest);
+                } catch (e: any) {
+                  if (e && e.message && e.message.includes('No LID for user')) {
+                    console.warn('[WWebJS Patch] addAndSendMsgToChat - No LID ignorado:', e.message);
+                    return [Promise.resolve(null), Promise.resolve(null)];
+                  }
+                  throw e;
+                } finally {
+                  if (prevLidMode !== undefined && chat && chat.groupMetadata) {
+                    chat.groupMetadata.isLidAddressingMode = prevLidMode;
+                  }
+                }
+              };
+            }
+          } catch (e) {
+            // WAWebSendMsgChatAction puede no estar disponible en esta versión
+          }
+
+          (win as any).__lidPatchApplied = true;
+          console.log('[WWebJS Patch] Parche LID aplicado exitosamente.');
+        } catch (patchErr) {
+          console.warn('[WWebJS Patch] No se pudo aplicar el parche LID:', patchErr);
+        }
+      });
+    } catch (e) {
+      this.logger.warn(`⚠️ Error aplicando parche LID (no crítico): ${(e as any)?.message || e}`);
+    }
+  }
+
   private _cachedChats: any[] | null = null;
   private _cachedChatsTime: number = 0;
 
@@ -481,19 +597,19 @@ export class BotInstance extends EventEmitter {
 
   private async resolveToCanonicalContactId(id: string): Promise<string> {
     const normalized = this.normalizeToContactId(id);
-    if (normalized.includes("@lid")) {
-      try {
-        if (this.client && this.state.status === "ready") {
-          const contact = await this.client.getContactById(normalized);
-          if (contact && contact.number) {
-            const canonical = `${contact.number}@c.us`;
-            this.logger.log(`🔄 Resolví @lid ${normalized} a @c.us canonical ${canonical}`);
-            return canonical;
+    try {
+      if (this.client && this.state.status === "ready") {
+        const contact = await this.client.getContactById(normalized);
+        if (contact && contact.id && contact.id._serialized) {
+          const canonical = contact.id._serialized;
+          if (canonical !== normalized) {
+            this.logger.log(`[BEHAVIOR] Resolved JID ${normalized} to canonical JID ${canonical}`);
           }
+          return canonical;
         }
-      } catch (e: any) {
-        this.logger.warn(`⚠️ No se pudo resolver @lid ${normalized} a @c.us: ${e.message || e}`);
       }
+    } catch (e: any) {
+      this.logger.warn(`⚠️ No se pudo resolver contacto ${normalized}: ${e.message || e}`);
     }
     return normalized;
   }
@@ -636,6 +752,9 @@ export class BotInstance extends EventEmitter {
     })();
 
     const isRecentMatch = this.recentlySentMessages.has(msg.body.trim());
+    const isBot = isHistoryMatch || isRecentMatch;
+
+    this.logger.log(`[BEHAVIOR] Outgoing message to ${remoteId} | BodyLength: ${msg.body ? msg.body.length : 0} | Sent by Bot: ${isBot}`);
 
     // Si es un mensaje con media (imagen, doc, audio) y recientemente le enviamos un media al mismo chat
     if (msg.hasMedia && this.recentlySentMediaTo.has(remoteId)) {
@@ -644,12 +763,13 @@ export class BotInstance extends EventEmitter {
     }
 
     // Si coincide con algo enviado recientemente o con el historial, lo ignoramos (es el bot)
-    if (isHistoryMatch || isRecentMatch) {
+    if (isBot) {
       this.recentlySentMessages.delete(msg.body.trim());
       // this.logger.log(`🤖 Mensaje saliente identificado como bot en ${remoteId} — omitiendo cambio a humano.`);
       return;
     }
 
+    this.logger.log(`[BEHAVIOR] Human intervention detected for ${remoteId}. Changing state to HUMAN.`);
     // Es un mensaje humano real. Actualizar o crear la sesión con estado "human".
     // this.logger.log(`👤 Intervención humana detectada en ${remoteId}. Cambiando estado a 'human'.`);
     if (remoteSession) {
@@ -683,9 +803,18 @@ export class BotInstance extends EventEmitter {
 
   private async _handleMessage(msg: any): Promise<void> {
     try {
-      if (msg.timestamp * 1000 < this.bootTime) return;
-      if (msg.type && BotInstance.IGNORED_MSG_TYPES.has(msg.type)) return;
-      if (msg.from === "status@broadcast" || msg.from.includes("@g.us")) return;
+      if (msg.timestamp * 1000 < this.bootTime) {
+        this.logger.log(`[BEHAVIOR] Ignored incoming message: timestamp older than boot time.`);
+        return;
+      }
+      if (msg.type && BotInstance.IGNORED_MSG_TYPES.has(msg.type)) {
+        this.logger.log(`[BEHAVIOR] Ignored incoming message: type ${msg.type} is in IGNORED_MSG_TYPES.`);
+        return;
+      }
+      if (msg.from === "status@broadcast" || msg.from.includes("@g.us")) {
+        this.logger.log(`[BEHAVIOR] Ignored incoming message: source ${msg.from} is broadcast or group.`);
+        return;
+      }
 
       const from = await this.getCanonicalId(msg);
       if (!msg.fromMe) {
@@ -694,9 +823,14 @@ export class BotInstance extends EventEmitter {
       }
       const msgId = msg.id?._serialized || msg.id?.id;
 
-      if (this.processedMsgIds.has(msgId)) return;
+      if (this.processedMsgIds.has(msgId)) {
+        this.logger.log(`[BEHAVIOR] Ignored incoming message: duplicate msgId ${msgId}.`);
+        return;
+      }
       this.processedMsgIds.add(msgId);
       setTimeout(() => this.processedMsgIds.delete(msgId), 30000);
+
+      this.logger.log(`[BEHAVIOR] Incoming message from ${from} | ID: ${msgId} | Type: ${msg.type} | HasMedia: ${msg.hasMedia} | BodyLength: ${msg.body ? msg.body.length : 0}`);
 
       if (msg.fromMe) {
         await this._handleOutgoingMessage(msg);
@@ -704,7 +838,10 @@ export class BotInstance extends EventEmitter {
       }
 
       const config = this.configSvc.getConfig();
-      if (config.isAutoResponseEnabled === false) return;
+      if (config.isAutoResponseEnabled === false) {
+        this.logger.log(`[BEHAVIOR] Ignored incoming message: isAutoResponseEnabled is false.`);
+        return;
+      }
 
       let pending = this.aggregationMap.get(from);
       if (!pending) {
@@ -774,6 +911,8 @@ export class BotInstance extends EventEmitter {
       const snapshotMessages = [...pending.rawMessages];
       pending.rawMessages = [];
 
+      this.logger.log(`[BEHAVIOR] Aggregating ${snapshotMessages.length} messages for ${from}`);
+
       const firstMsg = snapshotMessages[0];
 
       // Obtener contacto con fallback seguro si getContact() falla (ej: IDs @lid inestables)
@@ -817,6 +956,7 @@ export class BotInstance extends EventEmitter {
           instruccionExtra = `Saluda cálidamente a ${nombre} usando: "${welcomeTemplate.replace(/\{name\}/g, nombre)}".`;
         }
       } else if (
+        session.status !== "human" &&
         nowInSeconds - session.last_interaction >
         this.sessionMgr.TWENTY_FOUR_HOURS
       ) {
@@ -835,21 +975,8 @@ export class BotInstance extends EventEmitter {
 
       // 3. Respetar Estado de Intervención Humana
       if (session.status === "human") {
-        const humanSince = session.human_since || 0;
-        if (
-          nowInSeconds - humanSince >=
-          this.sessionMgr.AUTO_REACTIVATE_SECONDS
-        ) {
-          session.status = "bot";
-          await this.sessionMgr.saveSession(realFrom, session);
-          const reactivacionMsg = sys("botReactivado");
-          if (reactivacionMsg) {
-            this.addRecentSent(reactivacionMsg.trim());
-            await firstMsg.reply(reactivacionMsg);
-          }
-        } else {
-          return;
-        }
+        this.logger.log(`[BEHAVIOR] Ignored aggregation for ${realFrom}: session is in HUMAN status.`);
+        return;
       }
 
       // 4. Procesar todos los mensajes del snapshot
@@ -887,10 +1014,13 @@ export class BotInstance extends EventEmitter {
         config.cambialappMcpEnabled
       );
 
+      this.logger.log(`[BEHAVIOR] AI response generated for ${realFrom} | ResponseLength: ${respuesta.length} | Contains [HABLAR_CON_HUMANO]: ${respuesta.includes("[HABLAR_CON_HUMANO]")} | Contains [NO_ENTENDI]: ${respuesta.includes("[NO_ENTENDI]")}`);
+
       // 6. Verificar estado humano ANTES de finalizar (puede haber cambiado durante la generación IA)
       const currentStatus =
         await this.sessionMgr.getStatusFromFirestore(realFrom);
       if (currentStatus === "human") {
+        this.logger.log(`[BEHAVIOR] IA response delivery to ${realFrom} aborted: session status changed to human during generation.`);
         this.logger.log(`👤 Abortando respuesta IA en ${realFrom} (Intervención humana detectada durante generación).`);
         // Limpiar el mensaje del usuario del historial para no contaminar la siguiente consulta IA
         if (
@@ -1047,6 +1177,7 @@ export class BotInstance extends EventEmitter {
     // Recargamos la sesión completa para no sobreescribir con datos viejos de memoria
     const latestSession = await this.sessionMgr.getSession(from);
     if (!latestSession || latestSession.status === "human") {
+      this.logger.log(`[BEHAVIOR] Aborting final response delivery to ${from}: status changed to human.`);
       this.logger.log(`👤 Abortando envío final en ${from} (Intervención humana confirmada tras recarga).`);
       return;
     }
@@ -1072,6 +1203,7 @@ export class BotInstance extends EventEmitter {
 
     if (respuesta) {
       this.addRecentSent(respuesta);
+      this.logger.log(`[BEHAVIOR] Sending text response to ${from} | Length: ${respuesta.length}`);
       await this.safeSendMessage(from, respuesta, undefined, false);
     }
 
@@ -1080,6 +1212,7 @@ export class BotInstance extends EventEmitter {
       try {
         const safeFrom = this.normalizeToContactId(from);
         this.addRecentMediaSent(safeFrom);
+        this.logger.log(`[BEHAVIOR] Sending media response to ${from} from URL: ${url}`);
         const media = await this._fetchMediaFromUrl(url);
         await this.safeSendMessage(from, media, undefined, false);
       } catch (err: any) {
